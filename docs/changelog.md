@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-15 — Realistic damage, world destruction, audio, hitch removal
+
+- Infantry wounds (`infantry.gd`). Soldiers go HEALTHY/LIGHT/SEVERE/KIA with per-weapon outcome rolls. HE fragments wound nearby soldiers. SEVERE casualties bleed out unless given buddy aid, and bodies persist. A section whose survivors are all SEVERE stays selectable but is combat-ineffective and is not auto-targeted (`test_wounds`).
+- Vehicle damage (`vehicle_damage.gd`). Penetration by facing and range. Component effects: mobility, firepower, crew (bail-out), catastrophic. Wrecks stay visible as dark hulls, block routes for everyone, and give cover (`test_vehicle_damage`).
+- World damage (`structure_damage.gd`). Only HE damages buildings: damaged -> breached -> collapsed rubble, with garrison casualties and burials. Field works ignore small arms, depots cook off, and HE cuts wire. Boats can burn or flood, helos crash or force-land, drones are fragile, and HE flattens street furniture. Attack-click (A) a building with HE vehicles to shell it (`test_world_damage`).
+- Garrisons fire from windows facing the nearest spotted enemy, with 1.4x range from upper floors.
+- Procedural positional audio (`audio_fx.gd`): 30 synthesized sounds, a 16-voice pool with per-category caps, engine/rotor/footstep loops for the nearest units, and ambience. M mutes (`test_audio`).
+- Explosions are about 3x larger and layered: flash, fireball, shockwave, debris arcs and a dust column, with camera shake.
+- Player FPV strike: 150 supply, 5 drones, 60 s cooldown, aimed at a visible enemy near the click (`test_player_swarm`).
+- Hitch removal. Nav-grid re-weighting is incremental and path planning has a per-tick budget. Harbor combat profile: max step 222 -> 70 ms, and only the first tick exceeds 33 ms (`test_hitches`).
+- Renderer: Metal/Mobile was benchmarked (engine p95 18.6 -> 10.9 ms) but kept off because colours wash out. The project stays on GL Compatibility.
+
 ## 2026-10-15 — Parallel round: vehicle routing, explosions, presentation cost, counter-drone and FPV swarms
 
 - Vehicle routing. Coarse 4 u vehicle cells now stay open when any of 8 sub-points fits the hull; that point becomes the cell's waypoint. Shortcuts keep a 0.3 u margin. Hulls accept passed waypoints. Routes avoid parked units, oncoming tanks pass on their own right, and idle friendlies make way (`Terrain._refresh_land_cell`, `_anchor`, `_path`; `Simulation.standing_bodies`, `make_way`). `tests/probe_vehicle_path.gd`: mean route ratio 1.233 -> 1.017, worst 3.80 -> 1.09, false "no route" 2 -> 0, head-on tank deadlock fixed. The tank grid build at load rose 0.2 -> 0.4 s.

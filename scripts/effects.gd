@@ -92,6 +92,7 @@ const INFANTRY:=["rifle","atgm","engineer"]
 # Kinds that get the full vehicle kill; "" is the legacy kind-less explosion(). Unknown kinds get a small blast.
 const VEHICLES:=["tank","aa","boat","harvester",""]
 const Explosions:=preload("res://scripts/effects_explosions.gd")
+const Remains:=preload("res://scripts/effects_remains.gd")
 
 class Pool extends RefCounted:
 	const STRIDE:=20
@@ -140,6 +141,8 @@ class Pool extends RefCounted:
 	var bounds:=AABB()
 	var limit:=AABB()
 	var front_kind:=-1
+	# Bouncing particles of this kind report where they come to rest when they expire (debris remnants).
+	var rest_kind:=-1
 
 	func _init(count:int, is_flat:bool) -> void:
 		capacity=count
@@ -233,6 +236,7 @@ class Pool extends RefCounted:
 				h=0.0 # Every particle renders at least once, even one-frame flashes at low frame rates.
 			var a:=age[i]+h
 			if a>=duration:
+				if kind[i]==rest_kind and (bits&BOUNCE)!=0:owner.call("_debris_rest",pos[i],size0[i],color[i],rot[i])
 				kill(i)
 				continue
 			age[i]=a
@@ -356,6 +360,7 @@ var tracer_counts:Dictionary={}
 var dropped_cues:=0
 var noise_texture:ImageTexture
 var world_box:=AABB()
+var world_rect:=Rect2() # unpadded map, for permanent marks
 var shore_x:=INF
 # Legacy muzzle() calls wait here for the paired projectile() that names the weapon.
 var pending_muzzles:Array[Dictionary]=[]
@@ -364,11 +369,15 @@ var shake_enabled:=true
 var shake_pos:=PackedVector3Array()
 var shake_strength:=PackedFloat32Array()
 var shake_age:=PackedFloat32Array()
+# Permanent craters/scorch (tiled ground-damage textures) and landed debris chunks; see effects_remains.gd.
+var remains:=Remains.new()
 
 func _init() -> void:
 	rng.seed=814
 	# Instances in one MultiMesh draw in buffer order; flames stay in front of the soot they feed.
 	volume.front_kind=FIRE
+	volume.rest_kind=DEBRIS
+	add_child(remains)
 	volume.spin_cards=true
 	volume.pull=0.45
 	glow.pull=0.5
@@ -400,8 +409,10 @@ func reseed(value:int) -> void:
 # Culling boxes still follow live content; this caps them to the padded map and lets legacy calls infer water.
 func set_world_bounds(world_size:Vector2, shore:float=INF) -> void:
 	world_box=AABB(Vector3(-8,-2,-8),Vector3(world_size.x+16,62,world_size.y+16))
+	world_rect=Rect2(Vector2.ZERO,world_size)
 	shore_x=shore
 	for pool in [volume,glow,ground]:pool.limit=world_box
+	remains.set_bounds(world_box,world_size)
 
 func is_water_at(pos:Vector3) -> bool:
 	return pos.x>=shore_x
@@ -454,8 +465,10 @@ func smoke(pos:Vector3, vel:Vector3, size0:float, size1:float, life:float, col:C
 
 # drag and lift default to the original small-fireball motion; large blasts pass a stronger lift so the
 # fireball rolls upward while the shader cools it from white through orange into soot.
-func fireball(pos:Vector3, vel:Vector3, size0:float, size1:float, life:float, delay:float=0.0, priority:int=ESSENTIAL, drag:float=2.2, lift:float=1.2) -> int:
-	return volume.spawn(pos,vel,FIRE,size0,size1,life,Color(1,1,1,1),drag,-lift,delay,priority,0,rng.randf()*TAU,rng.randf_range(-1.2,1.2),rng.randf())
+# tint multiplies the shader's white-orange-soot ramp: darker red-brown for outer lobes, near-black for the
+# smoky lobes mixed into a big fireball.
+func fireball(pos:Vector3, vel:Vector3, size0:float, size1:float, life:float, delay:float=0.0, priority:int=ESSENTIAL, drag:float=2.2, lift:float=1.2, tint:Color=Color(1,1,1,1)) -> int:
+	return volume.spawn(pos,vel,FIRE,size0,size1,life,tint,drag,-lift,delay,priority,0,rng.randf()*TAU,rng.randf_range(-1.6,1.6),rng.randf())
 
 func debris(pos:Vector3, vel:Vector3, size:float, life:float, col:Color, bounce:bool=true, trail:bool=false, priority:int=NORMAL) -> int:
 	if volume.kind_live[DEBRIS]>=DEBRIS_CAP:
@@ -514,6 +527,18 @@ func _trail_puff(pos:Vector3, strength:float, tint:Color=SOOT) -> void:
 	if tint.r-tint.b>0.08:col=DUST.darkened(0.1)
 	elif tint.get_luminance()>0.35:col=tint.lightened(0.3)
 	smoke(pos,Vector3(0,0.3,0),0.22,0.9*strength+0.3,0.6,Color(col,0.5),1.8,0.0,0.0,OPTIONAL)
+
+# ---------------------------------------------------------------- permanent remains
+# Stamps a permanent crater/scorch/burn mark (Remains.CRATER/SCORCH/BURN) of radius metres. Never on water
+# or off the map once bounds are known.
+func mark(pos:Vector3, radius:float, style:int) -> void:
+	if is_water_at(pos) or (world_rect.has_area() and not world_rect.has_point(Vector2(pos.x,pos.z))):return
+	remains.stamp(pos,radius,style)
+
+# A bouncing fragment expired on the ground: keep it as a static chunk unless it is a chip or over water.
+func _debris_rest(pos:Vector3, size:float, col:Color, turn:float) -> void:
+	if size<Remains.CHUNK_MIN_SIZE or pos.y>0.6 or is_water_at(pos):return
+	remains.add_chunk(pos,size,col,turn)
 
 # ---------------------------------------------------------------- camera shake
 # Registers a blast for camera shake. strength is 1 for a vehicle kill, ~0.35 for a tank HE round; small arms
@@ -808,13 +833,17 @@ func he_burst(pos:Vector3, direction:Vector3, scale:float) -> void:
 		for n in int(round(2+3*scale)):
 			smoke(g+Vector3(0,0.35,0)+_jitter(0.4*scale,0.0),Vector3(0,rng.randf_range(1.4,3.0)*scale,0)+_jitter(0.6),0.6*scale,rng.randf_range(2.4,3.2)*scale,rng.randf_range(1.6,2.6),Color(DUST.darkened(0.12),0.66),1.6,0.2,rng.randf()*0.08,NORMAL if n<2 else OPTIONAL)
 		decal(g,DUST_RING,0.5,4.5*scale,0.5,Color(DUST,0.5))
-		decal(g,SCORCH,1.4*scale+0.4,1.6*scale+0.5,30.0,Color(SCORCH_COLOR,0.55),OPTIONAL)
+		decal(g,SCORCH,1.4*scale+0.4,1.6*scale+0.5,3.0,Color(SCORCH_COLOR,0.55),OPTIONAL)
+		mark(g,0.4+0.6*scale,Remains.CRATER)
 		return
 	var r:=2.5*scale
 	var c:=p+Vector3(0,0.3*r,0)
 	Explosions.core_flash(self,c,g,r,Color(1.0,0.88,0.62))
-	fireball(c,Vector3(0,0.7*r,0),1.0*r,2.8*r,0.5,0.0,ESSENTIAL,1.8,0.9*r)
-	fireball(c+back*0.4*r,back*r+Vector3(0,0.8*r,0),0.5*r,1.7*r,0.42,0.02,NORMAL,2.4,0.8*r)
+	fireball(c,Vector3(0,0.7*r,0),1.0*r,2.8*r,0.5,0.0,ESSENTIAL,1.8,0.9*r,Explosions.ball_tint(rng))
+	ember(c,Vector3(0,0.6*r,0),1.4*r,0.22,Explosions.CORE_GLOW,ESSENTIAL)
+	fireball(c+back*0.4*r,back*r+Vector3(0,0.8*r,0),0.5*r,1.7*r,0.42,0.02,NORMAL,2.4,0.8*r,Explosions.LOBE_EDGE*rng.randf_range(0.85,1.0))
+	# Soil thrown through the flame: a dark brown lobe mixed into the fire layer.
+	fireball(c+_jitter(0.3*r,0.0)+Vector3(0,0.2*r,0),Vector3(0,0.9*r,0)+_jitter(0.4*r,0.0),0.6*r,1.5*r,0.45,0.05,NORMAL,2.0,0.8*r,Color(0.42,0.31,0.22,0.95))
 	# Geyser: dark soil puffs launched fast and nearly straight up, braking hard so they stall high.
 	for n in 3:
 		smoke(g+Vector3(0,0.3+n*0.3*r,0)+_jitter(0.12*r,0.0),back*0.6+Vector3(0,rng.randf_range(2.6,4.0)*r,0)+_jitter(0.2*r,0.0),0.5*r,rng.randf_range(1.0,1.3)*r,rng.randf_range(1.8,2.6),Color(SOIL.lerp(DUST,0.35),0.85),2.0,0.0,n*0.02,NORMAL if n==0 else OPTIONAL)
@@ -822,7 +851,9 @@ func he_burst(pos:Vector3, direction:Vector3, scale:float) -> void:
 	Explosions.debris_arcs(self,g+Vector3(0,0.15,0),r,6,[SOIL,SOIL.darkened(0.25)],0,false)
 	Explosions.column(self,g,r,2,Color(DUST.darkened(0.15),0.74),3.2)
 	sparks(c,int(4*scale),11.0,Vector3.UP*0.6,0.5,OPTIONAL,1.6)
-	Explosions.scorch(self,g,r,30.0,0.6,OPTIONAL)
+	Explosions.scorch(self,g,r,4.0,0.6,OPTIONAL)
+	mark(g,1.2*r,Remains.SCORCH)
+	mark(g,0.7*r,Remains.CRATER)
 	shake(c,0.35*scale)
 
 # Armour strike: hard white flash and a spark fan rebounding off the plate; heavy hits leave a dark puff.
@@ -870,7 +901,7 @@ func _destroy_now(kind:String, pos:Vector3, water:bool) -> void:
 		air_burst(pos,0.45,false)
 		return
 	if kind=="helo":
-		air_burst(pos,1.0,true)
+		air_burst(pos,1.0,true,water)
 		return
 	if kind=="fpv_drone":
 		Explosions.drone_strike(self,pos,water,false)
@@ -894,7 +925,7 @@ func vehicle_explosion(pos:Vector3, scale:float=1.0, water:bool=false, cook_off:
 	var g:=Vector3(pos.x,FLOOR,pos.z)
 	var c:=pos+Vector3(0,0.25*r,0)
 	Explosions.core_flash(self,c,g,r,Color(1.0,0.9,0.68))
-	Explosions.fireball_layer(self,c,r,4,1.0)
+	Explosions.fireball_layer(self,c,r,4,1.0,2)
 	sparks(c,int(18*scale),3.0*r+2.0,Vector3.UP*0.8,1.1,ESSENTIAL,2.4)
 	for n in 4:ember(c+_jitter(0.3*r,0.2*r),Vector3(0,rng.randf_range(2.0,4.0),0)+_jitter(1.5,0.0),rng.randf_range(0.5,0.8),rng.randf_range(1.4,2.2),Color(1.0,0.55,0.22,0.9),OPTIONAL)
 	Explosions.debris_arcs(self,pos+Vector3(0,0.4,0),r,int(10*scale),[METAL,SOOT],3,not water)
@@ -905,7 +936,9 @@ func vehicle_explosion(pos:Vector3, scale:float=1.0, water:bool=false, cook_off:
 		water_strike(g,1.1*scale)
 	else:
 		Explosions.shockwave(self,g,r,DUST,8,ESSENTIAL)
-		Explosions.scorch(self,g,r,45.0,0.72,ESSENTIAL)
+		Explosions.scorch(self,g,r,7.0,0.72,ESSENTIAL)
+		mark(g,1.0*r,Remains.BURN)
+		Explosions.heat(self,g,r,3.0)
 	# Wreck fire and a black column that keeps rising for roughly 10-14 s after the kill.
 	add_emitter(g,11.0 if cook_off else 9.5,scale,water)
 	cue(rng.randf_range(0.35,0.55),_cook_off.bind(pos+Vector3(0,0.6,0)+_jitter(0.5*scale,0.0)))
@@ -918,20 +951,20 @@ func _cook_off(pos:Vector3) -> void:
 	var r:=1.2
 	flash(pos,3.0*r,0.05,Color(1.0,0.8,0.45),0.0,NORMAL)
 	bloom(pos,4.0*r,0.2,Color(1.0,0.55,0.22,0.3),OPTIONAL)
-	fireball(pos+Vector3(0,0.2,0),Vector3(0,1.4*r,0)+_jitter(0.6,0.0),0.8*r,2.4*r,0.4,0.0,NORMAL,1.8,0.9*r)
+	fireball(pos+Vector3(0,0.2,0),Vector3(0,1.4*r,0)+_jitter(0.6,0.0),0.8*r,2.4*r,0.4,0.0,NORMAL,1.8,0.9*r,Explosions.LOBE_HOT.lerp(Explosions.LOBE_EDGE,rng.randf()))
 	sparks(pos,8,10.0,Vector3.UP,0.8,NORMAL,1.8)
 	smoke(pos,Vector3(0,1.4,0),0.8*r,2.4*r,2.6,Color(SOOT,0.7),1.0,0.6,0.12)
 	shake(pos,0.12)
 
 # Aircraft or UAV destroyed in flight (R = 3*scale): airburst, burning fragments falling, and a ground impact on
 # landing.
-func air_burst(pos:Vector3, scale:float, crash:bool) -> void:
+func air_burst(pos:Vector3, scale:float, crash:bool, water:bool=false) -> void:
 	var r:=3.0*scale
 	flash(pos,3.0*r,0.07,Color(1.0,0.88,0.62))
 	bloom(pos,2.2*r,0.1,Explosions.CORE,ESSENTIAL)
-	fireball(pos,_jitter(0.3*r),1.0*r,2.6*r,rng.randf_range(0.6,0.8),0.0,ESSENTIAL,1.8,0.5*r)
+	fireball(pos,_jitter(0.3*r),1.0*r,2.6*r,rng.randf_range(0.6,0.8),0.0,ESSENTIAL,1.8,0.5*r,Explosions.ball_tint(rng))
 	for n in (2 if scale>0.7 else 0):
-		fireball(pos+_jitter(0.4*r),_jitter(1.0*r),0.5*r,1.7*r,rng.randf_range(0.45,0.6),n*0.03,NORMAL,2.4,0.4*r)
+		fireball(pos+_jitter(0.4*r),_jitter(1.0*r),0.5*r,1.7*r,rng.randf_range(0.45,0.6),n*0.03,NORMAL,2.4,0.4*r,Explosions.LOBE_EDGE*rng.randf_range(0.85,1.0))
 	sparks(pos,int(round(14*scale))+2,4.0*r+3.0,Vector3.ZERO,0.9,NORMAL,1.0+scale)
 	for n in int(round(8*scale))+2:
 		debris(pos,_jitter(3.5*scale+0.5,0.0)+Vector3(0,rng.randf_range(0.5,3.5),0),rng.randf_range(0.12,0.3)*scale+0.06,rng.randf_range(2.0,3.0),METAL if n%2 else SOOT,false,n<3 and crash)
@@ -940,7 +973,7 @@ func air_burst(pos:Vector3, scale:float, crash:bool) -> void:
 	shake(pos,0.5*scale)
 	if crash:
 		var fall:=sqrt(2.0*maxf(pos.y,0.5)/9.8)
-		cue(fall,vehicle_explosion.bind(Vector3(pos.x,0.4,pos.z),0.7,false,false))
+		cue(fall,vehicle_explosion.bind(Vector3(pos.x,0.4,pos.z),0.7,water,false))
 
 func structure_collapse(pos:Vector3) -> void:
 	vehicle_explosion(Vector3(pos.x,0.8,pos.z),1.5,false,false)
@@ -1047,6 +1080,7 @@ func _process(dt:float) -> void:
 	_update_emitters(dt)
 	_update_projectiles(dt)
 	if not shake_age.is_empty():_update_shake(dt)
+	remains.step(dt)
 	var drift:=wind+BREEZE
 	_sync_view()
 	volume.step(dt,drift,self)
@@ -1054,9 +1088,10 @@ func _process(dt:float) -> void:
 	ground.step(dt,drift,self)
 
 func stats() -> Dictionary:
-	return {"volume":volume.live,"glow":glow.live,"ground":ground.live,"shakes":shake_age.size(),"visible":volume.visible_count+glow.visible_count+ground.visible_count,"projectiles":projectiles.size(),"cues":cues.size(),"emitters":emitters.size(),"dropped":volume.dropped+glow.dropped+ground.dropped,"recycled":volume.recycled+glow.recycled+ground.recycled,"capacity":{"volume":VOLUME_CAPACITY,"glow":GLOW_CAPACITY,"ground":GROUND_CAPACITY,"projectiles":PROJECTILE_CAPACITY,"cues":CUE_CAPACITY,"emitters":EMITTER_CAPACITY}}
+	return {"volume":volume.live,"glow":glow.live,"ground":ground.live,"shakes":shake_age.size(),"remains":remains.stats(),"visible":volume.visible_count+glow.visible_count+ground.visible_count,"projectiles":projectiles.size(),"cues":cues.size(),"emitters":emitters.size(),"dropped":volume.dropped+glow.dropped+ground.dropped,"recycled":volume.recycled+glow.recycled+ground.recycled,"capacity":{"volume":VOLUME_CAPACITY,"glow":GLOW_CAPACITY,"ground":GROUND_CAPACITY,"projectiles":PROJECTILE_CAPACITY,"cues":CUE_CAPACITY,"emitters":EMITTER_CAPACITY}}
 
 func clear() -> void:
 	volume.clear();glow.clear();ground.clear()
 	projectiles.clear();cues.clear();emitters.clear();pending_muzzles.clear()
 	shake_pos.clear();shake_strength.clear();shake_age.clear()
+	remains.clear()

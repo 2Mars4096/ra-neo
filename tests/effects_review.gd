@@ -6,6 +6,10 @@ extends SceneTree
 #           gameplay zoom (camera size 40) and is captured at t = 0.05, 0.25, 0.6, 1.5 and 4 s after detonation,
 #           next to a reference tank and rifle squad. Its contact sheet is artifacts/effects-review-e-sheet.png
 #           (rows = kinds, columns = times). Add `-- --only-e` to run scene E alone.
+#           Scene F stages 300 mixed impacts and 7 kills around one spot, lets every transient layer expire and
+#           captures the permanent remains (ground-damage tiles and landed debris chunks) at close and wide zoom.
+#           It prints "EFFECTS REMAINS" with the measured per-frame effects cost and texture upload cost (the
+#           native numbers are the meaningful ones). `-- --only-f` runs scene F alone.
 # Headless: runs the same timeline and writes artifacts/effects-review.json plus flat-disc layout proxies.
 const Sim=preload("res://scripts/simulation.gd")
 const DT:=1.0/60.0
@@ -19,7 +23,7 @@ const E_TIMES:=[0.05,0.25,0.6,1.5,4.0]
 const E_ZOOM:=40.0
 # What each capture instant should show, printed with every scene-E capture.
 const E_STAGE:={0.05:"core flash + fireball birth, shock ring starting",0.25:"fireball at peak, shock ring at full radius, debris and sparks launching",
-	0.6:"fireball rolling up and darkening, debris arcs, dust skirt",1.5:"fireball turned to smoke, column rising, debris landing",4.0:"lingering column or wreck fire, scorch"}
+	0.6:"fireball rolling up and darkening, debris arcs, dust skirt",1.5:"fireball turned to smoke, column rising, debris landing",4.0:"lingering column or wreck fire; permanent crater/scorch/burn mark under the fading fresh scorch; landed debris chunks"}
 
 func _init() -> void:
 	call_deferred("run")
@@ -256,6 +260,10 @@ func run() -> void:
 		await explosion_review()
 		finish()
 		return
+	if "--only-f" in OS.get_cmdline_user_args():
+		await remains_review()
+		finish()
+		return
 	open(3)
 	# Scene A: firing line on open ground south of the village.
 	var rifles:=place("rifle",0,Vector2(46,66))
@@ -379,7 +387,47 @@ func run() -> void:
 		view(Vector3(128,0,70),64)
 		await capture("d3-events-rolling","+1.2 s at gameplay zoom: soot columns near the 144 m map edge stay drawn")
 	await explosion_review()
+	await remains_review()
 	finish()
+
+# Scene F: permanent remains after a sustained fight. Effects are stepped directly so the timing covers only
+# BattleEffects._process (including stamping and throttled tile uploads), not unit sync.
+func remains_review() -> void:
+	open(3)
+	battle.effects.shake_enabled=false
+	var spot:=Vector3(55,0,63)
+	place("tank",0,Vector2(spot.x-12,spot.z-6))
+	battle.sim.update_visibility()
+	battle.sync_units(5.0)
+	var fx=battle.effects
+	var rng:=RandomNumberGenerator.new()
+	rng.seed=4242
+	var weapons:=["tank","atgm","fpv_drone","at_gun","aa","rifle"]
+	var costs:Array[float]=[]
+	var impacts:=0
+	for frame in 600:
+		if frame%2==0:
+			var weapon:String=weapons[impacts%weapons.size()]
+			var to:=spot+Vector3(rng.randf_range(-22,22),0.8,rng.randf_range(-16,16))
+			fx.fire(weapon,to+Vector3(-30,0.2,12),to,false,false,"rifle")
+			impacts+=1
+		if frame%90==45:fx.destroyed("ammo_depot" if frame==405 else "tank",spot+Vector3(rng.randf_range(-15,15),0.7,rng.randf_range(-10,10)))
+		var started:=Time.get_ticks_usec()
+		fx._process(DT)
+		costs.append((Time.get_ticks_usec()-started)/1000.0)
+		if frame==300:
+			view(spot,40.0)
+			await capture("f0-remains-midfight","mid-fight: fresh blasts over accumulating craters, scorch and burn marks")
+	for i in 900:fx._process(0.1)
+	view(spot,40.0)
+	var stats:Dictionary=fx.remains.stats()
+	await capture("f1-remains-close","90 s after the fight, all transient effects gone: %d permanent marks in %d tiles, %d landed chunks"%[stats.stamps,stats.tiles,stats.chunks])
+	view(spot,64.0)
+	await capture("f2-remains-wide","same remains at wide gameplay zoom (64)")
+	costs.sort()
+	print("EFFECTS REMAINS impacts=",impacts," marks=",stats.stamps," tiles=",stats.tiles," texture_bytes=",stats.texture_bytes," chunks=",stats.chunks,
+		" uploads=",stats.uploads," upload_usec_mean=",snappedf(stats.upload_usec_mean,0.1)," upload_usec_max=",stats.upload_usec_max,
+		" effects_ms_p50=",costs[costs.size()/2]," effects_ms_p95=",costs[int(costs.size()*0.95)]," effects_ms_max=",costs.back()," native=",not headless)
 
 func finish() -> void:
 	var report:={"scenario":"Canal Watch + Riverside Town","viewport":[1440,900],"timestep":DT,"native_images":not headless,"renderer":RenderingServer.get_video_adapter_name(),"captures":captures,"note":"Paused deterministic staging; effects advanced manually at 60 Hz. Not a performance measurement."}

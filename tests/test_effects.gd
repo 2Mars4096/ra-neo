@@ -55,6 +55,9 @@ func run() -> void:
 	destruction_checks()
 	scale_checks()
 	layering_checks()
+	remains_checks()
+	remains_cost_checks()
+	chunk_checks()
 	shake_checks()
 	barrage_checks()
 	stress_checks()
@@ -190,7 +193,7 @@ func staging_checks() -> void:
 	for i in effects.volume.capacity:
 		if effects.volume.life[i]>0 and effects.volume.kind[i]==Effects.SMOKE and effects.volume.delay[i]>=0.15:rolling+=1
 	check(rolling>=8,"rolling smoke waits behind the fireball (%d delayed puffs)"%rolling)
-	check(live(effects.volume,Effects.FIRE)==5 and live(effects.volume,Effects.DEBRIS)==10,"central fireball, four lobes and debris are present")
+	check(live(effects.volume,Effects.FIRE)==7 and live(effects.volume,Effects.DEBRIS)==10,"central fireball, four lobes, two smoky lobes and debris are present")
 	check(live(effects.ground,Effects.SCORCH)==1 and live(effects.ground,Effects.DUST_RING)==2,"shock ring, dust ring and scorch are laid")
 	effects._process(0.05) # first rendered frame
 	effects._process(0.05)
@@ -207,7 +210,7 @@ func staging_checks() -> void:
 	check(effects.emitters.size()==1,"wreck keeps burning")
 	advance(effects,12.0)
 	check(effects.emitters.is_empty(),"wreck fire burns out")
-	check(live(effects.ground,Effects.SCORCH)==1,"scorch outlasts the smoke")
+	check(live(effects.ground,Effects.SCORCH)==0 and effects.remains.darkness_at(pos)>0.5,"permanent burn mark outlasts the smoke and the fresh scorch decal")
 	advance(effects,40.0,0.1)
 	check(live(effects.volume)+live(effects.glow)+live(effects.ground)==0,"all explosion layers expire")
 	# Killing ATGM in flight: the explosion waits for arrival instead of preceding the missile.
@@ -610,10 +613,10 @@ func explosion_checks() -> void:
 	var t:Dictionary=sig.tank_he_ground
 	var m:Dictionary=sig.atgm_ground
 	check(t.debris>=6 and t.smoke>=7 and t.dust_ring==2 and t.scorch==1 and t.flash==1,"tank HE: one flash, dirt fountain, dust geyser, shock and dust rings and scorch")
-	check(m.flash==2 and m.fire==3 and m.debris<=3 and m.scorch==1 and m.smoke>=3,"ATGM: sharp double flash, fireball and dark smoke rather than a dirt fountain")
+	check(m.flash==2 and m.fire==4 and m.debris<=3 and m.scorch==1 and m.smoke>=3,"ATGM: sharp double flash, fireball and dark smoke rather than a dirt fountain")
 	check(t.debris>m.debris and m.fire>t.fire,"tank HE throws more soil; the missile burns more")
-	check(sig.atgm_armor.scorch==0 and sig.atgm_armor.streak>=10 and sig.atgm_armor.fire==3,"ATGM on armour: jet sparks and fireball, no ground scorch")
-	check(sig.rocket_ground.flash==2 and sig.rocket_ground.fire==3,"helicopter rockets share the warhead recipe")
+	check(sig.atgm_armor.scorch==0 and sig.atgm_armor.streak>=10 and sig.atgm_armor.fire==4,"ATGM on armour: jet sparks and fireball, no ground scorch")
+	check(sig.rocket_ground.flash==2 and sig.rocket_ground.fire==4,"helicopter rockets share the warhead recipe")
 	check(sig.at_gun_armor.ember>=1 and sig.at_gun_armor.streak>=14 and sig.at_gun_armor.fire==0,"AT gun AP strike: bright hot spot and dense spark fan, no fireball")
 	check(sig.at_gun_ground.scorch==0 and sig.at_gun_ground.debris>=1 and sig.at_gun_ground.fire==0,"AT gun round skips through soil without an HE crater")
 	check(sig.fpv_ground.flash==1 and sig.fpv_ground.fire==1 and sig.fpv_ground.scorch==1 and sig.fpv_ground.streak>=12,"FPV drone strike: tight burst, fragment spray, small scorch")
@@ -654,7 +657,7 @@ func destruction_checks() -> void:
 	check(out.fpv_drone.fire==1 and out.fpv_drone.scorch==1 and out.fpv_drone.emitters==0 and out.fpv_drone.cues==0,"FPV drone kill is a small, complete blast")
 	check(out.fpv_drone_air.scorch==0 and out.fpv_drone_air.fire<=1 and out.fpv_drone_air.emitters==0,"FPV drone shot down bursts in the air")
 	check(out.fpv_drone_water.spray>=6 and out.fpv_drone_water.scorch==0,"FPV drone over water splashes")
-	check(out.mystery_walker.flash==1 and out.mystery_walker.fire==2 and out.mystery_walker.emitters==0 and out.mystery_walker.scorch==1,"unknown kinds get a generic small explosion")
+	check(out.mystery_walker.flash==1 and out.mystery_walker.fire==3 and out.mystery_walker.emitters==0 and out.mystery_walker.scorch==1,"unknown kinds get a generic small explosion")
 	check(out.mystery_walker_water.spray>=6 and out.mystery_walker_water.scorch==0,"unknown kinds on water splash")
 	check(out.bunker.concrete>=10 and out.bunker.debris>=8 and out.bunker.emitters==1,"bunker collapses into concrete dust and slab chunks")
 	check(out.ammo_depot.cues>=5 and out.ammo_depot.emitters==2,"ammo depot cooks off in a chain")
@@ -676,9 +679,9 @@ func destruction_checks() -> void:
 	check(column>=4 and top>4.0,"black smoke column still rising at 10 s (%d puffs, top %.1f m)"%[column,top])
 	check(effects.emitters.size()==1,"wreck still smoulders at 10 s")
 	advance(effects,20.0,0.1)
-	check(live(effects.ground,Effects.SCORCH)==1,"scorch decal persists at 30 s")
+	check(live(effects.ground,Effects.SCORCH)==0 and effects.remains.darkness_at(Vector3(30,0,30))>0.5,"fresh scorch decal is gone by 30 s; the burn mark stays")
 	advance(effects,30.0,0.1)
-	check(live(effects.ground,Effects.SCORCH)==0 and effects.emitters.is_empty(),"scorch fades out by 60 s")
+	check(effects.emitters.is_empty() and effects.remains.darkness_at(Vector3(30,0,30))>0.5 and effects.remains.chunks_added>0,"burn mark and landed hull fragments persist at 60 s")
 	release(effects)
 
 # ---------------------------------------------------------------- impact scale and layering
@@ -848,6 +851,179 @@ func barrage_checks() -> void:
 	check(effects.stats().visible==0 and effects.cues.is_empty() and effects.emitters.is_empty() and effects.shake_age.is_empty(),"barrage drains completely")
 	release(effects)
 
+# ---------------------------------------------------------------- permanent remains
+const Remains=preload("res://scripts/effects_remains.gd")
+
+# Texels around a point with stamped alpha above `threshold`, and their peak alpha.
+func marked(effects, pos:Vector3, half:float=10.0, threshold:float=0.15) -> Dictionary:
+	var count:=0
+	var peak:=0.0
+	var step:=Remains.TEXEL
+	var x:=pos.x-half
+	while x<=pos.x+half:
+		var z:=pos.z-half
+		while z<=pos.z+half:
+			var a:float=effects.remains.darkness_at(Vector3(x,0,z))
+			if a>threshold:count+=1
+			peak=maxf(peak,a)
+			z+=step
+		x+=step
+	return {"texels":count,"area_m2":count*step*step,"peak":snappedf(peak,0.01)}
+
+func remains_checks() -> void:
+	var effects=fresh()
+	effects.set_world_bounds(Vector2(144,108),128.0)
+	var at:=Vector3(40,0.8,40)
+	for i in 120:effects.fire("rifle",Vector3(20,0.95,40+i*0.05),at,i%2==0,false,"rifle")
+	for i in 30:effects.fire("rifle",Vector3(20,0.95,40),at,true,false,"tank")
+	advance(effects,1.0)
+	check(effects.remains.stamps==0 and effects.remains.chunk_count==0,"small arms leave no permanent marks")
+	var sizes:={}
+	for spec in [["fpv",func():Explosions.drone_strike(effects,at,false,false)],["atgm",func():Explosions.missile_burst(effects,at,Vector3.RIGHT,0.9,false)],
+			["tank_he",func():effects.he_burst(at,Vector3.DOWN,1.0)],["vehicle_kill",func():effects.destroyed("tank",Vector3(at.x,0.7,at.z))],["depot",func():effects.destroyed("ammo_depot",Vector3(at.x,0.7,at.z))]]:
+		effects.clear()
+		spec[1].call()
+		advance(effects,0.3)
+		sizes[spec[0]]=marked(effects,at,14.0)
+	evidence["remains_mark_sizes"]=sizes
+	check(sizes.fpv.texels>0 and sizes.fpv.texels<sizes.atgm.texels and sizes.atgm.texels<sizes.tank_he.texels and sizes.tank_he.texels<sizes.vehicle_kill.texels and sizes.vehicle_kill.texels<sizes.depot.texels,"mark area rises FPV < ATGM < tank HE < vehicle kill < depot: %s"%sizes)
+	check(sizes.vehicle_kill.peak>=0.8 and sizes.fpv.peak<sizes.vehicle_kill.peak,"vehicle kill leaves a near-black burn, darker than an FPV scorch")
+	# Permanent: two minutes later every transient layer has gone but the burn mark is unchanged.
+	effects.clear()
+	effects.destroyed("tank",Vector3(at.x,0.7,at.z))
+	advance(effects,0.3)
+	var fresh_mark:=marked(effects,at,14.0)
+	advance(effects,120.0,0.1)
+	var old_mark:=marked(effects,at,14.0)
+	check(live(effects.volume)+live(effects.glow)+live(effects.ground)==0 and old_mark==fresh_mark and effects.remains.stats().tiles==1,"burn mark persists unchanged after 2 minutes while transient layers expire")
+	# Never on water: a boat kill and a shell splash beyond the shore leave nothing.
+	effects.clear()
+	var stamped:int=effects.remains.stamps
+	effects.destroyed("boat",Vector3(134,0.4,40),true)
+	effects.water_strike(Vector3(136,0,50),1.0)
+	effects.he_burst(Vector3(138,0,60),Vector3.DOWN,1.0)
+	advance(effects,4.0)
+	check(effects.remains.stamps==stamped and effects.remains.stats().tiles==0 and effects.remains.chunk_count==0,"water takes no marks or chunks: %s"%effects.remains.stats())
+	effects.clear()
+	effects.destroyed("helo",Vector3(136,12,40),true)
+	advance(effects,4.0)
+	check(effects.remains.stamps==stamped and effects.remains.chunk_count==0,"a helicopter crashing into water leaves no burn mark")
+	# Upload throttle: a stamp every frame for 2 s re-uploads the tile at most every 0.25 s.
+	effects.clear()
+	var before:int=effects.remains.uploads
+	for frame in 120:
+		effects.remains.stamp(Vector3(10+frame*0.1,0,10),1.5,Remains.CRATER)
+		effects._process(1.0/60.0)
+	var uploads:int=effects.remains.uploads-before
+	check(uploads>=7 and uploads<=9,"dirty tile uploads are throttled to 4/s (%d in 2 s)"%uploads)
+	# A barrage over 20 tiles in one frame spreads its uploads: at most UPLOADS_PER_FRAME per frame.
+	effects.clear()
+	effects.set_world_bounds(Vector2(1024,768))
+	for i in 20:effects.remains.stamp(Vector3(32+i%5*64,0,32+i/5*64),2.0,Remains.BURN)
+	var most:=0
+	var frames:=0
+	while not effects.remains.dirty.is_empty() and frames<30:
+		before=effects.remains.uploads
+		effects._process(1.0/60.0)
+		most=maxi(most,effects.remains.uploads-before)
+		frames+=1
+	check(most==Remains.UPLOADS_PER_FRAME and frames==10,"20 freshly marked tiles upload %d per frame over %d frames"%[most,frames])
+	release(effects)
+	# Setup builds a few tiles and draws one empty so the tile shader compiles at load, not at the first crater.
+	var setup=fresh()
+	setup.set_world_bounds(Vector2(1024,768))
+	var shown:=0
+	for tile in setup.remains.spare:shown+=int(tile.node.visible)
+	check(setup.remains.allocated==Remains.PREALLOCATED and setup.remains.spare.size()==Remains.PREALLOCATED and shown==1,"mission setup preallocates %d tiles, one drawn empty for shader warm-up"%setup.remains.allocated)
+	setup.set_world_bounds(Vector2(1024,768))
+	check(setup.remains.allocated==Remains.PREALLOCATED,"repeated setup does not allocate more tiles")
+	release(setup)
+
+# CPU per frame with 300 impacts, and the same frame cost with thousands of past explosions already stamped.
+func remains_cost_checks() -> void:
+	var effects=fresh()
+	effects.set_world_bounds(Vector2(1024,768))
+	var kinds:=["tank","atgm","fpv_drone","helo","at_gun"]
+	var samples:Array[float]=[]
+	var stamp_usec:Array[float]=[]
+	for frame in 600:
+		if frame%2==0 and frame<600:
+			var k:String=kinds[(frame/2)%kinds.size()]
+			var to:=Vector3(200+(frame*7)%120,0.8,200+(frame*13)%90)
+			effects.fire(k,to+Vector3(-30,0.15,10),to,false,false,"rifle")
+		if frame%60==0:effects.destroyed("tank",Vector3(220+frame%80,0.7,240))
+		var started:=Time.get_ticks_usec()
+		effects._process(1.0/60.0)
+		samples.append((Time.get_ticks_usec()-started)/1000.0)
+	var impacts:int=effects.remains.stamps
+	var fight:Dictionary=effects.remains.stats()
+	var fight_stamp_usec:float=fight.stamp_usec_mean
+	# Stamping and uploading, averaged over the 600 fight frames (headless uploads exclude the GPU copy).
+	var remains_share_ms:float=(fight.stamp_usec_mean*fight.stamps+fight.upload_usec_mean*fight.uploads)/600.0/1000.0
+	samples.sort()
+	# Idle frame cost with few vs. many past explosions (same transient state: none).
+	effects.clear()
+	effects.remains.stamp(Vector3(10,0,10),2.0,Remains.BURN)
+	advance(effects,1.0)
+	var idle_few:=idle_cost(effects)
+	var t0:=Time.get_ticks_usec()
+	for i in 3000:effects.remains.stamp(Vector3(fmod(i*37.0,1000.0),0,fmod(i*53.0,760.0)),[1.2,2.5,4.0][i%3],i%3)
+	var per_stamp:=(Time.get_ticks_usec()-t0)/3000.0
+	advance(effects,1.0)
+	var idle_many:=idle_cost(effects)
+	var stats:Dictionary=effects.remains.stats()
+	# One-time procedural brush generation (shared by all instances; first use of each style/variant).
+	var t1:=Time.get_ticks_usec()
+	for style in Remains.STYLES:
+		for variant in Remains.VARIANTS:Remains.make_brush(style,variant)
+	var brush_ms:=(Time.get_ticks_usec()-t1)/1000.0/(Remains.STYLES*Remains.VARIANTS)
+	evidence["remains_brush_ms_each"]=snappedf(brush_ms,0.01)
+	check(brush_ms<15.0,"a base brush is generated once in %.1f ms"%brush_ms)
+	evidence["remains_cost"]={"impacts_marked":impacts,"update_ms_p50_300_impacts":samples[samples.size()/2],"update_ms_p95_300_impacts":samples[int(samples.size()*0.95)],
+		"idle_frame_ms_1_mark":idle_few,"idle_frame_ms_3001_marks":idle_many,"stamp_usec_mean":snappedf(per_stamp,0.1),"stamp_usec_mean_in_fight":snappedf(fight_stamp_usec,0.1),
+		"remains_share_of_fight_ms":snappedf(remains_share_ms,0.001),"tiles":stats.tiles,"evicted":stats.evicted,
+		"texture_bytes":stats.texture_bytes,"image_bytes":stats.image_bytes,"upload_usec_mean_headless":stats.upload_usec_mean,"upload_usec_max_headless":stats.upload_usec_max,
+		"note":"Headless dummy renderer: upload timings exclude the GPU copy; run tests/effects_review.gd natively for real upload cost."}
+	check(impacts>=250,"300-impact run stamped %d marks"%impacts)
+	check(stats.tiles==Remains.MAX_TILES and stats.evicted>0 and stats.texture_bytes==Remains.MAX_TILES*Remains.TILE_BYTES,"ground damage memory is capped at %d tiles (%.1f MB texture)"%[Remains.MAX_TILES,stats.texture_bytes/1048576.0])
+	check(idle_many<maxf(idle_few*1.5,idle_few+0.05),"frame cost stays flat with 3001 past marks (%.3f vs %.3f ms)"%[idle_many,idle_few])
+	check(per_stamp<400.0,"a stamp costs %.0f us"%per_stamp)
+	release(effects)
+
+func idle_cost(effects) -> float:
+	var samples:Array[float]=[]
+	for i in 240:
+		var started:=Time.get_ticks_usec()
+		effects._process(1.0/60.0)
+		samples.append((Time.get_ticks_usec()-started)/1000.0)
+	samples.sort()
+	return samples[samples.size()/2]
+
+# Landed fragments persist in one fixed MultiMesh ring; past the cap the oldest chunk is replaced.
+func chunk_checks() -> void:
+	var effects=fresh()
+	effects.set_world_bounds(Vector2(144,108),128.0)
+	effects.destroyed("tank",Vector3(30,0.7,30))
+	advance(effects,5.0,1.0/30.0)
+	var first:int=effects.remains.chunk_count
+	var on_ground:=true
+	for i in first:
+		var p:Vector3=effects.remains.chunk_pos[i]
+		if p.y>0.3 or p.distance_to(Vector3(30,0,30))>25.0:on_ground=false
+	check(first>=4 and on_ground,"hull fragments come to rest as %d static chunks near the wreck"%first)
+	var oldest:Vector3=effects.remains.chunk_pos[0]
+	var nodes:=descendants(effects)
+	for i in 70:
+		effects.destroyed(["tank","aa","bunker"][i%3],Vector3(10+i%10*12,0.7,10+i/10*12))
+		advance(effects,0.5,1.0/30.0)
+	advance(effects,5.0,1.0/30.0)
+	var r=effects.remains
+	evidence["chunks"]={"added":r.chunks_added,"live":r.chunk_count,"capacity":Remains.CHUNK_CAPACITY}
+	check(r.chunks_added>Remains.CHUNK_CAPACITY and r.chunk_count==Remains.CHUNK_CAPACITY and r.chunks.visible_instance_count==Remains.CHUNK_CAPACITY and r.chunks.instance_count==Remains.CHUNK_CAPACITY,"debris remnants capped at %d (%d landed)"%[Remains.CHUNK_CAPACITY,r.chunks_added])
+	check(not r.chunk_pos[0].is_equal_approx(oldest) and r.chunk_next==r.chunks_added%Remains.CHUNK_CAPACITY,"the oldest chunk is replaced first (ring slot %d next)"%r.chunk_next)
+	check(descendants(effects)==nodes,"chunks and marks add no nodes (%d tiles preallocated for the 144 m map)"%r.allocated)
+	release(effects)
+
 func descendants(node:Node) -> int:
 	var count:=node.get_child_count()
 	for child in node.get_children():count+=descendants(child)
@@ -921,6 +1097,9 @@ func stress_checks() -> void:
 	check(above_top==0,"no live particle sits above its pool's scan limit")
 	samples.sort()
 	evidence["stress"]={"worst":worst,"update_ms_p50":samples[samples.size()/2],"update_ms_p95":samples[int(samples.size()*0.95)],"update_ms_max":samples.back(),"nodes":nodes_before}
+	# Ground-damage tiles for the two impact sites come from the set preallocated at mission setup.
+	var tiles:int=effects.remains.tiles.size()
+	check(tiles>0 and tiles<=Remains.PREALLOCATED,"stress marks fit the preallocated damage tiles (%d of %d)"%[tiles,Remains.PREALLOCATED])
 	check(descendants(effects)==nodes_before,"effects node tree does not grow under fire (%d nodes)"%nodes_before)
 	check(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)==objects_before,"no nodes allocated anywhere during the stress run")
 	check(worst.volume<=Effects.VOLUME_CAPACITY and worst.glow<=Effects.GLOW_CAPACITY and worst.ground<=Effects.GROUND_CAPACITY and worst.visible<=Effects.CAPACITY,"pools stay within capacity: %s"%worst)
