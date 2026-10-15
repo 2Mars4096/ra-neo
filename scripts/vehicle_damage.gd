@@ -281,9 +281,17 @@ static func _finish(sim,target:Dictionary,damage:float)->float:
 static func _event(sim,target:Dictionary,effect:String,penetrated:bool=true)->void:
 	sim.events.append({"type":"vehicle_damage","unit":target.id,"kind":target.kind,"team":target.team,"effect":effect,"penetrated":penetrated,"pos":target.pos,"visible":target.visible})
 
+# Enemy vehicles the player can see: toast the effects that change the fight
+# (not crew casualties or repairs), at most one per ENEMY_NOTICE_GAP seconds.
+const ENEMY_NOTICE:=["mobility","firepower","abandoned","catastrophic","fire","flooding","tail_rotor","hydraulics","sunk","crashed","forced_landing"]
+const ENEMY_NOTICE_GAP:=3.0
 static func _report(sim,target:Dictionary,effect:String,text:String,penetrated:bool=true)->void:
 	_event(sim,target,effect,penetrated)
-	if target.team==0:sim.events.append({"type":"warning","text":text % LABEL.get(target.kind,str(target.kind).capitalize())})
+	var label:String=LABEL.get(target.kind,str(target.kind).capitalize())
+	if target.team==0:sim.events.append({"type":"warning","text":text % label})
+	elif target.get("visible",false) and effect in ENEMY_NOTICE and sim.time>=float(sim.get_meta("enemy_vehicle_notice",-INF)):
+		sim.set_meta("enemy_vehicle_notice",sim.time+ENEMY_NOTICE_GAP)
+		sim.events.append({"type":"warning","text":"Enemy "+text % label.to_lower()})
 
 # can_fire gate. A knocked-out gun cannot fire. An injured crew reloads and
 # acquires more slowly, and a buttoned-up crew acquires more slowly; both are

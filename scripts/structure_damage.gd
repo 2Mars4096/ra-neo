@@ -104,8 +104,10 @@ static func strike(sim,u:Dictionary,target:Dictionary,amount:float,victim:Dictio
 		# A small airframe rarely survives any hit that connects.
 		return maxf(amount,target.hp) if _rng(sim).randf()<FRAGILE_DOWN else amount
 	var he:=he_spec(sim,u)
-	if Garrison.inside(target):
-		var building:Dictionary=Garrison.index(sim).buildings[int(target.garrison)]
+	# Garrisoned, or already through the wall while the section files in or out.
+	var shelter:int=Garrison.member_building(target,victim)
+	if shelter>=0:
+		var building:Dictionary=Garrison.index(sim).buildings[shelter]
 		var state:int=mini(int(building.state),BREACHED)
 		# The round bursts on the wall at the struck soldier's window.
 		var aim:Vector2=victim.pos if not victim.is_empty() else u.pos
@@ -163,10 +165,12 @@ static func damage_building(sim,building_id:int,points:float,source:Vector2,impa
 	if state>=BREACHED and state<COLLAPSED:
 		var rng:=_rng(sim)
 		for u in sim.units:
-			if not sim.alive(u) or int(u.get("garrison",-1))!=building_id:continue
+			if not sim.alive(u) or not _sheltered_in(u,building_id):continue
+			# Mid entry/exit only the soldiers already through the wall are inside.
+			if not Garrison.inside(u) and not u.members.any(func(m):return m.hp>0 and Garrison.member_building(u,m)==building_id):continue
 			sim.Infantry.reconcile(u)
 			for m in u.members:
-				if m.hp>0 and rng.randf()<FRAGMENT_CHANCE:_wound(sim,u,m,sim.Infantry.roll("FRAGMENT",points/10.0,rng))
+				if m.hp>0 and Garrison.member_building(u,m)==building_id and rng.randf()<FRAGMENT_CHANCE:_wound(sim,u,m,sim.Infantry.roll("FRAGMENT",points/10.0,rng))
 			sim.Infantry.publish(u)
 			u.last_hit=sim.time
 			if u.hp<=0.0 and u.id!=exempt:_lost(sim,u)
@@ -189,7 +193,7 @@ static func collapse(sim,building_id:int,exempt:int=-1)->void:
 	for u in sim.units:
 		if not sim.alive(u) or u.members.is_empty():continue
 		var garrisoned:bool=int(u.get("garrison",-1))==building_id
-		if not garrisoned and int(u.get("garrison_target",-1))!=building_id:continue
+		if not garrisoned and not _sheltered_in(u,building_id):continue
 		sim.Infantry.reconcile(u)
 		for m in u.members:
 			if m.get("wound","")==sim.Infantry.KIA or not (garrisoned or m.get("indoors",false)):continue
@@ -207,7 +211,7 @@ static func collapse(sim,building_id:int,exempt:int=-1)->void:
 	# Fire missions on the building end with it.
 	if sim.has_meta(STATE):
 		for gunner in _state(sim).bombard:
-			if int(gunner.get("bombard",-1))==building_id:gunner.erase("bombard");gunner.erase("bombard_move")
+			if int(gunner.get("bombard",-1))==building_id:_end_mission(gunner)
 	var center:Vector2=building.bounds.get_center()
 	sim.terrain.collapse_blocks(building.blocks,building.bounds.grow(0.6))
 	sim.visibility_cache.clear()
@@ -217,6 +221,12 @@ static func collapse(sim,building_id:int,exempt:int=-1)->void:
 	sim.events.append({"type":"world_blast","kind":"collapse","pos":center,"radius":maxf(building.bounds.size.x,building.bounds.size.y)*0.5,"visible":true})
 	if player:sim.events.append({"type":"warning","text":"Building collapsed · %d buried, %d dug out" % [killed,survivors]})
 	elif killed>0:sim.events.append({"type":"warning","text":"Enemy-held building collapsed"})
+
+# Sections garrisoned in, bound for or filing out of this building (which of
+# their soldiers are inside: Garrison.member_building).
+static func _sheltered_in(u:Dictionary,building_id:int)->bool:
+	if u.members.is_empty():return false
+	return building_id in [int(u.get("garrison",-1)),int(u.get("garrison_target",-1)),int(u.get("garrison_exit",-1))]
 
 # One soldier hurt by masonry or blast, through the infantry wound model.
 static func _wound(sim,u:Dictionary,m:Dictionary,outcome:String)->void:
@@ -310,50 +320,108 @@ static func start_cook_off(sim,depot:Dictionary)->void:
 
 # --- Force-attack on a building --------------------------------------------------
 # Orders HE-armed vehicles/emplacements to shell a building until it collapses
-# or they get a new order. Units out of range first close to ~80% of range.
+# or they get a new order. A unit without range or a clear line to the wall
+# first drives to the nearest reachable firing position (aircraft close in
+# straight); with none, the player hears NO_POSITION. A unit that arrives
+# without a line looks again up to BOMBARD_REPLANS times, then gives up.
 # Returns how many units accepted. (Input wiring lives in battle.gd.)
+const NO_POSITION:="No firing position on that building"
+const BOMBARD_REPLANS:=2
+# Candidate firing spots tested for a route per search (each a grid search).
+const ROUTE_TRIES:=8
 static func bombard(sim,ids:Array,building_id:int)->int:
 	if building_id<0 or building_state(sim,building_id)>=COLLAPSED:return 0
 	var building:Dictionary=Garrison.index(sim).buildings[building_id]
 	var accepted:=0
+	var stranded:=0
 	for id in ids:
 		var u:Dictionary=sim.get_unit(int(id))
 		if not sim.alive(u) or not u.members.is_empty() or he_spec(sim,u).is_empty():continue
 		var d:Dictionary=sim.definitions[u.kind]
 		if d.get("strike",false) or (d.get("structure",false) and not d.get("armed",false)):continue
-		var aim:=wall_point(building,u.pos)
-		var reach:float=float(d.range)*0.85
 		u.erase("bombard_move")
-		if u.pos.distance_to(aim)>reach:
-			if float(d.speed)<=0.0:continue
-			if sim.issue([u.id],aim+(u.pos-aim).normalized()*reach*0.8,"move")<=0:continue
-			u["bombard_move"]=u.orders.back().pos
-		elif not d.get("structure",false):sim.stop([u.id])
+		if not _take_position(sim,u,building):
+			stranded+=1
+			continue
 		u["bombard"]=building_id
+		u["bombard_replans"]=0
 		if not _state(sim).bombard.has(u):_state(sim).bombard.append(u)
 		accepted+=1
+	if accepted==0 and stranded>0:sim.events.append({"type":"warning","text":NO_POSITION})
 	return accepted
+
+# Clear line from `from` to the building wall it faces (aircraft fire over roofs).
+static func fire_line(sim,u:Dictionary,building:Dictionary,from:Vector2)->bool:
+	if sim.definitions[u.kind].domain=="air":return true
+	var aim:=wall_point(building,from)
+	return sim.terrain.line_clear(from,aim+(from-aim).normalized()*0.3)
+
+# Stays and fires when in range with a line; otherwise moves to a firing
+# position. False when the unit can do neither.
+static func _take_position(sim,u:Dictionary,building:Dictionary)->bool:
+	var d:Dictionary=sim.definitions[u.kind]
+	var reach:float=float(d.range)*0.85
+	var aim:=wall_point(building,u.pos)
+	if u.pos.distance_to(aim)<=reach and fire_line(sim,u,building,u.pos):
+		if not d.get("structure",false):sim.stop([u.id])
+		return true
+	if float(d.speed)<=0.0:return false
+	var spot:Vector2=aim+(u.pos-aim).normalized()*reach*0.8 if d.domain=="air" else firing_position(sim,u,building,reach)
+	if not spot.is_finite() or sim.issue([u.id],spot,"move")<=0:return false
+	u["bombard_move"]=u.orders.back().pos
+	return true
+
+# Nearest open spot (fog-grid cell centres) within `reach` of the wall it faces,
+# with a clear line to that wall and a route from the unit; INF when none.
+static func firing_position(sim,u:Dictionary,building:Dictionary,reach:float)->Vector2:
+	var d:Dictionary=sim.definitions[u.kind]
+	var terrain=sim.terrain
+	var radius:float=float(d.radius)
+	var profile:String=terrain.mobility_profile(u.kind)
+	var area:Rect2=building.bounds.grow(reach)
+	var low:Vector2i=terrain.cell(area.position)
+	var high:Vector2i=terrain.cell(area.end)
+	var candidates:Array=[]
+	for x in range(low.x,high.x+1):
+		for y in range(low.y,high.y+1):
+			var p:Vector2=terrain.center(Vector2i(x,y))
+			if p.distance_squared_to(wall_point(building,p))<=reach*reach:candidates.append(p)
+	candidates.sort_custom(func(a,b):return a.distance_squared_to(u.pos)<b.distance_squared_to(u.pos))
+	var tries:=0
+	for p in candidates:
+		if not terrain.traversable(p,d.domain,radius) or not fire_line(sim,u,building,p):continue
+		if terrain.reachable(u.pos,p,d.domain,radius,profile):return p
+		tries+=1
+		if tries>=ROUTE_TRIES:break
+	return Vector2.INF
+
+static func _end_mission(u:Dictionary)->void:
+	for key in ["bombard","bombard_move","bombard_replans"]:u.erase(key)
 
 static func _bombard_tick(sim,list:Array)->void:
 	for i in range(list.size()-1,-1,-1):
 		var u:Dictionary=list[i]
 		var id:int=int(u.get("bombard",-1))
 		if not sim.alive(u) or id<0 or building_state(sim,id)>=COLLAPSED:
-			u.erase("bombard");u.erase("bombard_move");list.remove_at(i);continue
+			_end_mission(u);list.remove_at(i);continue
 		if not u.orders.is_empty():
 			# Any other order cancels the fire mission.
 			if u.orders.size()>1 or u.orders[0].mode!="move" or not u.has("bombard_move") or u.orders[0].pos.distance_to(u.bombard_move)>0.5:
-				u.erase("bombard");u.erase("bombard_move");list.remove_at(i)
+				_end_mission(u);list.remove_at(i)
 			continue
 		u.erase("bombard_move")
 		if int(u.target)>=0 or u.cooldown>0.0 or not VehicleDamage.weapon_ready(sim,u):continue
 		var building:Dictionary=Garrison.index(sim).buildings[id]
 		var d:Dictionary=sim.definitions[u.kind]
 		var aim:=wall_point(building,u.pos)
-		if u.pos.distance_to(aim)>float(d.range):
-			u.erase("bombard");list.remove_at(i);continue
-		var near:Vector2=aim+(u.pos-aim).normalized()*0.3
-		if d.domain!="air" and not sim.terrain.line_clear(u.pos,near):continue
+		if u.pos.distance_to(aim)>float(d.range) or not fire_line(sim,u,building,u.pos):
+			# Arrived off the line (or pushed out of range): look again, then give up.
+			var replans:int=int(u.get("bombard_replans",0))
+			if replans<BOMBARD_REPLANS and _take_position(sim,u,building):
+				u["bombard_replans"]=replans+1
+				continue
+			if u.team==0:sim.events.append({"type":"warning","text":NO_POSITION})
+			_end_mission(u);list.remove_at(i);continue
 		u.last_shot=sim.time
 		u.cooldown=float(d.interval)
 		u.state="BOMBARDING"

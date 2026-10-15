@@ -37,6 +37,9 @@ const SOUNDS:={
 	"boom_m":{"cat":"explosion","db":-3.0,"gap":0.1},
 	"boom_l":{"cat":"explosion","db":0.0,"gap":0.15},
 	"crunch":{"cat":"misc","db":-8.0,"gap":0.1},
+	"thud":{"cat":"impact","db":-8.0,"gap":0.12},
+	"debris":{"cat":"impact","db":-9.0,"gap":0.35},
+	"rumble":{"cat":"explosion","db":-1.0,"gap":0.8},
 	"wire":{"cat":"misc","db":-10.0,"gap":0.15},
 }
 # shot kind -> [sound, pitch, db offset]
@@ -86,6 +89,8 @@ var ambience:=AudioStreamPlayer.new()
 var ui_players:Array[AudioStreamPlayer]=[]
 var ui_next:=0
 var was_silent:=false
+var building_states:Dictionary={} # building id -> last heard damage state
+var collapse_heard:Dictionary={} # collapse centre -> clock
 var counters:={"played":0,"throttled":0,"capped":0,"stolen":0,"culled":0,"distant":0,"ui":0}
 
 func setup(simulation, effect_layer=null) -> void:
@@ -198,6 +203,8 @@ func event(e:Dictionary) -> void:
 			play_at("crunch",Vector3(p.x,0.5,p.y),rng.randf_range(0.85,1.1))
 		"warning":ui("warn")
 		"reinforcement":ui("deploy")
+		"building_damage":_building_hit(e)
+		"building_collapse":_building_collapse(e)
 
 func _shot(e:Dictionary) -> void:
 	var kind:String=e.get("kind","rifle")
@@ -246,11 +253,62 @@ func _impact(surface:String, pos:Vector3, heavy:bool, delay:float) -> void:
 		"water":if rng.randf()<0.4:_later(delay,"splash",pos,1.7,-6.0,true)
 		"ground","earth":if rng.randf()<0.35:_later(delay,"dirt",pos,1.6,-6.0,true)
 
+# Masonry under HE: a deep thud and falling plaster where the round strikes the
+# wall, timed with the round's own impact; a louder crack and a debris trickle
+# when the hit holes the building to its next damage state.
+func _building_hit(e:Dictionary) -> void:
+	var id:int=int(e.get("building",-1))
+	var state:int=int(e.get("state",0))
+	var worse:=state>int(building_states.get(id,0))
+	building_states[id]=state
+	var p:Vector2=e.get("impact",Vector2.ZERO)
+	var pos:=Vector3(p.x,clampf(float(e.get("height",3.0))*0.4,1.0,4.0),p.y)
+	if _ground_distance(pos)>hear:
+		_distant(pos,1.0,true)
+		return
+	var due:=_impact_due(p)
+	var weight:=clampf(float(e.get("fraction",0.0)),0.0,1.0)
+	_later(due,"thud",pos,rng.randf_range(0.9,1.1)-0.15*weight,-2.0+3.0*weight)
+	if worse:
+		_later(due+0.05,"masonry",pos,0.6,6.0)
+		_later(due+0.15,"debris",pos,rng.randf_range(1.0,1.15),-3.0)
+
+# A building coming down: a long low rumble, a masonry crack and the rubble
+# pouring down after it; taller buildings rumble deeper and louder.
+func _building_collapse(e:Dictionary) -> void:
+	var p:Vector2=e.get("pos",Vector2.ZERO)
+	building_states[int(e.get("building",-1))]=3
+	collapse_heard[p]=clock
+	var pos:=Vector3(p.x,1.5,p.y)
+	if _ground_distance(pos)>hear:
+		_distant(pos,3.0,true)
+		return
+	var tall:=clampf((float(e.get("height",4.0))-3.0)/15.0,0.0,1.0)
+	var due:=_impact_due(p,maxf(4.0,float(e.get("bounds",Rect2()).size.length())*0.5))
+	_later(due,"masonry",pos,0.5,8.0)
+	_later(due,"rumble",pos,1.0-0.25*tall,2.0*tall)
+	_later(due+0.25,"debris",pos,0.85,2.0)
+	_later(due+1.1,"debris",pos,0.7,0.0)
+	_later(due+1.6,"crunch",pos,0.6,2.0)
+
+# When the round in flight toward `at` lands (its pending impact sound), else now.
+func _impact_due(at:Vector2, near:float=2.5) -> float:
+	var due:=clock
+	for item in pending:
+		if item[5] and Vector2(item[2].x-at.x,item[2].z-at.y).length()<near:due=maxf(due,float(item[0]))
+	return due-clock
+
 func _destroyed(e:Dictionary) -> void:
 	var kind:String=e.get("kind","")
 	var p:Vector2=e.get("pos",Vector2.ZERO)
 	var pos:=Vector3(p.x,0.7,p.y)
 	if kind in Effects.INFANTRY:return
+	# The collapse blast is relayed as a vehicle kill (ruined_building.gd); the
+	# collapse already has its own sound.
+	if collapse_heard.has(p):
+		var heard:float=collapse_heard[p]
+		collapse_heard.erase(p)
+		if heard==clock:return
 	if not bool(e.get("visible",true)) or _ground_distance(pos)>hear:
 		_distant(pos,2.0,true)
 		return
@@ -568,6 +626,10 @@ func build_library() -> void:
 	streams.metal=_wav(metal,hi)
 	streams.masonry=_wav(_burst(hi,0.42,{"crack":0.9,"crack_tau":0.004,"body":0.7,"body_tau":0.09,"lp":0.45,"lp_end":0.12,"tone":0.3,"f0":140.0,"f1":70.0,"tone_tau":0.05,"crackle":1.0,"crackle_rate":0.003}),hi)
 	streams.splash=_wav(_splash(mid,0.6),mid)
+	# Buildings: wall thud, rubble trickle and collapse rumble (low content, low rates).
+	streams.thud=_wav(_burst(lo,0.5,{"crack":0.45,"crack_tau":0.004,"body":1.0,"body_tau":0.07,"lp":0.3,"lp_end":0.04,"tone":0.9,"f0":95.0,"f1":42.0,"tone_tau":0.08,"sweep_tau":0.03,"rumble":0.5,"rumble_tau":0.18,"crackle":0.9,"crackle_rate":0.004}),lo)
+	streams.debris=_wav(_debris(lo,1.8),lo)
+	streams.rumble=_wav(_rumble(6000,2.8),6000)
 	# Explosions: one recipe, longer and darker with size.
 	streams.boom_s=_wav(_boom(lo,0.7,0.6),lo)
 	streams.boom_m=_wav(_boom(lo,1.3,1.0),lo)
@@ -675,6 +737,38 @@ func _boom(rate:int, seconds:float, size:float) -> PackedFloat32Array:
 		if i%int(rate*0.12)==0:target=rng.randf_range(0.7,1.3)
 		surge+=(target-surge)*0.002
 		out[i]*=lerpf(1.0,surge,minf(1.0,i*dt/0.3))
+	return out
+
+# Falling rubble: grains of grit and the odd chunk landing, thinning out.
+func _debris(rate:int, seconds:float) -> PackedFloat32Array:
+	var out:=_silence(rate,seconds)
+	var dt:=1.0/rate
+	var lp:=0.0
+	var grain:=0.0
+	var grain_k:=exp(-dt/0.006)
+	for i in out.size():
+		var t:=i*dt
+		var density:=0.012*exp(-t/0.9)+0.0015
+		if rng.randf()<density:grain=rng.randf_range(0.3,1.0)*exp(-t/1.4)
+		var w:=rng.randf()*2.0-1.0
+		lp+=(w-lp)*0.35
+		out[i]=lp*grain*1.8
+		grain*=grain_k
+	for n in 7:
+		var at:=rng.randf_range(0.0,seconds*0.7)
+		_mix(out,_burst(rate,0.18,{"body":1.0,"body_tau":0.03,"lp":0.25,"lp_end":0.06,"tone":0.6,"f0":120.0,"f1":60.0,"tone_tau":0.03}),rate,at,0.7*exp(-at/1.2))
+	return out
+
+# Collapse: sub-bass groan that swells briefly and rolls away with slow surges.
+func _rumble(rate:int, seconds:float) -> PackedFloat32Array:
+	var out:=_burst(rate,seconds,{"crack":0.3,"crack_tau":0.01,"body":0.7,"body_tau":0.45,"lp":0.12,"lp_end":0.02,"tone":0.8,"f0":60.0,"f1":24.0,"tone_tau":0.9,"sweep_tau":0.4,"rumble":1.0,"rumble_tau":1.3,"crackle":0.4,"crackle_rate":0.003,"attack":0.12})
+	var dt:=1.0/rate
+	var surge:=1.0
+	var target:=1.0
+	for i in out.size():
+		if i%int(rate*0.2)==0:target=rng.randf_range(0.6,1.35)
+		surge+=(target-surge)*0.003
+		out[i]*=surge*minf(1.0,(1.0-i*dt/seconds)*1.6)
 	return out
 
 func _ring(rate:int, seconds:float, partials:Array, click:float, click_tau:float=0.003) -> PackedFloat32Array:

@@ -179,6 +179,7 @@ static func step_transit(sim,u:Dictionary,dt:float)->void:
 			if m.pos.distance_to(spot)<0.3:m.at_door=true
 		if walking.is_empty() and waiting.is_empty():
 			u.erase("garrison_transit")
+			u.erase("garrison_exit")
 			u.hold_command=false
 			u.state="READY"
 			for m in living:m.erase("at_door")
@@ -212,6 +213,8 @@ static func leave(sim,u:Dictionary)->void:
 	if u.get("garrison",-1)<0:return
 	var building:int=int(u.garrison)
 	u["garrison"]=-1
+	# Those still inside while the section files out keep this building's shelter.
+	u["garrison_exit"]=building
 	var door:Vector2=u.get("garrison_door",u.pos)
 	u["garrison_wall"]=wall_point(sim,building,door)
 	u["garrison_transit"]="OUT"
@@ -234,6 +237,7 @@ static func tick(sim,dt:float=1.0/30.0)->void:
 		if not sim.alive(u) or u.members.is_empty():continue
 		if transit(u)=="IN" and not u.orders.is_empty():
 			# Re-ordered mid-entry: whoever got in files back out.
+			u["garrison_exit"]=int(u.garrison_target)
 			u.erase("garrison_target")
 			u["garrison_transit"]="OUT"
 			var rank:=0
@@ -295,7 +299,7 @@ static func man_windows(sim,u:Dictionary)->void:
 # with no doorway walk, and drop any pending entry.
 static func evict(sim,u:Dictionary)->void:
 	u["garrison"]=-1
-	for key in ["garrison_transit","garrison_target","garrison_wall","window_threat","window_threat_pos"]:u.erase(key)
+	for key in ["garrison_transit","garrison_target","garrison_exit","garrison_wall","window_threat","window_threat_pos"]:u.erase(key)
 	u.hold_command=false
 	u.orders=[];u.path=[];u.intent={}
 	u.state="READY"
@@ -313,3 +317,10 @@ static func inside(u:Dictionary)->bool:
 # soldier (vehicles, empty sections) the section state decides.
 static func member_indoors(u:Dictionary,m:Dictionary)->bool:
 	return inside(u) or bool(m.get("indoors",false))
+
+# The building sheltering `m`: the garrison, or during a walked entry/exit the
+# one being entered or left (-1 when the soldier is outside).
+static func member_building(u:Dictionary,m:Dictionary)->int:
+	if inside(u):return int(u.garrison)
+	if not bool(m.get("indoors",false)):return -1
+	return int(u.get("garrison_target",-1)) if transit(u)=="IN" else int(u.get("garrison_exit",-1))
