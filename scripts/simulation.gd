@@ -916,6 +916,7 @@ func tick(dt: float) -> void:
 				resolve_shot(u,target,1.0)
 
 	if profiling:lap=_lap("unit_loop",lap)
+	VehicleDamage.tick_recrew(self,dt)
 	preload("res://scripts/structure_damage.gd").tick(self,dt)
 	update_tactics(dt)
 	if profiling:lap=_lap("tactics",lap)

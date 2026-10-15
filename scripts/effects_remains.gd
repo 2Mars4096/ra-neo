@@ -10,9 +10,11 @@ extends Node3D
 # A few tiles are built during mission setup, one of them drawn empty so the tile shader compiles at load
 # rather than at the first crater.
 
-# 0.4 m/texel: a 1 m crater spans 5 texels, enough for a round outline under bilinear magnification at gameplay
-# zoom (~9 screen px per texel). Tiles are always magnified (>= 1.6 px/texel even at the widest zoom), so they
-# carry no mipmaps.
+# 0.4 m/texel: a 1 m crater spans 5 texels. Tiles are always magnified (~9 screen px per texel at gameplay zoom,
+# >= 1.6 even at the widest), so they carry no mipmaps and are sampled with a cubic B-spline in
+# shaders/effect_remains.gdshader: plain bilinear kinks every contour at texel lines, which made small crater rims read
+# as blocky diamonds on screen. (0.32 m/texel would cost 15.36 MB of texture plus the same in CPU images at the tile
+# cap and 56% larger uploads, for little visible gain once sampling is smooth.)
 const TEXEL:=0.4
 const TILE_TEXELS:=160
 const TILE_SIZE:=TEXEL*TILE_TEXELS
@@ -25,6 +27,7 @@ const HEIGHT:=0.036 # above road surfaces (<= 0.028), below fresh decals (0.045)
 const CHUNK_CAPACITY:=512
 const CHUNK_MIN_SIZE:=0.12
 const TILE_BYTES:=TILE_TEXELS*TILE_TEXELS*4
+const SHADER:=preload("res://shaders/effect_remains.gdshader")
 
 # Mark styles
 const CRATER:=0 # HE: scorched pit, lighter brown ejecta rim ring, streaky soil spray
@@ -166,16 +169,13 @@ func _new_tile() -> Dictionary:
 		plane=PlaneMesh.new()
 		plane.size=Vector2(TILE_SIZE,TILE_SIZE)
 	var image:=Image.create(TILE_TEXELS,TILE_TEXELS,false,Image.FORMAT_RGBA8)
-	var material:=StandardMaterial3D.new()
-	material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.depth_draw_mode=BaseMaterial3D.DEPTH_DRAW_DISABLED
-	material.texture_filter=BaseMaterial3D.TEXTURE_FILTER_LINEAR
-	# Clamp, not repeat: a mark at one tile edge must not bleed a filtered line onto the opposite edge.
-	material.texture_repeat=false
+	# Unshaded alpha-blended quad sampled with a smooth cubic B-spline (4 bilinear taps, clamped edges so a mark at
+	# one tile edge does not bleed onto the opposite edge): see shaders/effect_remains.gdshader.
+	var material:=ShaderMaterial.new()
+	material.shader=SHADER
 	material.render_priority=-2
 	var texture:=ImageTexture.create_from_image(image)
-	material.albedo_texture=texture
+	material.set_shader_parameter("remains",texture)
 	var node:=MeshInstance3D.new()
 	node.mesh=plane
 	node.material_override=material

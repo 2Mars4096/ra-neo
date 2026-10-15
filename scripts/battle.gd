@@ -668,6 +668,14 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		notify("Field structures are fixed • select a section to move")
 		attack_mode=false
 		return
+	# Right-click an abandoned vehicle with infantry selected: the nearest
+	# section climbs in (re-crew; an enemy hull is captured).
+	if enemy<0 and not attack:
+		var hull:Dictionary=sim.VehicleDamage.abandoned_at(sim,destination)
+		if not hull.is_empty() and sim.VehicleDamage.order_recrew(sim,ids,hull.id)>0:
+			notify(("Section moving to capture the enemy %s" if hull.team!=0 else "Section moving to re-crew the %s") % sim.VehicleDamage.LABEL.get(hull.kind,str(hull.kind).capitalize()))
+			ping()
+			return
 	# Right-click an obstacle (enemy wire/hedgehogs/sandbags/trench, or a
 	# finished own work) with engineers selected: clear it.
 	if not attack and not sim.field_ops.is_empty():

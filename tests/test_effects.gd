@@ -940,16 +940,46 @@ func remains_checks() -> void:
 	check(setup.remains.allocated==Remains.PREALLOCATED,"repeated setup does not allocate more tiles")
 	release(setup)
 
-# Stamped colour as the GPU samples it: bilinear between texel centres ((i+0.5)*TEXEL), like the tile quads.
-func filtered_color(remains, x:float, z:float) -> Color:
+# Stamped colour as the GPU samples it: a cubic B-spline over the 4x4 texel centres ((i+0.5)*TEXEL) around the point,
+# like shaders/effect_remains.gdshader (smooth set), or plain bilinear between the nearest 4 (the old tile material).
+func filtered_color(remains, x:float, z:float, smooth:bool=true) -> Color:
 	var t:float=Remains.TEXEL
 	var fx:=x/t-0.5
 	var fz:=z/t-0.5
 	var ix:=floori(fx)
 	var iz:=floori(fz)
-	var c:=[]
-	for k in 4:c.append(remains.color_at(Vector3((ix+k%2+0.5)*t,0,(iz+k/2+0.5)*t)))
-	return c[0].lerp(c[1],fx-ix).lerp(c[2].lerp(c[3],fx-ix),fz-iz)
+	if not smooth:
+		var c:=[]
+		for k in 4:c.append(remains.color_at(Vector3((ix+k%2+0.5)*t,0,(iz+k/2+0.5)*t)))
+		return c[0].lerp(c[1],fx-ix).lerp(c[2].lerp(c[3],fx-ix),fz-iz)
+	var wx:=bspline(fx-ix)
+	var wz:=bspline(fz-iz)
+	var sum:=Color(0,0,0,0)
+	for j in 4:
+		for k in 4:sum+=remains.color_at(Vector3((ix+k-0.5)*t,0,(iz+j-0.5)*t))*(wx[k]*wz[j])
+	return sum
+
+func bspline(f:float) -> Array:
+	return [pow(1.0-f,3)/6.0,(4.0-6.0*f*f+3.0*f*f*f)/6.0,(1.0+3.0*f+3.0*f*f-3.0*f*f*f)/6.0,f*f*f/6.0]
+
+# Kinkiness of a mark's half-alpha contour on screen: mean deviation (m) of its radius in 64 directions from the mean
+# of its two neighbours. Bilinear contours are chains of hyperbola segments that kink at every texel line (the
+# blocky diamond rings seen natively); a smooth reconstruction leaves only the brush's own low-frequency outline.
+func contour_kink(remains, centre:Vector2, smooth:bool) -> float:
+	var radii:=[]
+	for n in 64:
+		var dir:=Vector2.RIGHT.rotated(n*TAU/64)
+		var r:=0.0
+		while r<8.0 and filtered_color(remains,centre.x+dir.x*r,centre.y+dir.y*r,smooth).a>=0.5:r+=0.02
+		var lo:=maxf(r-0.02,0.0)
+		for k in 12:
+			var mid:=0.5*(lo+r)
+			if filtered_color(remains,centre.x+dir.x*mid,centre.y+dir.y*mid,smooth).a>=0.5:lo=mid
+			else:r=mid
+		radii.append(r)
+	var kink:=0.0
+	for n in 64:kink+=absf(radii[n]-0.5*(radii[(n+63)%64]+radii[(n+1)%64]))
+	return kink/64.0
 
 # Distance from a mark's centre along `dir` to its outline (filtered alpha first below 0.1) or, with dark set,
 # to the edge of what reads as dark on screen (the mark composited over a mid-tone ground first above 0.2).
@@ -1042,7 +1072,30 @@ func crater_shape_checks() -> void:
 	evidence["remains_crater_luminance"]={"crater_centre":snappedf(middle.get_luminance(),0.01),"crater_rim":snappedf(rim.get_luminance(),0.01),"rim_rgb":[snappedf(rim.r,0.01),snappedf(rim.g,0.01),snappedf(rim.b,0.01)],"burn_centre":snappedf(burn_middle.get_luminance(),0.01),"burn_brightest":snappedf(burn_rim.get_luminance(),0.01)}
 	check(middle.a>0.8 and middle.get_luminance()<0.06 and rim.get_luminance()>3.0*middle.get_luminance() and rim.r>rim.b+0.05,"HE crater: dark scorched centre inside a lighter brown ejecta rim %s"%evidence.remains_crater_luminance)
 	check(burn_middle.a>0.8 and burn_rim.get_luminance()<0.1,"burn mark has no light rim %s"%evidence.remains_crater_luminance)
-	check(remains.tiles.values()[0].node.material_override.texture_filter==BaseMaterial3D.TEXTURE_FILTER_LINEAR and not remains.tiles.values()[0].node.material_override.texture_repeat,"tiles sample linearly with clamped edges")
+	# Tiles draw through the smooth B-spline shader (4 bilinear taps of a clamped, linearly filtered texture).
+	var material:Material=remains.tiles.values()[0].node.material_override
+	var code:String=material.shader.code if material is ShaderMaterial and material.shader else ""
+	check(material is ShaderMaterial and material.shader.resource_path=="res://shaders/effect_remains.gdshader" and material.get_shader_parameter("remains")==remains.tiles.values()[0].texture
+		and "smooth_sample(remains, UV)" in code and code.count("texture(tex,")==4 and "filter_linear," in code and "repeat_disable" in code,"tiles sample a clamped linear texture through the 4-tap B-spline shader")
+	var uniforms:=[]
+	for uniform in (load("res://shaders/effect_remains.gdshader") as Shader).get_shader_uniform_list():uniforms.append(uniform.name)
+	check("remains" in uniforms,"effect_remains.gdshader compiles and exposes remains")
+	# Smooth sampling removes the texel-line kinks that made small craters read as blocky diamonds.
+	remains.clear()
+	var kinks:={}
+	for spec in [["crater_0.45",0.45],["crater_1.75",1.75]]:
+		var smooth_sum:=0.0
+		var linear_sum:=0.0
+		for k in 4:
+			var p:=Vector3(40+k*24.3,0,40)
+			remains.stamp(p,spec[1],Remains.CRATER)
+			var centre:=Vector2((floori(p.x/t)+0.5)*t,(floori(p.z/t)+0.5)*t)
+			smooth_sum+=contour_kink(remains,centre,true)
+			linear_sum+=contour_kink(remains,centre,false)
+		kinks[spec[0]]={"bilinear_mm":snappedf(linear_sum/4.0*1000.0,0.1),"bspline_mm":snappedf(smooth_sum/4.0*1000.0,0.1)}
+		remains.clear()
+	evidence["remains_contour_kink"]=kinks
+	check(kinks["crater_0.45"].bspline_mm<0.5*kinks["crater_0.45"].bilinear_mm and kinks["crater_1.75"].bspline_mm<0.5*kinks["crater_1.75"].bilinear_mm,"smooth sampling at least halves crater contour kinks against bilinear: %s"%kinks)
 	release(effects)
 
 # CPU per frame with 300 impacts, and the same frame cost with thousands of past explosions already stamped.

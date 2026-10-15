@@ -153,6 +153,8 @@ static func strike(sim,u:Dictionary,target:Dictionary,amount:float)->float:
 				target.cooldown=maxf(float(target.cooldown),0.0)+float(td.interval)
 				target.aim_time=0.0
 				if target.crew<=0:
+					# The hull's remaining integrity, kept for re-crewing.
+					if td.domain!="air":target["abandoned_hp"]=maxf(0.0,float(target.hp)-damage)
 					target.hp=0.0
 					if td.domain=="air":_report(sim,target,"catastrophic","%s pilot lost · crashed")
 					else:
@@ -398,3 +400,141 @@ static func field_repair(sim,u:Dictionary,dt:float)->void:
 		"crew":
 			u.crew=int(u.crew)+1
 			_report(sim,u,"repaired_crew","%s crew replacement arrived")
+
+# Re-crewing: an infantry section ordered to an abandoned hull (crew bailed out,
+# integrity left) climbs in after RECREW_SECONDS beside it, out of heavy fire.
+# Up to RECREW_CREW soldiers leave the section as the new crew (an understrength
+# crew keeps the casualty penalties); an enemy hull is captured. The wreck gives
+# way to a fresh unit with the hull's integrity and component damage, so the
+# presentation builds a normal vehicle and the wreck bookkeeping stays simple.
+const RECREW:="vehicle_recrew"
+const RECREW_KINDS:=["rifle","atgm","engineer"]
+const RECREW_SECONDS:=4.0
+const RECREW_REACH:=4.0
+const RECREW_CREW:=2
+# Heavy fire pauses the work: section suppression, or hit within RECREW_QUIET s.
+const RECREW_SUPPRESSION:=0.5
+const RECREW_QUIET:=1.5
+const RECREW_GIVE_UP:=3.0
+# Wound state of a soldier who left the section as crew: hp 0, never drawn,
+# never a casualty or a body.
+const BOARDED:="CREW"
+
+static func recrewable(sim,hull:Dictionary)->bool:
+	return not hull.is_empty() and not sim.alive(hull) and hull.get("abandoned",false) and hull.get("wrecked",false) and float(hull.get("abandoned_hp",0.0))>0.0
+
+# The re-crewable hull under a ground point (within its wreck radius + slack).
+static func abandoned_at(sim,pos:Vector2,slack:float=1.0)->Dictionary:
+	var best:Dictionary={}
+	var nearest:=INF
+	for wreck in wrecks(sim):
+		var gap:float=pos.distance_to(wreck.pos)
+		if gap>float(wreck.radius)+slack or gap>=nearest:continue
+		var hull:Dictionary=sim.get_unit(int(wreck.id))
+		if recrewable(sim,hull):
+			best=hull
+			nearest=gap
+	return best
+
+static func can_recrew(sim,section:Dictionary)->bool:
+	if not sim.alive(section) or section.kind not in RECREW_KINDS or section.get("combat_ineffective",false):return false
+	for member in section.members:
+		if member.hp>0:return true
+	return false
+
+# Sends the nearest eligible section among `ids` to the hull. Returns 1 if sent.
+static func order_recrew(sim,ids:Array,hull_id:int)->int:
+	var hull:Dictionary=sim.get_unit(hull_id)
+	if not recrewable(sim,hull):return 0
+	var chosen:Dictionary={}
+	var nearest:=INF
+	for id in ids:
+		var section:Dictionary=sim.get_unit(int(id))
+		if not can_recrew(sim,section):continue
+		var gap:float=section.pos.distance_squared_to(hull.pos)
+		if gap<nearest:
+			chosen=section
+			nearest=gap
+	if chosen.is_empty():return 0
+	var away:Vector2=chosen.pos-hull.pos
+	var approach:Vector2=hull.pos+(away.normalized() if away.length()>0.01 else Vector2.DOWN)*(float(sim.definitions[hull.kind].radius)+1.5)
+	if sim.issue([chosen.id],approach,"move")==0:return 0
+	if not sim.has_meta(RECREW):sim.set_meta(RECREW,[])
+	var jobs:Array=sim.get_meta(RECREW)
+	for i in range(jobs.size()-1,-1,-1):
+		if int(jobs[i].section)==int(chosen.id):jobs.remove_at(i)
+	jobs.append({"section":chosen.id,"hull":hull.id,"dest":chosen.orders[-1].pos if not chosen.orders.is_empty() else approach,"done":0.0,"idle":0.0})
+	return 1
+
+# Per sim tick (simulation.tick, after the unit loop).
+static func tick_recrew(sim,dt:float)->void:
+	if not sim.has_meta(RECREW):return
+	var jobs:Array=sim.get_meta(RECREW)
+	for i in range(jobs.size()-1,-1,-1):
+		var job:Dictionary=jobs[i]
+		var section:Dictionary=sim.get_unit(int(job.section))
+		var hull:Dictionary=sim.get_unit(int(job.hull))
+		# Lost, beaten to it, or redirected by a new order: drop the job.
+		if not can_recrew(sim,section) or not recrewable(sim,hull) or (not section.orders.is_empty() and section.orders[-1].pos!=job.dest):
+			jobs.remove_at(i)
+			continue
+		if section.pos.distance_to(hull.pos)>float(sim.definitions[hull.kind].radius)+RECREW_REACH:
+			if section.orders.is_empty():
+				job.idle=float(job.idle)+dt
+				if float(job.idle)>=RECREW_GIVE_UP:
+					jobs.remove_at(i)
+					if section.team==0:sim.events.append({"type":"warning","text":"Section could not reach the %s" % LABEL.get(hull.kind,str(hull.kind).capitalize())})
+			continue
+		if float(section.suppression)>=RECREW_SUPPRESSION or sim.time-float(section.last_hit)<RECREW_QUIET:
+			section.reason="Re-crewing · pinned by fire"
+			continue
+		job.done=float(job.done)+dt
+		section.reason="Re-crewing %d%%" % int(100.0*minf(1.0,float(job.done)/RECREW_SECONDS))
+		if float(job.done)>=RECREW_SECONDS:
+			jobs.remove_at(i)
+			_board(sim,section,hull)
+	if jobs.is_empty():sim.remove_meta(RECREW)
+
+# Soldiers climb in: a fresh hull replaces the wreck. Returns the new vehicle.
+static func _board(sim,section:Dictionary,hull:Dictionary)->Dictionary:
+	var fresh:Dictionary=sim.spawn(hull.kind,section.team,hull.pos)
+	if fresh.is_empty():return fresh
+	var able:Array=section.members.filter(func(m):return m.hp>0)
+	# Healthy soldiers first; the highest index first, so an ATGM team keeps its launcher.
+	able.sort_custom(func(a,b):return a.wound==b.wound and a.index>b.index or a.wound!=b.wound and a.wound==sim.Infantry.HEALTHY)
+	var crew_full:int=int(hull.get("crew_full",sim.definitions[hull.kind].get("crew",2)))
+	var count:int=mini(mini(crew_full,RECREW_CREW),able.size())
+	for k in count:
+		var member:Dictionary=able[k]
+		sim.Infantry.release(section,member)
+		if member.get("cover_phase","")!="":sim.Infantry.Cover.clear(member)
+		member.hp=0.0
+		member.wound=BOARDED
+		member.state=BOARDED
+		member.target=-1
+		member.aim=0.0
+		member.bleed_at=INF
+	sim.Infantry.publish(section)
+	fresh.pos=hull.pos
+	fresh.home=hull.pos
+	fresh.facing=hull.facing
+	fresh.hp=clampf(float(hull.abandoned_hp),1.0,float(fresh.max_hp))
+	ensure_state(sim,fresh)
+	fresh.crew=count
+	fresh.crew_full=crew_full
+	fresh.mobility_kill=hull.get("mobility_kill",false)
+	fresh.firepower_kill=hull.get("firepower_kill",false)
+	# The wreck is gone: its node hides (not alive, not wrecked).
+	hull.wrecked=false
+	hull.abandoned_hp=0.0
+	hull["recrewed_as"]=fresh.id
+	var list:Array=wrecks(sim)
+	for k in range(list.size()-1,-1,-1):
+		if int(list[k].id)==int(hull.id):list.remove_at(k)
+	var captured:bool=hull.team!=section.team
+	if not captured and hull.team==0:sim.losses=maxi(0,sim.losses-1)
+	_event(sim,fresh,"captured" if captured else "recrewed")
+	if fresh.team==0:
+		var label:String=LABEL.get(fresh.kind,str(fresh.kind).capitalize())
+		sim.events.append({"type":"warning","text":("Enemy %s captured · %d crew aboard" if captured else "%s re-crewed · %d crew aboard") % [label,count]})
+	return fresh
