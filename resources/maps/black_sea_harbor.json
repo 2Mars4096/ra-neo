@@ -1,0 +1,3413 @@
+{
+ "schema_version": 2,
+ "compiler": "tools/build_harbor_map.py",
+ "proposal": {
+  "status": "authored fictional geography; gameplay balance and native appearance pending validation",
+  "inspiration": "Broad public bay/headland geography only: a western open sea, a long eastward harbor and a south-cutting inlet. All dimensions, streets, parcels, objectives and forces are invented; no real military positions or defenses are represented.",
+  "assumptions": [
+   "One world unit is one gameplay distance unit, not a survey scale; building footprints are RTS-compressed to about 0.6x real, storey 2.7 u.",
+   "Land forces cross around the closed south-inlet head and the eastern main-bay head; there are no underwater roads or invisible bridges.",
+   "All normal play uses field operations with one supply pool and engineer support; old scenarios remain hidden fixtures.",
+   "Navigation cells are 4 units and fog cells are 8 units; primary corridors are 16-20 units wide, town streets 10-12, private lanes and tracks 6-8.",
+   "Rotations use Godot Y yaw: local x,z points rotate clockwise by rotation_degrees (world = centre + (x cos a - z sin a, x sin a + z cos a), a = -yaw). Street face is local -z.",
+   "Collision: architecture entries are independent of blocks; each carries collision [first,count] into blocks. A rotated footprint is covered by <=6 axis-aligned rects with <=1 u excess; where a street is too oblique for that, the building yaw is snapped toward the axis (a slightly stepped frontage, as on real slopes).",
+   "Morphology note: each district is one period's rule set. Historic centre = rounded ring street around the cathedral hill with radials, waterfront boulevard and inlet embankment; perimeter blocks with corner buildings, continuous 0.8 u (side street) or 3.2 u (tree-lined main street) building lines and open courtyards. Hillside = contour lanes, walled private plots 11-21 x 13-30 with the house on a front corner, outbuildings and gardens behind, garages in the ravine. Microdistrict = superblocks between arterials with slab rows on the block axis, 18-22 u yards, a school or kindergarten, shops on the arterial and garages on the edge. Port = grid estate with transit sheds parallel to the quay, siding between shed and quay road, crane rails on the apron, workshops and a tank farm behind. Farm belt = linear village on one lane with barns behind and vineyard blocks edged by poplars. North side = private houses, three panel_5 near the ferry landing, a dacha cooperative grid and the battery ruin on the headland.",
+   "Squares, parks, the cemetery, vineyards, fields, the tank farm, stockyard and parade ground are deliberate open space, not missing scatter. Damage is clustered within ~60 u of objectives and the freight front only."
+  ]
+ },
+ "scenario": {
+  "id": "black_sea_harbor",
+  "name": "BLACK SEA HARBOR",
+  "mode": "field_ops",
+  "hidden": false,
+  "brief": "Secure the harbor approach, old town and freight yard; engineers support the combined-arms force.",
+  "size": [
+   1024,
+   768
+  ],
+  "nav_cell_size": 4,
+  "fog_cell_size": 8,
+  "style": "showcase",
+  "port": false,
+  "shore_x": 1024,
+  "autonomy": true,
+  "air_altitudes": {
+   "drone": 11,
+   "helo": 13
+  },
+  "hold": 90,
+  "field_insertion": [
+   280,
+   680
+  ],
+  "field_sea_insertion": [
+   80,
+   640
+  ],
+  "field_enemy_insertion": [
+   940,
+   120
+  ],
+  "objectives": [
+   [
+    340,
+    342
+   ],
+   [
+    345,
+    455
+   ],
+   [
+    715,
+    365
+   ]
+  ],
+  "sectors": [
+   "HARBOR APPROACH",
+   "OLD TOWN",
+   "FREIGHT YARD"
+  ],
+  "water_polygons": [
+   [
+    [
+     0,
+     0
+    ],
+    [
+     190,
+     0
+    ],
+    [
+     205,
+     100
+    ],
+    [
+     180,
+     180
+    ],
+    [
+     210,
+     260
+    ],
+    [
+     200,
+     340
+    ],
+    [
+     195,
+     410
+    ],
+    [
+     212,
+     490
+    ],
+    [
+     200,
+     580
+    ],
+    [
+     180,
+     650
+    ],
+    [
+     205,
+     768
+    ],
+    [
+     0,
+     768
+    ]
+   ],
+   [
+    [
+     160,
+     190
+    ],
+    [
+     300,
+     175
+    ],
+    [
+     450,
+     180
+    ],
+    [
+     590,
+     190
+    ],
+    [
+     730,
+     205
+    ],
+    [
+     830,
+     225
+    ],
+    [
+     872,
+     250
+    ],
+    [
+     850,
+     290
+    ],
+    [
+     800,
+     315
+    ],
+    [
+     700,
+     330
+    ],
+    [
+     560,
+     335
+    ],
+    [
+     430,
+     325
+    ],
+    [
+     300,
+     320
+    ],
+    [
+     160,
+     340
+    ]
+   ],
+   [
+    [
+     420,
+     300
+    ],
+    [
+     500,
+     300
+    ],
+    [
+     505,
+     390
+    ],
+    [
+     490,
+     460
+    ],
+    [
+     488,
+     525
+    ],
+    [
+     470,
+     554
+    ],
+    [
+     440,
+     545
+    ],
+    [
+     425,
+     500
+    ],
+    [
+     430,
+     440
+    ],
+    [
+     415,
+     370
+    ]
+   ]
+  ],
+  "woods": [
+   [
+    230,
+    610,
+    24,
+    30
+   ],
+   [
+    325,
+    615,
+    20,
+    18
+   ],
+   [
+    560,
+    615,
+    40,
+    20
+   ],
+   [
+    785,
+    590,
+    32,
+    35
+   ],
+   [
+    940,
+    620,
+    20,
+    32
+   ],
+   [
+    650,
+    100,
+    35,
+    20
+   ]
+  ],
+  "rubble": [
+   365,
+   465,
+   15,
+   10
+  ],
+  "mud": [
+   600,
+   615,
+   60,
+   22
+  ],
+  "resource_fields": [],
+  "districts": [
+   {
+    "name": "West insertion green",
+    "type": "staging",
+    "bounds": [
+     220,
+     640,
+     150,
+     90
+    ]
+   },
+   {
+    "name": "Old peninsula town",
+    "type": "urban",
+    "bounds": [
+     222,
+     345,
+     190,
+     215
+    ]
+   },
+   {
+    "name": "Southern hillside neighborhoods",
+    "type": "urban",
+    "bounds": [
+     310,
+     575,
+     220,
+     140
+    ]
+   },
+   {
+    "name": "Freight harbor and loading aprons",
+    "type": "industry",
+    "bounds": [
+     555,
+     342,
+     290,
+     180
+    ]
+   },
+   {
+    "name": "Eastern bayhead town",
+    "type": "urban",
+    "bounds": [
+     875,
+     340,
+     135,
+     230
+    ]
+   },
+   {
+    "name": "Orchard and farm belt",
+    "type": "rural",
+    "bounds": [
+     550,
+     600,
+     330,
+     130
+    ]
+   },
+   {
+    "name": "North headland neighborhoods",
+    "type": "urban",
+    "bounds": [
+     660,
+     50,
+     250,
+     110
+    ]
+   },
+   {
+    "name": "Northeast reserve area",
+    "type": "staging",
+    "bounds": [
+     915,
+     60,
+     100,
+     140
+    ]
+   }
+  ],
+  "player_force": [
+   {
+    "kind": "engineer",
+    "position": [
+     280,
+     680
+    ]
+   },
+   {
+    "kind": "rifle",
+    "position": [
+     270,
+     670
+    ]
+   },
+   {
+    "kind": "rifle",
+    "position": [
+     290,
+     670
+    ]
+   },
+   {
+    "kind": "atgm",
+    "position": [
+     295,
+     687
+    ]
+   },
+   {
+    "kind": "tank",
+    "position": [
+     280,
+     695
+    ]
+   },
+   {
+    "kind": "aa",
+    "position": [
+     300,
+     700
+    ]
+   },
+   {
+    "kind": "drone",
+    "position": [
+     275,
+     660
+    ]
+   },
+   {
+    "kind": "helo",
+    "position": [
+     310,
+     680
+    ]
+   },
+   {
+    "kind": "boat",
+    "position": [
+     80,
+     640
+    ]
+   }
+  ],
+  "enemy_force": [
+   {
+    "kind": "rifle",
+    "position": [
+     350,
+     344
+    ]
+   },
+   {
+    "kind": "atgm",
+    "position": [
+     326,
+     342
+    ]
+   },
+   {
+    "kind": "tank",
+    "position": [
+     345,
+     355
+    ]
+   },
+   {
+    "kind": "rifle",
+    "position": [
+     345,
+     461
+    ]
+   },
+   {
+    "kind": "rifle",
+    "position": [
+     320,
+     454
+    ]
+   },
+   {
+    "kind": "aa",
+    "position": [
+     340,
+     450
+    ]
+   },
+   {
+    "kind": "tank",
+    "position": [
+     715,
+     372
+    ]
+   },
+   {
+    "kind": "atgm",
+    "position": [
+     700,
+     360
+    ]
+   },
+   {
+    "kind": "rifle",
+    "position": [
+     735,
+     365
+    ]
+   },
+   {
+    "kind": "rifle",
+    "position": [
+     940,
+     120
+    ]
+   },
+   {
+    "kind": "tank",
+    "position": [
+     950,
+     130
+    ]
+   },
+   {
+    "kind": "aa",
+    "position": [
+     930,
+     110
+    ]
+   },
+   {
+    "kind": "drone",
+    "position": [
+     910,
+     160
+    ]
+   },
+   {
+    "kind": "helo",
+    "position": [
+     960,
+     145
+    ]
+   },
+   {
+    "kind": "boat",
+    "position": [
+     670,
+     260
+    ]
+   },
+   {
+    "kind": "boat",
+    "position": [
+     330,
+     265
+    ]
+   }
+  ]
+ },
+ "streets": [
+  {
+   "name": "Peninsula spine",
+   "width": 18,
+   "purpose": "insertion to town and waterfront",
+   "points": [
+    [
+     280,
+     710
+    ],
+    [
+     280,
+     680
+    ],
+    [
+     270,
+     600
+    ],
+    [
+     290,
+     550
+    ],
+    [
+     290,
+     455
+    ],
+    [
+     300,
+     375
+    ],
+    [
+     340,
+     342
+    ]
+   ],
+   "class": "avenue"
+  },
+  {
+   "name": "Bayhead ring",
+   "width": 20,
+   "purpose": "continuous land route around both bay heads",
+   "points": [
+    [
+     270,
+     600
+    ],
+    [
+     430,
+     610
+    ],
+    [
+     560,
+     595
+    ],
+    [
+     700,
+     570
+    ],
+    [
+     880,
+     525
+    ],
+    [
+     930,
+     400
+    ],
+    [
+     920,
+     250
+    ],
+    [
+     940,
+     120
+    ],
+    [
+     960,
+     70
+    ]
+   ],
+   "class": "arterial"
+  },
+  {
+   "name": "Freight arterial",
+   "width": 18,
+   "purpose": "large vehicle access to cargo sector",
+   "points": [
+    [
+     700,
+     570
+    ],
+    [
+     700,
+     480
+    ],
+    [
+     710,
+     420
+    ],
+    [
+     715,
+     365
+    ],
+    [
+     790,
+     350
+    ]
+   ],
+   "class": "arterial"
+  },
+  {
+   "name": "Quay service road",
+   "width": 16,
+   "purpose": "cargo waterfront service corridor",
+   "points": [
+    [
+     565,
+     353
+    ],
+    [
+     645,
+     353
+    ],
+    [
+     715,
+     365
+    ],
+    [
+     800,
+     345
+    ],
+    [
+     855,
+     335
+    ],
+    [
+     925,
+     335
+    ]
+   ],
+   "class": "port"
+  },
+  {
+   "name": "Cargo east connector",
+   "width": 16,
+   "purpose": "freight to ring road",
+   "points": [
+    [
+     800,
+     345
+    ],
+    [
+     810,
+     405
+    ],
+    [
+     810,
+     465
+    ],
+    [
+     810,
+     542
+    ]
+   ],
+   "class": "port"
+  },
+  {
+   "name": "Farm north access",
+   "width": 14,
+   "purpose": "rural alternative to freight approach",
+   "points": [
+    [
+     745,
+     665
+    ],
+    [
+     745,
+     559
+    ]
+   ],
+   "class": "track"
+  },
+  {
+   "name": "Primorsky boulevard",
+   "width": 12,
+   "class": "boulevard",
+   "purpose": "old town waterfront boulevard",
+   "points": [
+    [
+     214,
+     343
+    ],
+    [
+     300,
+     341
+    ],
+    [
+     340,
+     342
+    ],
+    [
+     406,
+     340
+    ]
+   ]
+  },
+  {
+   "name": "Inlet embankment",
+   "width": 10,
+   "class": "boulevard",
+   "purpose": "old town inlet embankment",
+   "points": [
+    [
+     406,
+     340
+    ],
+    [
+     408,
+     415
+    ],
+    [
+     410,
+     492
+    ],
+    [
+     418,
+     530
+    ],
+    [
+     432,
+     556
+    ],
+    [
+     450,
+     575
+    ],
+    [
+     452,
+     607.5
+    ]
+   ]
+  },
+  {
+   "name": "Hill ring north",
+   "width": 12,
+   "class": "avenue",
+   "purpose": "old town hill ring street",
+   "points": [
+    [
+     297.1,
+     398
+    ],
+    [
+     386,
+     398
+    ],
+    [
+     408,
+     415
+    ]
+   ]
+  },
+  {
+   "name": "Hill ring south",
+   "width": 12,
+   "class": "avenue",
+   "purpose": "old town hill ring street",
+   "points": [
+    [
+     410,
+     492
+    ],
+    [
+     396,
+     510
+    ],
+    [
+     290,
+     510
+    ]
+   ]
+  },
+  {
+   "name": "West sea street",
+   "width": 10,
+   "class": "street",
+   "purpose": "old town western sea street",
+   "points": [
+    [
+     214,
+     343
+    ],
+    [
+     212,
+     410
+    ],
+    [
+     224,
+     490
+    ],
+    [
+     218,
+     560
+    ],
+    [
+     240,
+     590
+    ],
+    [
+     270,
+     600
+    ]
+   ]
+  },
+  {
+   "name": "Cathedral radial",
+   "width": 10,
+   "class": "street",
+   "purpose": "old town radial to boulevard",
+   "points": [
+    [
+     325,
+     398
+    ],
+    [
+     325,
+     354.4
+    ]
+   ]
+  },
+  {
+   "name": "Admiralty radial",
+   "width": 10,
+   "class": "street",
+   "purpose": "old town radial to boulevard",
+   "points": [
+    [
+     362,
+     398
+    ],
+    [
+     362,
+     341.3
+    ]
+   ]
+  },
+  {
+   "name": "Lazarev street",
+   "width": 10,
+   "class": "street",
+   "purpose": "old town cross street",
+   "points": [
+    [
+     297.1,
+     398
+    ],
+    [
+     212.4,
+     398
+    ]
+   ]
+  },
+  {
+   "name": "Greek street",
+   "width": 10,
+   "class": "street",
+   "purpose": "old town cross street",
+   "points": [
+    [
+     290,
+     455
+    ],
+    [
+     218.75,
+     455
+    ]
+   ]
+  },
+  {
+   "name": "Market street",
+   "width": 10,
+   "class": "street",
+   "purpose": "old town cross street",
+   "points": [
+    [
+     290,
+     510
+    ],
+    [
+     222.3,
+     510
+    ]
+   ]
+  },
+  {
+   "name": "Dock street",
+   "width": 10,
+   "class": "street",
+   "purpose": "old town cross street",
+   "points": [
+    [
+     288.8,
+     553
+    ],
+    [
+     430.4,
+     553
+    ]
+   ]
+  },
+  {
+   "name": "South radial",
+   "width": 10,
+   "class": "street",
+   "purpose": "old town radial to ring road",
+   "points": [
+    [
+     340,
+     510
+    ],
+    [
+     340,
+     604.4
+    ]
+   ]
+  },
+  {
+   "name": "Embankment radial",
+   "width": 10,
+   "class": "street",
+   "purpose": "old town radial to ring road",
+   "points": [
+    [
+     385,
+     510
+    ],
+    [
+     385,
+     607.2
+    ]
+   ]
+  },
+  {
+   "name": "Upper contour lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "hillside private lane",
+   "points": [
+    [
+     274.5,
+     636
+    ],
+    [
+     320,
+     642
+    ],
+    [
+     365,
+     638
+    ],
+    [
+     410,
+     646
+    ],
+    [
+     440,
+     642
+    ]
+   ]
+  },
+  {
+   "name": "Middle contour lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "hillside private lane",
+   "points": [
+    [
+     322,
+     694
+    ],
+    [
+     362,
+     690
+    ],
+    [
+     412,
+     694
+    ],
+    [
+     446,
+     690
+    ]
+   ]
+  },
+  {
+   "name": "Lower contour lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "hillside private lane",
+   "points": [
+    [
+     332,
+     728
+    ],
+    [
+     358,
+     725
+    ],
+    [
+     400,
+     730
+    ],
+    [
+     452,
+     725
+    ]
+   ]
+  },
+  {
+   "name": "Hillside steps",
+   "width": 7,
+   "class": "lane",
+   "purpose": "hillside connector to ring road",
+   "points": [
+    [
+     360,
+     605.6
+    ],
+    [
+     358,
+     638.6
+    ],
+    [
+     362,
+     690
+    ],
+    [
+     358,
+     725
+    ]
+   ]
+  },
+  {
+   "name": "Ravine road",
+   "width": 8,
+   "class": "garage",
+   "purpose": "ravine garage cooperative road",
+   "points": [
+    [
+     440,
+     608.8
+    ],
+    [
+     440,
+     642
+    ],
+    [
+     446,
+     690
+    ],
+    [
+     452,
+     725
+    ]
+   ]
+  },
+  {
+   "name": "East upper lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "hillside private lane",
+   "points": [
+    [
+     440,
+     642
+    ],
+    [
+     480,
+     648
+    ],
+    [
+     520,
+     640
+    ],
+    [
+     556,
+     646
+    ]
+   ]
+  },
+  {
+   "name": "East lower lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "hillside private lane",
+   "points": [
+    [
+     446,
+     690
+    ],
+    [
+     490,
+     684
+    ],
+    [
+     530,
+     692
+    ],
+    [
+     560,
+     688
+    ]
+   ]
+  },
+  {
+   "name": "East hillside lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "hillside connector to ring road",
+   "points": [
+    [
+     520,
+     599.6
+    ],
+    [
+     520,
+     640
+    ]
+   ]
+  },
+  {
+   "name": "Port road north",
+   "width": 12,
+   "class": "street",
+   "purpose": "port service grid",
+   "points": [
+    [
+     560,
+     407
+    ],
+    [
+     711,
+     410
+    ],
+    [
+     809.2,
+     400
+    ]
+   ]
+  },
+  {
+   "name": "Port road south",
+   "width": 12,
+   "class": "street",
+   "purpose": "port service grid",
+   "points": [
+    [
+     560,
+     468
+    ],
+    [
+     701.7,
+     470
+    ],
+    [
+     810,
+     466
+    ]
+   ]
+  },
+  {
+   "name": "Port west road",
+   "width": 12,
+   "class": "street",
+   "purpose": "port service grid",
+   "points": [
+    [
+     565,
+     353
+    ],
+    [
+     560,
+     407
+    ],
+    [
+     560,
+     468
+    ],
+    [
+     560,
+     595
+    ]
+   ]
+  },
+  {
+   "name": "Dock cross road",
+   "width": 12,
+   "class": "street",
+   "purpose": "port service grid",
+   "points": [
+    [
+     632,
+     353
+    ],
+    [
+     632,
+     582.1
+    ]
+   ]
+  },
+  {
+   "name": "Shipyard lane",
+   "width": 10,
+   "class": "street",
+   "purpose": "ship repair yard access",
+   "points": [
+    [
+     560,
+     440
+    ],
+    [
+     512,
+     440
+    ]
+   ]
+  },
+  {
+   "name": "Bayhead north lane",
+   "width": 12,
+   "class": "avenue",
+   "purpose": "microdistrict superblock street",
+   "points": [
+    [
+     920.8,
+     262
+    ],
+    [
+     1010,
+     262
+    ]
+   ]
+  },
+  {
+   "name": "Bayhead avenue",
+   "width": 14,
+   "class": "arterial",
+   "purpose": "microdistrict superblock arterial",
+   "points": [
+    [
+     925.7,
+     335
+    ],
+    [
+     1010,
+     337
+    ]
+   ]
+  },
+  {
+   "name": "Garage lane",
+   "width": 10,
+   "class": "garage",
+   "purpose": "microdistrict garage edge",
+   "points": [
+    [
+     880,
+     525
+    ],
+    [
+     1010,
+     540
+    ]
+   ]
+  },
+  {
+   "name": "Microdistrict east road",
+   "width": 12,
+   "class": "avenue",
+   "purpose": "microdistrict superblock street",
+   "points": [
+    [
+     1010,
+     262
+    ],
+    [
+     1010,
+     337
+    ],
+    [
+     1010,
+     540
+    ]
+   ]
+  },
+  {
+   "name": "Farm lane",
+   "width": 9,
+   "class": "lane",
+   "purpose": "linear village lane",
+   "points": [
+    [
+     565,
+     686
+    ],
+    [
+     620,
+     690
+    ],
+    [
+     690,
+     680
+    ],
+    [
+     745,
+     665
+    ],
+    [
+     800,
+     676
+    ],
+    [
+     860,
+     688
+    ],
+    [
+     895,
+     698
+    ]
+   ]
+  },
+  {
+   "name": "Vineyard track",
+   "width": 6,
+   "class": "track",
+   "purpose": "vineyard service track",
+   "points": [
+    [
+     820,
+     540
+    ],
+    [
+     820,
+     680
+    ]
+   ]
+  },
+  {
+   "name": "North shore road",
+   "width": 12,
+   "class": "street",
+   "purpose": "north side settlement road",
+   "points": [
+    [
+     630,
+     165
+    ],
+    [
+     700,
+     172
+    ],
+    [
+     770,
+     182
+    ],
+    [
+     840,
+     200
+    ],
+    [
+     922.2,
+     235.6
+    ]
+   ]
+  },
+  {
+   "name": "North upper lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "north side private lane",
+   "points": [
+    [
+     690,
+     128
+    ],
+    [
+     750,
+     118
+    ],
+    [
+     820,
+     126
+    ],
+    [
+     880,
+     132
+    ],
+    [
+     936.2,
+     145
+    ]
+   ]
+  },
+  {
+   "name": "Ferry lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "north side connector",
+   "points": [
+    [
+     700,
+     172
+    ],
+    [
+     700,
+     126.3
+    ],
+    [
+     700,
+     92
+    ]
+   ]
+  },
+  {
+   "name": "Chapel lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "north side connector",
+   "points": [
+    [
+     800,
+     189.7
+    ],
+    [
+     800,
+     123.7
+    ],
+    [
+     800,
+     98
+    ]
+   ]
+  },
+  {
+   "name": "North hill lane",
+   "width": 7,
+   "class": "lane",
+   "purpose": "north side private lane",
+   "points": [
+    [
+     700,
+     92
+    ],
+    [
+     750,
+     95
+    ],
+    [
+     800,
+     98
+    ],
+    [
+     860,
+     102
+    ],
+    [
+     905,
+     106
+    ]
+   ]
+  },
+  {
+   "name": "Ferry landing lane",
+   "width": 8,
+   "class": "street",
+   "purpose": "ferry landing access",
+   "points": [
+    [
+     760,
+     183.8
+    ],
+    [
+     760,
+     203
+    ]
+   ]
+  },
+  {
+   "name": "Battery track",
+   "width": 6,
+   "class": "track",
+   "purpose": "track to coastal battery ruin",
+   "points": [
+    [
+     247,
+     160
+    ],
+    [
+     330,
+     145
+    ],
+    [
+     450,
+     130
+    ],
+    [
+     530,
+     131
+    ],
+    [
+     640,
+     132
+    ],
+    [
+     690,
+     128
+    ]
+   ]
+  },
+  {
+   "name": "Dacha upper lane",
+   "width": 6,
+   "class": "lane",
+   "purpose": "dacha cooperative lane",
+   "points": [
+    [
+     300,
+     72
+    ],
+    [
+     400,
+     70
+    ],
+    [
+     500,
+     68
+    ]
+   ]
+  },
+  {
+   "name": "Dacha middle lane",
+   "width": 6,
+   "class": "lane",
+   "purpose": "dacha cooperative lane",
+   "points": [
+    [
+     300,
+     104
+    ],
+    [
+     400,
+     101
+    ],
+    [
+     500,
+     99
+    ]
+   ]
+  },
+  {
+   "name": "Dacha west lane",
+   "width": 6,
+   "class": "lane",
+   "purpose": "dacha cooperative lane",
+   "points": [
+    [
+     300,
+     72
+    ],
+    [
+     300,
+     104
+    ],
+    [
+     300,
+     146.8
+    ]
+   ]
+  },
+  {
+   "name": "Dacha centre lane",
+   "width": 6,
+   "class": "lane",
+   "purpose": "dacha cooperative lane",
+   "points": [
+    [
+     400,
+     70
+    ],
+    [
+     400,
+     101
+    ],
+    [
+     400,
+     136.2
+    ]
+   ]
+  },
+  {
+   "name": "Dacha east lane",
+   "width": 6,
+   "class": "lane",
+   "purpose": "dacha cooperative lane",
+   "points": [
+    [
+     500,
+     68
+    ],
+    [
+     500,
+     99
+    ],
+    [
+     500,
+     130.6
+    ]
+   ]
+  },
+  {
+   "name": "Barracks road",
+   "width": 10,
+   "class": "street",
+   "purpose": "reserve compound access",
+   "points": [
+    [
+     944,
+     110
+    ],
+    [
+     1012,
+     110
+    ]
+   ]
+  }
+ ],
+ "rock_parcels": [
+  [
+   540,
+   45,
+   38,
+   28
+  ],
+  [
+   585,
+   90,
+   28,
+   32
+  ],
+  [
+   985,
+   600,
+   26,
+   40
+  ],
+  [
+   460,
+   710,
+   35,
+   26
+  ],
+  [
+   860,
+   640,
+   20,
+   28
+  ]
+ ],
+ "footpaths": [
+  [
+   [
+    316,
+    460
+   ],
+   [
+    306,
+    460
+   ],
+   [
+    299,
+    460
+   ]
+  ],
+  [
+   [
+    345,
+    481
+   ],
+   [
+    345,
+    504
+   ]
+  ],
+  [
+   [
+    434,
+    645
+   ],
+   [
+    436,
+    700
+   ],
+   [
+    440,
+    722
+   ]
+  ],
+  [
+   [
+    700,
+    655
+   ],
+   [
+    700,
+    600
+   ]
+  ]
+ ],
+ "prop_plan": {
+  "centre": "plane trees and double lamps on boulevards, square furniture, courtyard trees/sheds/laundry/cars",
+  "hillside": "stone yard walls with gates, pergolas, fruit trees, greenhouses and sheds; garages and allotments in the ravine",
+  "port": "portal cranes on quay rails, sidings with boxcars, containers, tank farm, concrete perimeter fence",
+  "microdistrict": "playgrounds, parking bays, heat pipes, dumpsters, acacias, bus stops",
+  "village": "trellis rows, poplar windbreaks, haystacks, tractors",
+  "waterfront": "quay walls, bollards and moored civilian boats in water"
+ },
+ "city_districts": [
+  {
+   "id": "ravine",
+   "name": "Ravine garage cooperative",
+   "morphology": "garages",
+   "polygon": [
+    [
+     427,
+     614
+    ],
+    [
+     458,
+     612
+    ],
+    [
+     464,
+     745
+    ],
+    [
+     430,
+     745
+    ]
+   ]
+  },
+  {
+   "id": "hillside",
+   "name": "Southern hillside private sector",
+   "morphology": "private",
+   "polygon": [
+    [
+     276,
+     612
+    ],
+    [
+     560,
+     598
+    ],
+    [
+     562,
+     748
+    ],
+    [
+     320,
+     748
+    ],
+    [
+     320,
+     648
+    ],
+    [
+     276,
+     642
+    ]
+   ]
+  },
+  {
+   "id": "centre",
+   "name": "Historic centre",
+   "morphology": "perimeter",
+   "polygon": [
+    [
+     198,
+     322
+    ],
+    [
+     300,
+     318
+    ],
+    [
+     432,
+     322
+    ],
+    [
+     432,
+     400
+    ],
+    [
+     440,
+     520
+    ],
+    [
+     470,
+     558
+    ],
+    [
+     458,
+     612
+    ],
+    [
+     270,
+     606
+    ],
+    [
+     200,
+     598
+    ],
+    [
+     190,
+     410
+    ]
+   ]
+  },
+  {
+   "id": "green",
+   "name": "West insertion green",
+   "morphology": "green",
+   "polygon": [
+    [
+     198,
+     598
+    ],
+    [
+     276,
+     610
+    ],
+    [
+     276,
+     642
+    ],
+    [
+     320,
+     648
+    ],
+    [
+     320,
+     768
+    ],
+    [
+     198,
+     768
+    ]
+   ]
+  },
+  {
+   "id": "port",
+   "name": "Freight harbor estate",
+   "morphology": "port",
+   "polygon": [
+    [
+     495,
+     330
+    ],
+    [
+     700,
+     326
+    ],
+    [
+     800,
+     312
+    ],
+    [
+     862,
+     290
+    ],
+    [
+     870,
+     300
+    ],
+    [
+     813,
+     342
+    ],
+    [
+     813,
+     546
+    ],
+    [
+     700,
+     576
+    ],
+    [
+     560,
+     602
+    ],
+    [
+     490,
+     565
+    ],
+    [
+     485,
+     460
+    ],
+    [
+     500,
+     390
+    ]
+   ]
+  },
+  {
+   "id": "micro",
+   "name": "Eastern bayhead microdistrict",
+   "morphology": "superblock",
+   "polygon": [
+    [
+     813,
+     342
+    ],
+    [
+     870,
+     300
+    ],
+    [
+     880,
+     242
+    ],
+    [
+     1024,
+     242
+    ],
+    [
+     1024,
+     548
+    ],
+    [
+     950,
+     548
+    ],
+    [
+     880,
+     529
+    ],
+    [
+     813,
+     548
+    ]
+   ]
+  },
+  {
+   "id": "village",
+   "name": "Vineyard village and farm belt",
+   "morphology": "village",
+   "polygon": [
+    [
+     562,
+     602
+    ],
+    [
+     700,
+     578
+    ],
+    [
+     880,
+     533
+    ],
+    [
+     1024,
+     556
+    ],
+    [
+     1024,
+     768
+    ],
+    [
+     562,
+     768
+    ]
+   ]
+  },
+  {
+   "id": "reserve",
+   "name": "Northeast barracks reserve",
+   "morphology": "compound",
+   "polygon": [
+    [
+     912,
+     20
+    ],
+    [
+     1024,
+     20
+    ],
+    [
+     1024,
+     242
+    ],
+    [
+     925,
+     242
+    ]
+   ]
+  },
+  {
+   "id": "north",
+   "name": "North side settlement",
+   "morphology": "north",
+   "polygon": [
+    [
+     600,
+     60
+    ],
+    [
+     912,
+     60
+    ],
+    [
+     925,
+     242
+    ],
+    [
+     872,
+     250
+    ],
+    [
+     830,
+     225
+    ],
+    [
+     730,
+     205
+    ],
+    [
+     590,
+     190
+    ]
+   ]
+  },
+  {
+   "id": "dacha",
+   "name": "Headland dacha cooperative",
+   "morphology": "dacha",
+   "polygon": [
+    [
+     288,
+     58
+    ],
+    [
+     512,
+     56
+    ],
+    [
+     512,
+     134
+    ],
+    [
+     450,
+     132
+    ],
+    [
+     330,
+     146
+    ],
+    [
+     288,
+     150
+    ]
+   ]
+  },
+  {
+   "id": "headland",
+   "name": "Battery headland",
+   "morphology": "open",
+   "polygon": [
+    [
+     185,
+     0
+    ],
+    [
+     912,
+     0
+    ],
+    [
+     912,
+     60
+    ],
+    [
+     600,
+     60
+    ],
+    [
+     590,
+     190
+    ],
+    [
+     300,
+     175
+    ],
+    [
+     160,
+     190
+    ],
+    [
+     205,
+     100
+    ]
+   ]
+  }
+ ],
+ "open_spaces": [
+  {
+   "name": "Cathedral square",
+   "kind": "square",
+   "polygon": [
+    [
+     316,
+     438
+    ],
+    [
+     376,
+     438
+    ],
+    [
+     378,
+     481
+    ],
+    [
+     316,
+     481
+    ]
+   ]
+  },
+  {
+   "name": "Cathedral close",
+   "kind": "cathedral_close",
+   "polygon": [
+    [
+     330,
+     404
+    ],
+    [
+     366,
+     404
+    ],
+    [
+     366,
+     438
+    ],
+    [
+     330,
+     438
+    ]
+   ]
+  },
+  {
+   "name": "Hill garden west",
+   "kind": "hill_park",
+   "polygon": [
+    [
+     302,
+     404
+    ],
+    [
+     330,
+     404
+    ],
+    [
+     330,
+     438
+    ],
+    [
+     316,
+     438
+    ],
+    [
+     316,
+     484
+    ],
+    [
+     302,
+     504
+    ]
+   ]
+  },
+  {
+   "name": "Hill garden south",
+   "kind": "hill_park",
+   "polygon": [
+    [
+     316,
+     481
+    ],
+    [
+     378,
+     481
+    ],
+    [
+     380,
+     486
+    ],
+    [
+     364,
+     486
+    ],
+    [
+     364,
+     504
+    ],
+    [
+     316,
+     504
+    ]
+   ]
+  },
+  {
+   "name": "Harbor approach plaza",
+   "kind": "square",
+   "polygon": [
+    [
+     326,
+     347
+    ],
+    [
+     358,
+     347
+    ],
+    [
+     356,
+     362
+    ],
+    [
+     330,
+     362
+    ]
+   ]
+  },
+  {
+   "name": "Seafront garden",
+   "kind": "seafront",
+   "polygon": [
+    [
+     214,
+     331
+    ],
+    [
+     288,
+     327
+    ],
+    [
+     288,
+     334
+    ],
+    [
+     214,
+     337
+    ]
+   ]
+  },
+  {
+   "name": "Ravine allotments",
+   "kind": "ravine",
+   "polygon": [
+    [
+     426,
+     650
+    ],
+    [
+     436,
+     650
+    ],
+    [
+     438,
+     720
+    ],
+    [
+     428,
+     720
+    ]
+   ]
+  },
+  {
+   "name": "Ravine east slope",
+   "kind": "ravine",
+   "polygon": [
+    [
+     452,
+     700
+    ],
+    [
+     462,
+     700
+    ],
+    [
+     464,
+     742
+    ],
+    [
+     456,
+     742
+    ]
+   ]
+  },
+  {
+   "name": "Cemetery",
+   "kind": "cemetery",
+   "polygon": [
+    [
+     212,
+     648
+    ],
+    [
+     262,
+     648
+    ],
+    [
+     262,
+     728
+    ],
+    [
+     214,
+     728
+    ]
+   ]
+  },
+  {
+   "name": "Quarry scrub",
+   "kind": "scrub",
+   "polygon": [
+    [
+     214,
+     736
+    ],
+    [
+     300,
+     736
+    ],
+    [
+     300,
+     764
+    ],
+    [
+     214,
+     764
+    ]
+   ]
+  },
+  {
+   "name": "Tank farm",
+   "kind": "tank_farm",
+   "polygon": [
+    [
+     768,
+     476
+    ],
+    [
+     800,
+     476
+    ],
+    [
+     800,
+     536
+    ],
+    [
+     768,
+     536
+    ]
+   ]
+  },
+  {
+   "name": "Container yard",
+   "kind": "stockyard",
+   "polygon": [
+    [
+     640,
+     478
+    ],
+    [
+     690,
+     478
+    ],
+    [
+     690,
+     566
+    ],
+    [
+     640,
+     566
+    ]
+   ]
+  },
+  {
+   "name": "Parade ground",
+   "kind": "parade",
+   "polygon": [
+    [
+     976,
+     118
+    ],
+    [
+     1016,
+     118
+    ],
+    [
+     1016,
+     160
+    ],
+    [
+     976,
+     160
+    ]
+   ]
+  },
+  {
+   "name": "Vineyard north A",
+   "kind": "vineyard",
+   "polygon": [
+    [
+     664,
+     592
+    ],
+    [
+     736,
+     582
+    ],
+    [
+     736,
+     640
+    ],
+    [
+     664,
+     646
+    ]
+   ]
+  },
+  {
+   "name": "Vineyard north B",
+   "kind": "vineyard",
+   "polygon": [
+    [
+     752,
+     572
+    ],
+    [
+     781,
+     566
+    ],
+    [
+     781,
+     640
+    ],
+    [
+     752,
+     640
+    ]
+   ]
+  },
+  {
+   "name": "Vineyard north C",
+   "kind": "vineyard",
+   "polygon": [
+    [
+     826,
+     574
+    ],
+    [
+     878,
+     562
+    ],
+    [
+     878,
+     634
+    ],
+    [
+     826,
+     634
+    ]
+   ]
+  },
+  {
+   "name": "Vineyard south A",
+   "kind": "vineyard",
+   "polygon": [
+    [
+     575,
+     736
+    ],
+    [
+     690,
+     736
+    ],
+    [
+     690,
+     762
+    ],
+    [
+     575,
+     762
+    ]
+   ]
+  },
+  {
+   "name": "Vineyard south B",
+   "kind": "vineyard",
+   "polygon": [
+    [
+     705,
+     736
+    ],
+    [
+     835,
+     736
+    ],
+    [
+     835,
+     762
+    ],
+    [
+     705,
+     762
+    ]
+   ]
+  },
+  {
+   "name": "Ploughed field",
+   "kind": "field",
+   "polygon": [
+    [
+     600,
+     612
+    ],
+    [
+     660,
+     612
+    ],
+    [
+     660,
+     640
+    ],
+    [
+     600,
+     640
+    ]
+   ]
+  },
+  {
+   "name": "Coop yard",
+   "kind": "field",
+   "polygon": [
+    [
+     905,
+     700
+    ],
+    [
+     960,
+     700
+    ],
+    [
+     960,
+     740
+    ],
+    [
+     905,
+     740
+    ]
+   ]
+  },
+  {
+   "name": "Headland pines",
+   "kind": "headland",
+   "polygon": [
+    [
+     250,
+     30
+    ],
+    [
+     520,
+     30
+    ],
+    [
+     520,
+     52
+    ],
+    [
+     284,
+     54
+    ],
+    [
+     284,
+     150
+    ],
+    [
+     262,
+     150
+    ],
+    [
+     250,
+     145
+    ]
+   ]
+  },
+  {
+   "name": "Battery point",
+   "kind": "headland",
+   "polygon": [
+    [
+     200,
+     105
+    ],
+    [
+     255,
+     105
+    ],
+    [
+     262,
+     170
+    ],
+    [
+     205,
+     172
+    ]
+   ]
+  },
+  {
+   "name": "North pines",
+   "kind": "headland",
+   "polygon": [
+    [
+     610,
+     30
+    ],
+    [
+     905,
+     30
+    ],
+    [
+     905,
+     62
+    ],
+    [
+     610,
+     62
+    ]
+   ]
+  }
+ ],
+ "landmarks": [
+  {
+   "design": "cathedral",
+   "position": [
+    348,
+    421
+   ],
+   "rotation_degrees": 180,
+   "source_size": [
+    22,
+    30
+   ],
+   "district": "centre"
+  },
+  {
+   "design": "colonnade_landing",
+   "position": [
+    300,
+    328.5
+   ],
+   "rotation_degrees": 180,
+   "source_size": [
+    22,
+    9
+   ],
+   "district": "centre",
+   "street": "Primorsky boulevard"
+  },
+  {
+   "design": "civic_hall",
+   "position": [
+    346,
+    494
+   ],
+   "rotation_degrees": 180,
+   "source_size": [
+    32,
+    18
+   ],
+   "district": "centre",
+   "floors": 3,
+   "street": "Hill ring south"
+  },
+  {
+   "design": "market_hall",
+   "position": [
+    318,
+    582
+   ],
+   "rotation_degrees": 180,
+   "source_size": [
+    30,
+    18
+   ],
+   "district": "centre",
+   "street": "Bayhead ring"
+  },
+  {
+   "design": "point_tower",
+   "position": [
+    948,
+    312
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    16,
+    16
+   ],
+   "district": "micro",
+   "floors": 13
+  },
+  {
+   "design": "fort_ruin",
+   "position": [
+    228,
+    140
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    30,
+    30
+   ],
+   "district": "headland"
+  },
+  {
+   "design": "petrol_station",
+   "position": [
+    291,
+    623.5
+   ],
+   "rotation_degrees": 90,
+   "source_size": [
+    18,
+    12
+   ],
+   "district": "green",
+   "street": "Peninsula spine"
+  },
+  {
+   "design": "slipway",
+   "position": [
+    828,
+    318
+   ],
+   "rotation_degrees": 180,
+   "source_size": [
+    36,
+    12
+   ],
+   "district": "port"
+  },
+  {
+   "design": "slipway",
+   "position": [
+    503,
+    500
+   ],
+   "rotation_degrees": -90,
+   "source_size": [
+    36,
+    12
+   ],
+   "district": "port"
+  },
+  {
+   "design": "port_admin",
+   "position": [
+    718,
+    528
+   ],
+   "rotation_degrees": 90,
+   "source_size": [
+    26,
+    12
+   ],
+   "district": "port",
+   "floors": 4,
+   "street": "Freight arterial"
+  },
+  {
+   "design": "gatehouse",
+   "position": [
+    713,
+    549
+   ],
+   "rotation_degrees": 90,
+   "source_size": [
+    6,
+    4.5
+   ],
+   "district": "port",
+   "street": "Freight arterial"
+  },
+  {
+   "design": "barracks",
+   "position": [
+    984,
+    70
+   ],
+   "rotation_degrees": 90,
+   "source_size": [
+    40,
+    12
+   ],
+   "district": "reserve"
+  },
+  {
+   "design": "barracks",
+   "position": [
+    1004,
+    70
+   ],
+   "rotation_degrees": 90,
+   "source_size": [
+    40,
+    12
+   ],
+   "district": "reserve"
+  },
+  {
+   "design": "barracks",
+   "position": [
+    994,
+    175
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    40,
+    12
+   ],
+   "district": "reserve"
+  },
+  {
+   "design": "workshop_hall",
+   "position": [
+    994,
+    204
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    36,
+    16
+   ],
+   "district": "reserve"
+  },
+  {
+   "design": "gatehouse",
+   "position": [
+    968,
+    98
+   ],
+   "rotation_degrees": 180,
+   "source_size": [
+    6,
+    4.5
+   ],
+   "district": "reserve",
+   "street": "Barracks road"
+  },
+  {
+   "design": "panel_5",
+   "position": [
+    735,
+    150
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    40,
+    9.5
+   ],
+   "district": "north"
+  },
+  {
+   "design": "panel_5",
+   "position": [
+    777,
+    140
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    36,
+    9.5
+   ],
+   "district": "north"
+  },
+  {
+   "design": "panel_5",
+   "position": [
+    775,
+    165
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    36,
+    9.5
+   ],
+   "district": "north"
+  },
+  {
+   "design": "shop_pavilion",
+   "position": [
+    735,
+    195
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    18,
+    11
+   ],
+   "district": "north",
+   "street": "North shore road"
+  },
+  {
+   "design": "coop_shed",
+   "position": [
+    880,
+    712
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    36,
+    16
+   ],
+   "district": "village"
+  },
+  {
+   "design": "barn_long",
+   "position": [
+    884,
+    740
+   ],
+   "rotation_degrees": 0,
+   "source_size": [
+    30,
+    11
+   ],
+   "district": "village"
+  }
+ ],
+ "crane_rails": [
+  {
+   "points": [
+    [
+     572,
+     340.5
+    ],
+    [
+     640,
+     339
+    ],
+    [
+     698,
+     336
+    ]
+   ],
+   "spacing": 30
+  },
+  {
+   "points": [
+    [
+     732,
+     334
+    ],
+    [
+     798,
+     322
+    ]
+   ],
+   "spacing": 28
+  }
+ ],
+ "port_fence": [
+  [
+   [
+    566,
+    586
+   ],
+   [
+    628,
+    575
+   ]
+  ],
+  [
+   [
+    636,
+    573
+   ],
+   [
+    696,
+    563
+   ]
+  ],
+  [
+   [
+    704,
+    561
+   ],
+   [
+    756,
+    548
+   ]
+  ],
+  [
+   [
+    764,
+    546
+   ],
+   [
+    806,
+    535
+   ]
+  ]
+ ],
+ "compound_fence": [
+  [
+   [
+    970,
+    40
+   ],
+   [
+    1018,
+    40
+   ]
+  ],
+  [
+   [
+    1018,
+    40
+   ],
+   [
+    1018,
+    214
+   ]
+  ],
+  [
+   [
+    970,
+    214
+   ],
+   [
+    1018,
+    214
+   ]
+  ],
+  [
+   [
+    970,
+    40
+   ],
+   [
+    970,
+    104
+   ]
+  ],
+  [
+   [
+    970,
+    116
+   ],
+   [
+    970,
+    214
+   ]
+  ]
+ ],
+ "decor": [
+  {
+   "id": "fountain.round",
+   "position": [
+    364,
+    447
+   ],
+   "context": "cathedral square fountain"
+  },
+  {
+   "id": "monument.statue",
+   "position": [
+    328,
+    474
+   ],
+   "context": "cathedral square monument"
+  },
+  {
+   "id": "monument.column",
+   "position": [
+    314,
+    360
+   ],
+   "context": "harbor approach memorial column"
+  },
+  {
+   "id": "kiosk.market_stall",
+   "position": [
+    296,
+    566
+   ],
+   "context": "market stalls beside market hall"
+  },
+  {
+   "id": "kiosk.market_stall",
+   "position": [
+    342,
+    566
+   ],
+   "context": "market stalls beside market hall"
+  },
+  {
+   "id": "water_tower.farm",
+   "position": [
+    915,
+    712
+   ],
+   "context": "cooperative water tower"
+  },
+  {
+   "id": "antenna.panel_mast",
+   "position": [
+    1010,
+    117
+   ],
+   "context": "reserve signals mast",
+   "road_margin": 0.3
+  },
+  {
+   "id": "antenna.tripod",
+   "position": [
+    978,
+    104
+   ],
+   "context": "reserve signals antenna"
+  },
+  {
+   "id": "checkpoint_gate.boom",
+   "position": [
+    962,
+    101.5
+   ],
+   "rotation_degrees": 0,
+   "context": "compound checkpoint barrier raised beside the gate"
+  },
+  {
+   "id": "small_boat.rowing",
+   "position": [
+    575,
+    325
+   ],
+   "rotation_degrees": 90,
+   "domain": "sea",
+   "context": "civilian boats moored beside freight quay"
+  },
+  {
+   "id": "small_boat.rowing",
+   "position": [
+    600,
+    323
+   ],
+   "rotation_degrees": 90,
+   "domain": "sea",
+   "context": "civilian boats moored beside freight quay"
+  },
+  {
+   "id": "small_boat.outboard",
+   "position": [
+    752,
+    216
+   ],
+   "rotation_degrees": 90,
+   "domain": "sea",
+   "context": "boats at north side ferry landing"
+  },
+  {
+   "id": "small_boat.rowing",
+   "position": [
+    768,
+    218
+   ],
+   "rotation_degrees": 90,
+   "domain": "sea",
+   "context": "boats at north side ferry landing"
+  },
+  {
+   "id": "barge.flat_deck",
+   "position": [
+    765,
+    298
+   ],
+   "rotation_degrees": 90,
+   "domain": "sea",
+   "context": "moored freight lighter outside navigable centerline"
+  },
+  {
+   "id": "bus_stop.glazed_shelter",
+   "position": [
+    748,
+    190
+   ],
+   "context": "ferry landing bus stop"
+  }
+ ],
+ "quay_walls": [
+  [
+   [
+    300,
+    320
+   ],
+   [
+    430,
+    325
+   ]
+  ],
+  [
+   [
+    560,
+    335
+   ],
+   [
+    700,
+    330
+   ]
+  ]
+ ],
+ "damage_front": [
+  [
+   640,
+   365
+  ],
+  [
+   680,
+   372
+  ],
+  [
+   750,
+   372
+  ],
+  [
+   790,
+   360
+  ],
+  [
+   700,
+   400
+  ],
+  [
+   705,
+   440
+  ]
+ ],
+ "layout_validation": {
+  "primary_road_min_width": 16,
+  "building_road_clearance": 0.5,
+  "collision_excess_max": 1.0,
+  "collision_rects_max": 6,
+  "setback_limits": {
+   "perimeter": [
+    0.3,
+    5.5
+   ],
+   "private": [
+    0.3,
+    8.0
+   ],
+   "north": [
+    0.3,
+    8.0
+   ],
+   "village": [
+    0.3,
+    9.5
+   ],
+   "garages": [
+    0.5,
+    4.5
+   ],
+   "port": [
+    2.0,
+    9.0
+   ],
+   "superblock": [
+    3.0,
+    12.0
+   ],
+   "green": [
+    0.3,
+    6.0
+   ],
+   "compound": [
+    0.3,
+    8.0
+   ],
+   "dacha": [
+    0.3,
+    6.0
+   ],
+   "garage_row": [
+    0.5,
+    4.5
+   ],
+   "gatehouse": [
+    0.3,
+    5.0
+   ],
+   "shop_pavilion": [
+    3.0,
+    12.0
+   ]
+  },
+  "boat_support_point": [
+   340,
+   316
+  ],
+  "sea_route_points": [
+   [
+    80,
+    640
+   ],
+   [
+    100,
+    400
+   ],
+   [
+    170,
+    270
+   ],
+   [
+    340,
+    265
+   ],
+   [
+    670,
+    260
+   ]
+  ],
+  "land_route_points": [
+   [
+    280,
+    680
+   ],
+   [
+    270,
+    600
+   ],
+   [
+    430,
+    610
+   ],
+   [
+    560,
+    595
+   ],
+   [
+    700,
+    570
+   ],
+   [
+    880,
+    525
+   ],
+   [
+    930,
+    400
+   ],
+   [
+    920,
+    250
+   ],
+   [
+    940,
+    120
+   ]
+  ]
+ }
+}

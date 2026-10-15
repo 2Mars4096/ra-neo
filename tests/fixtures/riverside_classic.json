@@ -1,0 +1,622 @@
+{
+  "id": "riverside_town",
+  "name": "RIVERSIDE TOWN",
+  "brief": "Build a base, secure the town approaches and resource fields, then destroy the enemy headquarters and production.",
+  "mode": "classic",
+  "size": [
+    144,
+    108
+  ],
+  "sectors": [
+    "WEST DEPOSIT",
+    "EAST DEPOSIT"
+  ],
+  "hold": 60,
+  "objectives": [
+    [
+      24,
+      86
+    ],
+    [
+      104,
+      22
+    ]
+  ],
+  "resource_fields": [
+    [
+      24,
+      86,
+      8000
+    ],
+    [
+      104,
+      22,
+      8000
+    ],
+    [
+      42,
+      34,
+      6000
+    ],
+    [
+      93,
+      51,
+      6000
+    ]
+  ],
+  "style": "showcase",
+  "port": false,
+  "shore_x": 128,
+  "autonomy": true,
+  "air_altitudes": {
+    "drone": 11.0,
+    "helo": 13.0
+  },
+  "blocks": [
+    [
+      34,
+      42.5,
+      7,
+      7
+    ],
+    [
+      22,
+      39,
+      8,
+      8
+    ],
+    [
+      56,
+      42.5,
+      9,
+      7
+    ],
+    [
+      76,
+      39,
+      7,
+      9
+    ],
+    [
+      87,
+      38,
+      9,
+      9
+    ],
+    [
+      97,
+      39,
+      8,
+      8
+    ],
+    [
+      24,
+      62,
+      9,
+      8
+    ],
+    [
+      35,
+      63,
+      8,
+      7
+    ],
+    [
+      56,
+      58.5,
+      9,
+      7
+    ],
+    [
+      76.5,
+      58.5,
+      7,
+      7
+    ],
+    [
+      89,
+      65,
+      10,
+      9
+    ],
+    [
+      112,
+      63,
+      8,
+      8
+    ],
+    [
+      89,
+      84,
+      10,
+      9
+    ],
+    [
+      113,
+      85,
+      7,
+      8
+    ],
+    [
+      35,
+      83,
+      9,
+      8
+    ],
+    [
+      34,
+      20,
+      9,
+      9
+    ],
+    [
+      57,
+      20,
+      8,
+      8
+    ],
+    [
+      89,
+      22,
+      9,
+      8
+    ],
+    [
+      111,
+      32,
+      9,
+      9
+    ],
+    [
+      76,
+      20,
+      8,
+      8
+    ]
+  ],
+  "architecture": [
+    {
+      "design": "cafe",
+      "facing": "south"
+    },
+    {
+      "design": "shelled_house",
+      "facing": "south"
+    },
+    {
+      "design": "terrace",
+      "facing": "south"
+    },
+    {
+      "design": "chapel",
+      "facing": "west"
+    },
+    {
+      "design": "villa",
+      "facing": "south"
+    },
+    {
+      "design": "flat_block",
+      "facing": "south"
+    },
+    {
+      "design": "farmstead",
+      "facing": "north"
+    },
+    {
+      "design": "corner_collapse",
+      "facing": "north"
+    },
+    {
+      "design": "terrace",
+      "facing": "north"
+    },
+    {
+      "design": "cafe",
+      "facing": "north"
+    },
+    {
+      "design": "warehouse",
+      "facing": "east"
+    },
+    {
+      "design": "gutted_shed",
+      "facing": "west"
+    },
+    {
+      "design": "warehouse",
+      "facing": "east"
+    },
+    {
+      "design": "roofless_barn",
+      "facing": "west"
+    },
+    {
+      "design": "farmstead",
+      "facing": "east"
+    },
+    {
+      "design": "villa",
+      "facing": "east"
+    },
+    {
+      "design": "flat_block",
+      "facing": "west"
+    },
+    {
+      "design": "roofless_barn",
+      "facing": "north"
+    },
+    {
+      "design": "warehouse",
+      "facing": "west"
+    },
+    {
+      "design": "shelled_house",
+      "facing": "west"
+    }
+  ],
+  "woods": [
+    [
+      6,
+      66,
+      12,
+      16
+    ],
+    [
+      20,
+      8,
+      4,
+      18
+    ],
+    [
+      80,
+      76,
+      4,
+      16
+    ],
+    [
+      4,
+      10,
+      10,
+      15
+    ],
+    [
+      6,
+      30,
+      12,
+      18
+    ]
+  ],
+  "rubble": [
+    99,
+    79,
+    7,
+    14
+  ],
+  "mud": [
+    16,
+    35,
+    12,
+    8
+  ],
+  "roads": {
+    "nodes": {
+      "west": [
+        4,
+        54
+      ],
+      "market": [
+        48,
+        54
+      ],
+      "cross": [
+        72,
+        54
+      ],
+      "east": [
+        123,
+        54
+      ],
+      "market_n": [
+        48,
+        14
+      ],
+      "north": [
+        72,
+        4
+      ],
+      "north_cross": [
+        72,
+        14
+      ],
+      "industry_n": [
+        108,
+        16
+      ],
+      "quay_n": [
+        123,
+        16
+      ],
+      "market_s": [
+        48,
+        76
+      ],
+      "south": [
+        48,
+        102
+      ],
+      "base_road": [
+        14,
+        97
+      ],
+      "south_turn": [
+        48,
+        97
+      ],
+      "south_cross": [
+        72,
+        97
+      ],
+      "industry": [
+        108,
+        54
+      ],
+      "yard": [
+        108,
+        78
+      ],
+      "freight": [
+        108,
+        102
+      ],
+      "quay_s": [
+        123,
+        102
+      ],
+      "quay_mid": [
+        123,
+        78
+      ],
+      "freight_south_turn": [
+        108,
+        98
+      ]
+    },
+    "edges": [
+      [
+        "west",
+        "market",
+        6,
+        "town through road"
+      ],
+      [
+        "market",
+        "cross",
+        6,
+        "village high street"
+      ],
+      [
+        "cross",
+        "industry",
+        6,
+        "town through road"
+      ],
+      [
+        "industry",
+        "east",
+        6,
+        "industrial access"
+      ],
+      [
+        "market_n",
+        "market",
+        5.5,
+        "town through road"
+      ],
+      [
+        "market",
+        "market_s",
+        5.5,
+        "town through road"
+      ],
+      [
+        "market_s",
+        "south_turn",
+        5,
+        "southern approach"
+      ],
+      [
+        "south_turn",
+        "south",
+        5,
+        "southern approach"
+      ],
+      [
+        "base_road",
+        "south_turn",
+        5,
+        "southern approach"
+      ],
+      [
+        "north",
+        "north_cross",
+        6,
+        "town through road"
+      ],
+      [
+        "north_cross",
+        "cross",
+        6,
+        "town through road"
+      ],
+      [
+        "cross",
+        "south_cross",
+        5.5,
+        "town through road"
+      ],
+      [
+        "south_turn",
+        "south_cross",
+        5,
+        "southern approach"
+      ],
+      [
+        "market_n",
+        "north_cross",
+        5,
+        "town through road"
+      ],
+      [
+        "north_cross",
+        "industry_n",
+        5,
+        "industrial access"
+      ],
+      [
+        "industry_n",
+        "quay_n",
+        4.5,
+        "quayside service road"
+      ],
+      [
+        "industry_n",
+        "industry",
+        5,
+        "industrial access"
+      ],
+      [
+        "industry",
+        "yard",
+        5,
+        "industrial access"
+      ],
+      [
+        "yard",
+        "freight_south_turn",
+        5,
+        "workshop loading access"
+      ],
+      [
+        "freight_south_turn",
+        "freight",
+        5,
+        "industrial access"
+      ],
+      [
+        "quay_n",
+        "east",
+        4.5,
+        "quayside service road"
+      ],
+      [
+        "yard",
+        "quay_mid",
+        4.5,
+        "quayside service road"
+      ],
+      [
+        "east",
+        "quay_mid",
+        4.5,
+        "quayside service road"
+      ],
+      [
+        "quay_mid",
+        "quay_s",
+        4.5,
+        "quayside service road"
+      ],
+      [
+        "south_cross",
+        "freight_south_turn",
+        5,
+        "southern freight connector"
+      ]
+    ]
+  },
+  "weather": true,
+  "footpaths": [
+    [
+      [
+        12,
+        92
+      ],
+      [
+        12,
+        84
+      ],
+      [
+        12,
+        76
+      ],
+      [
+        12,
+        36
+      ],
+      [
+        12,
+        28
+      ],
+      [
+        17,
+        27
+      ],
+      [
+        17,
+        4.5
+      ],
+      [
+        48,
+        4.5
+      ],
+      [
+        48,
+        14
+      ]
+    ]
+  ],
+  "districts": [
+    {
+      "name": "Southwest depot",
+      "role": "protected starting economy",
+      "bounds": [
+        3,
+        78,
+        27,
+        26
+      ]
+    },
+    {
+      "name": "Old town",
+      "role": "short route with exposed intersections",
+      "bounds": [
+        22,
+        20,
+        65,
+        54
+      ]
+    },
+    {
+      "name": "Farm approach",
+      "role": "longer screened infantry route",
+      "bounds": [
+        5,
+        27,
+        22,
+        58
+      ]
+    },
+    {
+      "name": "Freight quarter",
+      "role": "vehicle approach and contested economy",
+      "bounds": [
+        87,
+        32,
+        38,
+        65
+      ]
+    }
+  ]
+}

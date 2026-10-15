@@ -1,0 +1,564 @@
+{
+  "circulation": {
+    "variants": [
+      "paved_road",
+      "gravel_shoulder",
+      "footpath",
+      "paving",
+      "crossing",
+      "drain_grate",
+      "manhole",
+      "single_lamp",
+      "direction_sign",
+      "guardrail"
+    ],
+    "placement": "Road edges, junction approaches and entrances; keep sight lines and vehicle clearance",
+    "implemented": [
+      "paved_road",
+      "gravel_shoulder",
+      "paving",
+      "crossing",
+      "drain_grate",
+      "single_lamp",
+      "footpath"
+    ],
+    "library_ready": [
+      "manhole",
+      "direction_sign",
+      "guardrail"
+    ],
+    "planned": [],
+    "evidence": [
+      "scripts/environment_detail.gd",
+      "scripts/road_network.gd",
+      "scripts/roadside_props.gd",
+      "scripts/visuals.gd",
+      "resources/assets_street.json"
+    ],
+    "semantics": "Existing parcel dressing inherits its solid parcel; no independent cover or collision is implied by this catalogue. Authored dirt footpath markings retain underlying soil/weather costs.",
+    "asset_variants": {
+      "manhole": [
+        "round_cast",
+        "open_works"
+      ],
+      "direction_sign": [
+        "fingerpost",
+        "roadside_panel"
+      ],
+      "guardrail": [
+        "w_beam",
+        "wire_rope"
+      ]
+    }
+  },
+  "town_life": {
+    "variants": [
+      "cafe_table",
+      "umbrella",
+      "bench",
+      "bin",
+      "planter",
+      "bicycle_rack",
+      "sedan",
+      "service_van",
+      "pickup",
+      "bus_stop"
+    ],
+    "placement": "Frontages, forecourts, parks and signed parking areas",
+    "implemented": [
+      "cafe_table",
+      "umbrella",
+      "bench",
+      "planter",
+      "sedan",
+      "service_van",
+      "bin"
+    ],
+    "library_ready": [
+      "bicycle_rack",
+      "pickup",
+      "bus_stop"
+    ],
+    "planned": [],
+    "evidence": [
+      "scripts/architectural_block.gd",
+      "scripts/roadside_props.gd",
+      "resources/assets_street.json"
+    ],
+    "semantics": "Existing parcel dressing inherits its solid parcel; no independent cover or collision is implied by this catalogue.",
+    "asset_variants": {
+      "bicycle_rack": [
+        "sheffield_stands",
+        "wheel_slots"
+      ],
+      "pickup": [
+        "single_cab",
+        "crew_cab_canopy"
+      ],
+      "bus_stop": [
+        "glazed_shelter",
+        "timber_lean_to"
+      ]
+    }
+  },
+  "industry": {
+    "variants": [
+      "pallet_stack",
+      "timber_crates",
+      "drum_cluster",
+      "pipe_stack",
+      "cable_reel",
+      "shipping_container",
+      "forklift",
+      "loading_dock",
+      "gantry",
+      "service_cabinet"
+    ],
+    "placement": "Pipe stock beside workshop service walls, parallel to loading activity; keep door and forklift paths visually clear. Existing roadside props require their shared blockers.",
+    "implemented": [
+      "timber_crates",
+      "shipping_container",
+      "forklift",
+      "loading_dock",
+      "pallet_stack",
+      "drum_cluster",
+      "cable_reel",
+      "service_cabinet"
+    ],
+    "library_ready": [
+      "pipe_rack/low_cradle",
+      "pipe_rack/tiered",
+      "pipe_stack",
+      "gantry"
+    ],
+    "planned": [],
+    "evidence": [
+      "scripts/architectural_block.gd",
+      "scripts/roadside_props.gd",
+      "scripts/environment_variants.gd",
+      "resources/assets_waterfront.json"
+    ],
+    "semantics": "Existing parcel dressing inherits its solid parcel; no independent cover or collision is implied by this catalogue.",
+    "library_semantics": "Static models only; integration pending. Place wholly inside an existing blocked parcel on flat y=0. Creates no collision, sight blocker, cover bonus or destruction behavior.",
+    "library_specs": {
+      "pipe_rack/low_cradle": {
+        "footprint_x_z_width_depth": [
+          -1.6,
+          -0.7,
+          3.2,
+          1.4
+        ],
+        "max_height": 0.62,
+        "form": "Two hollow pipes on low steel cradles",
+        "runtime_placement": "pending",
+        "collision": "none_added; existing_blocked_parcel_required",
+        "cover": "none_added"
+      },
+      "pipe_rack/tiered": {
+        "footprint_x_z_width_depth": [
+          -1.6,
+          -0.7,
+          3.2,
+          1.4
+        ],
+        "max_height": 1.48,
+        "form": "Four hollow pipes on two raised crossbar levels",
+        "runtime_placement": "pending",
+        "collision": "none_added; existing_blocked_parcel_required",
+        "cover": "none_added"
+      }
+    },
+    "asset_variants": {
+      "pipe_stack": [
+        "paired_large",
+        "pyramid"
+      ],
+      "gantry": [
+        "fixed",
+        "travelling"
+      ]
+    }
+  },
+  "utilities": {
+    "variants": [
+      "junction_cabinet",
+      "transformer",
+      "utility_pole",
+      "overhead_cable",
+      "water_tank",
+      "roof_vent",
+      "solar_panel",
+      "drain_outfall"
+    ],
+    "placement": "Service edges, rooftops and drainage destinations",
+    "implemented": [
+      "water_tank",
+      "roof_vent",
+      "solar_panel",
+      "junction_cabinet"
+    ],
+    "library_ready": [
+      "transformer",
+      "utility_pole",
+      "overhead_cable",
+      "drain_outfall"
+    ],
+    "planned": [],
+    "evidence": [
+      "scripts/architectural_block.gd",
+      "scripts/roadside_props.gd",
+      "resources/assets_street.json"
+    ],
+    "semantics": "Existing parcel dressing inherits its solid parcel; no independent cover or collision is implied by this catalogue.",
+    "asset_variants": {
+      "transformer": [
+        "pad_mounted",
+        "fenced_compound"
+      ],
+      "utility_pole": [
+        "timber_crossarm",
+        "concrete_service"
+      ],
+      "overhead_cable": [
+        "three_phase_span",
+        "service_drop"
+      ],
+      "drain_outfall": [
+        "pipe_headwall",
+        "box_culvert"
+      ]
+    }
+  },
+  "rural": {
+    "variants": [
+      "raised_beds",
+      "polytunnel",
+      "hay_bales",
+      "orchard",
+      "hedgerow",
+      "field_gate",
+      "irrigation_ditch",
+      "tractor",
+      "farm_trailer"
+    ],
+    "placement": "Village edge parcels, fields and water access",
+    "implemented": [
+      "raised_beds",
+      "polytunnel",
+      "hay_bales",
+      "field_gate"
+    ],
+    "library_ready": [
+      "orchard",
+      "irrigation_ditch",
+      "tractor",
+      "farm_trailer"
+    ],
+    "planned": [
+      "hedgerow"
+    ],
+    "evidence": [
+      "scripts/architectural_block.gd",
+      "resources/assets_rural.json"
+    ],
+    "semantics": "Existing parcel dressing inherits its solid parcel; no independent cover or collision is implied by this catalogue.",
+    "asset_variants": {
+      "orchard": [
+        "open_crown",
+        "trained_row"
+      ],
+      "irrigation_ditch": [
+        "earth_banks",
+        "lined_sluice"
+      ],
+      "tractor": [
+        "open_utility",
+        "cab_utility"
+      ],
+      "farm_trailer": [
+        "flatbed",
+        "grain_tipper"
+      ]
+    }
+  },
+  "vegetation": {
+    "variants": [
+      "deciduous_tree",
+      "cypress",
+      "shrub",
+      "climbing_vine",
+      "grass_patch",
+      "reed_bed",
+      "broken_tree"
+    ],
+    "placement": "Boundaries, courtyards and damp banks; avoid uniform grids outside managed planting",
+    "implemented": [
+      "deciduous_tree",
+      "cypress",
+      "shrub",
+      "climbing_vine"
+    ],
+    "library_ready": [
+      "hedgerow",
+      "grass_patch",
+      "reed_bed",
+      "broken_tree"
+    ],
+    "planned": [],
+    "evidence": [
+      "scripts/architectural_block.gd",
+      "scripts/visuals.gd",
+      "resources/assets_rural.json"
+    ],
+    "semantics": "Existing parcel dressing inherits its solid parcel; no independent cover or collision is implied by this catalogue.",
+    "asset_variants": {
+      "hedgerow": [
+        "mixed_shrubs",
+        "laid_bank"
+      ],
+      "grass_patch": [
+        "short_sward",
+        "dry_tussocks"
+      ],
+      "reed_bed": [
+        "rushes",
+        "cattails"
+      ],
+      "broken_tree": [
+        "snapped_snag",
+        "fallen_bough"
+      ]
+    }
+  },
+  "waterfront": {
+    "variants": [
+      "quay_edge",
+      "bollard",
+      "tyre_fender",
+      "railings",
+      "access_ladder",
+      "mooring_rope",
+      "small_boat",
+      "barge",
+      "lifebuoy"
+    ],
+    "placement": "Fenders against quay wall toes inside existing blocked parcels, working face -Z, rear +Z. Never project into currently navigable water. Bollards already use roadside blockers.",
+    "implemented": [
+      "bollard",
+      "quay_edge"
+    ],
+    "library_ready": [
+      "quay_fender/timber_piles",
+      "quay_fender/rubber_panel",
+      "tyre_fender",
+      "railings",
+      "access_ladder",
+      "mooring_rope",
+      "small_boat",
+      "barge",
+      "lifebuoy"
+    ],
+    "planned": [],
+    "evidence": [
+      "scripts/roadside_props.gd",
+      "scripts/environment_variants.gd",
+      "scripts/roadside_props.gd",
+      "resources/assets_waterfront.json"
+    ],
+    "semantics": "Existing parcel dressing inherits its solid parcel; no independent cover or collision is implied by this catalogue. Riverside quay bays remain within the land-side shoreline; their shared footprints block land bodies. No offshore collision or new boat asset is implied.",
+    "library_semantics": "Static models only; integration pending. Place wholly inside an existing blocked parcel on flat y=0. Creates no collision, sight blocker, cover bonus or destruction behavior.",
+    "library_specs": {
+      "quay_fender/timber_piles": {
+        "footprint_x_z_width_depth": [
+          -1.3,
+          -0.4,
+          2.6,
+          0.8
+        ],
+        "max_height": 1.72,
+        "form": "Three timber piles with two bolted horizontal rubbing beams",
+        "runtime_placement": "pending",
+        "collision": "none_added; existing_blocked_parcel_required",
+        "cover": "none_added"
+      },
+      "quay_fender/rubber_panel": {
+        "footprint_x_z_width_depth": [
+          -1.3,
+          -0.4,
+          2.6,
+          0.8
+        ],
+        "max_height": 1.36,
+        "form": "Broad ribbed rubber panel mounted on two grounded steel feet",
+        "runtime_placement": "pending",
+        "collision": "none_added; existing_blocked_parcel_required",
+        "cover": "none_added"
+      }
+    },
+    "asset_variants": {
+      "tyre_fender": [
+        "single",
+        "double"
+      ],
+      "railings": [
+        "straight",
+        "corner"
+      ],
+      "access_ladder": [
+        "wall",
+        "guarded"
+      ],
+      "mooring_rope": [
+        "coil",
+        "bollard"
+      ],
+      "small_boat": [
+        "rowing",
+        "outboard"
+      ],
+      "barge": [
+        "flat_deck",
+        "cargo_hold"
+      ],
+      "lifebuoy": [
+        "post",
+        "cabinet"
+      ]
+    }
+  },
+  "field_defences": {
+    "variants": [
+      "sandbag_line",
+      "sandbag_corner",
+      "concrete_barrier",
+      "filled_wire_basket",
+      "checkpoint_gate",
+      "supply_tent",
+      "antenna",
+      "camouflage_net"
+    ],
+    "placement": "Deliberate disused supply/defensive site inside blocked parcels. Never imply an accessible firing position or close an active route; functional field cover remains planned.",
+    "implemented": [],
+    "library_ready": [
+      "sandbags/straight",
+      "sandbags/corner",
+      "concrete_barrier",
+      "filled_wire_basket",
+      "checkpoint_gate",
+      "supply_tent",
+      "antenna",
+      "camouflage_net"
+    ],
+    "planned": [],
+    "evidence": [
+      "scripts/environment_variants.gd",
+      "resources/assets_battlefield.json"
+    ],
+    "semantics": "Existing parcel dressing inherits its solid parcel; no independent cover or collision is implied by this catalogue.",
+    "library_semantics": "Static models only; integration pending. Place wholly inside an existing blocked parcel on flat y=0. Creates no collision, sight blocker, cover bonus or destruction behavior.",
+    "variant_aliases": {
+      "sandbag_line": "sandbags/straight",
+      "sandbag_corner": "sandbags/corner"
+    },
+    "library_specs": {
+      "sandbags/straight": {
+        "footprint_x_z_width_depth": [
+          -1.3,
+          -0.4,
+          2.6,
+          0.8
+        ],
+        "max_height": 0.72,
+        "form": "Three bonded courses; short end bags on middle course",
+        "runtime_placement": "pending",
+        "collision": "none_added; existing_blocked_parcel_required",
+        "cover": "none_added"
+      },
+      "sandbags/corner": {
+        "footprint_x_z_width_depth": [
+          -1.3,
+          -0.4,
+          2.6,
+          1.9
+        ],
+        "max_height": 0.72,
+        "form": "L return with two additional bags per course",
+        "runtime_placement": "pending",
+        "collision": "none_added; existing_blocked_parcel_required",
+        "cover": "none_added"
+      }
+    },
+    "asset_variants": {
+      "concrete_barrier": [
+        "jersey",
+        "linked_blocks"
+      ],
+      "filled_wire_basket": [
+        "single",
+        "stepped"
+      ],
+      "checkpoint_gate": [
+        "boom",
+        "swing"
+      ],
+      "supply_tent": [
+        "ridge",
+        "lean_to"
+      ],
+      "antenna": [
+        "tripod",
+        "panel_mast"
+      ],
+      "camouflage_net": [
+        "low_drape",
+        "high_ridge"
+      ]
+    }
+  },
+  "damage": {
+    "variants": [
+      "shell_scar",
+      "roof_collapse",
+      "burnt_shed",
+      "broken_wall",
+      "brick_rubble",
+      "scorch_mark",
+      "wreck",
+      "crater"
+    ],
+    "placement": "Localized damage stories near affected buildings and routes",
+    "implemented": [
+      "shell_scar",
+      "roof_collapse",
+      "burnt_shed",
+      "broken_wall",
+      "brick_rubble"
+    ],
+    "library_ready": [
+      "scorch_mark",
+      "wreck",
+      "crater"
+    ],
+    "planned": [],
+    "evidence": [
+      "scripts/architectural_block.gd",
+      "scripts/ruined_building.gd",
+      "resources/assets_battlefield.json"
+    ],
+    "semantics": "Existing parcel dressing inherits its solid parcel; no independent cover or collision is implied by this catalogue.",
+    "asset_variants": {
+      "scorch_mark": [
+        "radial",
+        "streak"
+      ],
+      "wreck": [
+        "utility_hulk",
+        "tracked_hulk"
+      ],
+      "crater": [
+        "shallow",
+        "elongated"
+      ]
+    }
+  }
+}

@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Build an offline review page from the actual in-engine manifest and captures."""
+import json, html
+from pathlib import Path
+root=Path(__file__).resolve().parent.parent
+rows=json.loads((root/'artifacts/asset-manifest.json').read_text())
+esc=html.escape
+categories=sorted({x['category'] for x in rows})
+head='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>RA Neo asset library</title><style>
+body{margin:0;background:#18201e;color:#e1e4d7;font:16px/1.5 system-ui}main{max-width:1500px;margin:auto;padding:28px}h1{margin:0;font-size:28px}p{max-width:950px;color:#b6c1b9}nav{display:flex;gap:12px;position:sticky;top:0;padding:14px 0;background:#18201e;z-index:1;flex-wrap:wrap}input,select{font:inherit;padding:8px;background:#28352f;color:inherit;border:1px solid #58675e;border-radius:3px}#grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}figure{margin:0;background:#24302a;border:1px solid #405047}img{display:block;width:100%;aspect-ratio:1.5;object-fit:contain;background:#34403b}figcaption{padding:12px}h2{font-size:16px;margin:0 0 6px}.meta{font-size:12px;color:#afbeb2}.desc{font-size:13px;margin:6px 0}a{color:#c7d59b}details{font-size:12px;margin-top:8px}[hidden]{display:none!important}</style><main><h1>RA / NEO — Environment asset library</h1><p>100 original callable models across 10 categories. These are engine-rendered models, not generated concept images. Preview cameras fit each object individually; compare the declared bounds for scale. Library-ready assets still require placement and authoritative collision/cover integration.</p><nav><input id="search" aria-label="Search assets" placeholder="Search name, variant or use"><select id="category" aria-label="Category"><option value="">All categories</option>'''
+head+=''.join(f'<option value="{esc(c)}">{esc(c.replace("_"," ").title())}</option>' for c in categories)
+head+='</select><span id="count"></span></nav><div id="grid">'
+cards=[]
+for r in rows:
+ ident=r['id'];f=r['footprint'];rb=r.get('render_bounds',[0,0,0,f[2],r['height'],f[3]]);search=' '.join(str(r.get(k,'')) for k in ['label','kind','variant','description','placement']).lower()
+ cards.append(f'''<figure data-category="{esc(r['category'])}" data-search="{esc(search,quote=True)}"><a href="asset-previews/{esc(ident)}.png"><img loading="lazy" src="asset-previews/{esc(ident)}.png" alt="{esc(r['label'])}"></a><figcaption><h2>{esc(r['label'])}</h2><div class="meta">{esc(ident)} · {float(rb[3]):.2f} × {float(rb[5]):.2f} × {float(rb[4]):.2f} render bounds</div><p class="desc">{esc(r.get('description','Reusable original scene asset.'))}</p><details><summary>Placement and gameplay contract</summary>{esc(str(r['placement']))}<br>Placement envelope: {esc(str(f))}; height {r["height"]}<br>Collision descriptor: {esc(r['collision'])}; automatic cover: {str(r.get('cover',False)).lower()}<br>Registry status: {esc(r['status'])}; geometry alone installs no physics.</details></figcaption></figure>''')
+foot='''</div><p><a href="../docs/environment-library.md">API and placement guide</a> · <a href="asset-library-checks.json">Bounds evidence</a> · <a href="../docs/art-authenticity-review.md">Authenticity study</a></p></main><script>const search=document.querySelector('#search'),category=document.querySelector('#category'),cards=[...document.querySelectorAll('figure')];function filter(){let n=0;const q=search.value.toLowerCase().trim();for(const c of cards){c.hidden=!(c.dataset.search.includes(q)&&(!category.value||c.dataset.category===category.value));if(!c.hidden)n++;}document.querySelector('#count').textContent=n+' models';}search.addEventListener('input',filter);category.addEventListener('change',filter);filter();</script></html>'''
+(root/'artifacts/asset-library.html').write_text(head+''.join(cards)+foot)
+print(f'Asset review: {len(rows)} models, {len(categories)} categories')

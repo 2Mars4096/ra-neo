@@ -1,0 +1,658 @@
+extends RefCounted
+
+const KINDS=["tactical_cover","observation_post","repair_point","aid_post","concertina_wire","tank_obstacles","fighting_trench","vehicle_berm","camouflage_net","forward_supply_point","bunker","at_gun","command_post","ammo_depot"]
+# Linear works may be turned 90 degrees during placement.
+const ROTATABLE=["tactical_cover","concertina_wire","tank_obstacles","fighting_trench"]
+# A forward supply point only receives reinforcements when no seen enemy is this close.
+const FORWARD_SAFE_RADIUS:=18.0
+const PURCHASES=["rifle","atgm","engineer","tank","aa","drone","helo","boat"]
+
+static func build_choices()->Dictionary:
+	var data:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://resources/field_units.json"))
+	data.erase("engineer")
+	return data
+
+static func setup(sim)->void:
+	var extra:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://resources/field_units.json"))
+	sim.definitions.merge(extra)
+	for kind in sim.definitions:
+		if not sim.definitions[kind].has("combat_alias"):sim.definitions[kind]["combat_alias"]=kind
+		if not sim.definitions[kind].has("render_alias"):sim.definitions[kind]["render_alias"]=kind
+	var original:Dictionary=sim.effectiveness.duplicate(true)
+	for weapon in sim.definitions:
+		sim.effectiveness[weapon]={}
+		for target in sim.definitions:
+			var wa:String=sim.definitions[weapon].get("combat_alias",weapon)
+			var ta:String=sim.definitions[target].get("combat_alias",target)
+			var multiplier:float=original[wa][ta]
+			if sim.definitions[weapon].get("structure",false) and not sim.definitions[weapon].get("armed",false):multiplier=0.0
+			elif target in KINDS:multiplier=0.25 if wa=="rifle" else (0.0 if wa=="drone" else 0.8)
+			sim.effectiveness[weapon][target]=multiplier
+	var config:Dictionary=sim.scenario
+	var insertion:=point(config.get("field_insertion",config.get("insertion",[14,97])))
+	sim.credits=float(config.get("field_supply",900.0))
+	sim.field_ops={"income_rate":float(config.get("field_income",2.0)),"insertion":insertion,
+		"sea_insertion":point(config.get("field_sea_insertion",[sim.terrain.shore_x+7,insertion.y])),
+		"enemy_insertion":point(config.get("field_enemy_insertion",config.get("enemy_insertion",[114,12]))),
+		"enemy_sea_insertion":point(config.get("field_enemy_sea_insertion",[-1,-1])),
+		"started":false,"obstacle_key":"","last_build_error":"","last_purchase_error":""}
+
+static func point(value)->Vector2:
+	if value is Vector2:return value
+	return Vector2(float(value[0]),float(value[1]))
+
+# Force records accept {"kind","position"|"pos"} dictionaries or [kind,[x,y]] / [kind,x,y] arrays.
+static func force_records(records:Array)->Array:
+	var result:Array=[]
+	for record in records:
+		if record is Dictionary:result.append({"kind":str(record.kind),"pos":point(record.get("position",record.get("pos")))})
+		elif record.size()==2:result.append({"kind":str(record[0]),"pos":point(record[1])})
+		else:result.append({"kind":str(record[0]),"pos":Vector2(float(record[1]),float(record[2]))})
+	return result
+
+static func legacy_player_force(sim)->Array:
+	return ["rifle","rifle","engineer","tank","drone"].map(func(kind):return {"kind":kind,"pos":sim.field_ops.insertion})
+
+static func legacy_enemy_force()->Array:
+	var result:Array=[]
+	for spot in [Vector2(56,48),Vector2(108,71),Vector2(114,12)]:
+		for kind in ["rifle","atgm","tank"]:result.append({"kind":kind,"pos":spot})
+	return result
+
+static func populate(sim)->void:
+	var config:Dictionary=sim.scenario
+	var player:Array=force_records(config.player_force) if config.has("player_force") else legacy_player_force(sim)
+	var enemy:Array=force_records(config.enemy_force) if config.has("enemy_force") else legacy_enemy_force()
+	for record in player:sim.spawn(record.kind,0,record.pos)
+	for record in enemy:sim.spawn(record.kind,1,record.pos)
+	spawn_prepared_works(sim,config.get("enemy_works",[]),1)
+	sim.field_ops.started=true
+
+# Authored prepared positions (trenches, wire, bunkers, gun pits, command posts)
+# start complete for their side; they are ordinary destructible field works.
+static func spawn_prepared_works(sim,records:Array,team:int)->void:
+	for record in records:
+		var kind:String=str(record.kind)
+		if not sim.definitions.has(kind):continue
+		var unit:Dictionary=sim.spawn(kind,team,point(record.position))
+		if unit.is_empty():continue
+		unit.merge({"structure":true,"build_left":0.0,"engineer_id":-1,"build_paused":false,"rotated":bool(record.get("rotated",false)),"prepared":true},true)
+		unit.hp=unit.max_hp
+		unit.state="READY"
+	if not records.is_empty():sync_obstacles(sim)
+
+# Drag-to-install. Linear works lay segments along the dominant drag axis
+# (RA2-style walls); nets tile the dragged rectangle. Each segment is an
+# ordinary site paid at commit; one engineer section builds them in order.
+const DRAG_LINE:=["tactical_cover","concertina_wire","tank_obstacles","fighting_trench"]
+const DRAG_AREA:=["camouflage_net"]
+const DRAG_LIMIT:=12
+
+static func draggable(kind:String)->bool:
+	return kind in DRAG_LINE or kind in DRAG_AREA
+
+static func drag_plan(sim,kind:String,a:Vector2,b:Vector2)->Array:
+	var size:Array=sim.definitions[kind].footprint
+	var result:Array=[]
+	if kind in DRAG_AREA:
+		var w:float=float(size[0]);var d:float=float(size[1])
+		var nx:=maxi(1,roundi(absf(b.x-a.x)/w)+1);var nz:=maxi(1,roundi(absf(b.y-a.y)/d)+1)
+		for i in nx:
+			for j in nz:
+				if result.size()<DRAG_LIMIT:result.append({"pos":a+Vector2(signf(b.x-a.x)*i*w,signf(b.y-a.y)*j*d),"rotated":false})
+		return result
+	var delta:=b-a
+	var along_x:=absf(delta.x)>=absf(delta.y)
+	var length:float=float(size[0]) # Long axis of a linear work.
+	var span:=absf(delta.x) if along_x else absf(delta.y)
+	var count:=clampi(roundi(span/length)+1,1,DRAG_LIMIT)
+	var step:=Vector2(signf(delta.x) if delta.x!=0 else 1.0,0) if along_x else Vector2(0,signf(delta.y) if delta.y!=0 else 1.0)
+	for i in count:result.append({"pos":a+step*length*i,"rotated":not along_x})
+	return result
+
+static func drag_cost(sim,kind:String,plan:Array)->int:
+	return int(sim.definitions[kind].cost)*plan.size()
+
+# Commit a dragged plan: the first valid segment starts now, later ones wait as
+# paid, queued sites for the same engineer. Invalid segments are skipped (not charged).
+static func build_many(sim,kind:String,plan:Array,engineer_id:int)->int:
+	var built:=0
+	var first:=-1
+	for segment in plan:
+		var rotated:bool=segment.rotated and kind in ROTATABLE
+		if first<0:
+			if build(sim,kind,segment.pos,engineer_id,rotated):
+				first=sim.units.back().id;built+=1
+			continue
+		if sim.credits<float(sim.definitions[kind].cost):break
+		if not occupied_clear(sim,segment.pos,kind,false,[],footprint(sim,kind,segment.pos,rotated)) or not site_ground_clear(sim,kind,segment.pos,rotated):continue
+		var unit:Dictionary=sim.spawn(kind,0,segment.pos)
+		if unit.is_empty():continue
+		unit.merge({"structure":true,"build_left":float(sim.definitions[kind].build_seconds),"engineer_id":-1,"last_engineer_id":engineer_id,"queued_for":engineer_id,"work_point":segment.pos,"build_paused":true,"rotated":rotated},true)
+		unit.hp=unit.max_hp*0.2
+		unit.state="QUEUED"
+		sim.credits-=float(sim.definitions[kind].cost)
+		built+=1
+	if built>0:sync_obstacles(sim)
+	return built
+
+# After a site completes, the same engineers move on to their next queued segment.
+static func continue_queue(sim,engineer:Dictionary)->void:
+	var best:Dictionary={}
+	for site in sim.units:
+		if not sim.alive(site) or site.get("queued_for",-1)!=engineer.id or site.get("build_left",0.0)<=0:continue
+		if best.is_empty() or site.pos.distance_squared_to(engineer.pos)<best.pos.distance_squared_to(engineer.pos):best=site
+	if best.is_empty():return
+	best.erase("queued_for")
+	if not resume(sim,best.id,engineer.id):best["queued_for"]=engineer.id
+
+# Enemy offensive: escalating two-pronged waves aimed at the player's forward
+# base. A drone scouts ahead; the main body attack-moves straight in while a
+# flanking group detours wide to arrive from the side; a wave that loses 70% of
+# its strength withdraws to regroup. Waves need living enemy logistics.
+static func wave_target(sim)->Vector2:
+	var forward:=forward_point(sim)
+	if forward.x>=0:return forward
+	var works:Array=sim.units.filter(func(u):return sim.alive(u) and u.team==0 and u.get("structure",false))
+	if not works.is_empty():
+		var sum:=Vector2.ZERO
+		for u in works:sum+=u.pos
+		return sum/works.size()
+	return sim.field_ops.insertion
+
+static func wave_composition(index:int)->Array:
+	var kinds:Array=["drone"]
+	for i in 3+index:kinds.append("rifle")
+	for i in 1+index/2:kinds.append("atgm")
+	for i in mini(4,1+(index+1)/2):kinds.append("tank")
+	if index%3==2:kinds.append("aa")
+	if index>=3:kinds.append("helo")
+	return kinds
+
+# Aggressive defence: idle enemy defenders strike seen player units that come
+# within 30 u of their post, then return to it once the threat is gone.
+static func local_counterattacks(sim,state:Dictionary)->void:
+	if sim.time<float(state.get("local_next",0.0)):return
+	state.local_next=sim.time+2.0
+	var wave:Array=state.get("active",[])
+	for defender in sim.units:
+		if not sim.alive(defender) or defender.team!=1 or defender.get("structure",false) or defender.id in wave:continue
+		if sim.definitions[defender.kind].domain!="land":continue
+		if not defender.has("post"):defender["post"]=defender.pos
+		var threat:Dictionary={}
+		var best:=30.0*30.0
+		for intruder in sim.units:
+			if not sim.alive(intruder) or intruder.team!=0 or intruder.get("structure",false) or not intruder.seen_by[1]:continue
+			var d:float=intruder.pos.distance_squared_to(defender.post)
+			if d<best:best=d;threat=intruder
+		if not threat.is_empty() and defender.orders.is_empty():
+			sim.issue([defender.id],threat.pos,"attack_move")
+		elif threat.is_empty() and defender.orders.is_empty() and defender.pos.distance_to(defender.post)>8.0:
+			sim.issue([defender.id],defender.post,"move")
+
+static func enemy_offensive(sim)->void:
+	var plan:Dictionary=sim.scenario.get("enemy_waves",{})
+	if plan.is_empty() or not sim.field_ops.started:return
+	var state:Dictionary=sim.field_ops.get("waves",{})
+	if state.is_empty():
+		state={"next":float(plan.get("first",150.0)),"index":0,"active":[],"strength":0.0}
+		sim.field_ops["waves"]=state
+	# Withdraw a broken wave so it does not trickle into the defence one unit at a time.
+	if not state.active.is_empty():
+		var alive:Array=state.active.filter(func(id):return sim.alive(sim.get_unit(id)))
+		var hp:=0.0
+		for id in alive:hp+=float(sim.get_unit(id).hp)
+		if alive.is_empty() or hp<state.strength*0.3:
+			if not alive.is_empty():sim.issue(alive,sim.field_ops.enemy_insertion,"retreat")
+			sim.events.append({"type":"warning","text":"Enemy assault broken • survivors falling back"})
+			state.active=[]
+	local_counterattacks(sim,state)
+	if not state.get("warned",false) and sim.time>=state.next-20.0 and state.index<int(plan.get("max_wave",8)) and enemy_logistics_alive(sim):
+		state.warned=true
+		sim.events.append({"type":"warning","text":"Enemy assault forming in the north-east • ~20 s"})
+	if sim.time<state.next or state.index>=int(plan.get("max_wave",8)) or not enemy_logistics_alive(sim):return
+	state.warned=false
+	state.next=sim.time+float(plan.get("interval",120.0))
+	var target:=wave_target(sim)
+	var origin:Vector2=sim.field_ops.enemy_insertion
+	var main:Array=[];var flank:Array=[];var scouts:Array=[]
+	for kind in wave_composition(state.index):
+		var unit:Dictionary=sim.spawn(kind,1,origin)
+		if unit.is_empty():continue
+		if kind=="drone":scouts.append(unit.id)
+		elif kind in ["rifle","atgm"] and flank.size()<main.size()/2+1:flank.append(unit.id)
+		else:main.append(unit.id)
+	state.index+=1
+	state.active=main+flank+scouts
+	state.strength=0.0
+	for id in state.active:state.strength+=float(sim.get_unit(id).hp)
+	sim.issue(scouts,target,"attack_move")
+	sim.issue(main,target,"attack_move")
+	# Flank: a waypoint 70 u off the direct axis on the side with a reachable route.
+	var axis:Vector2=(target-origin).normalized()
+	for side in [1,-1]:
+		var waypoint:Vector2=origin.lerp(target,0.6)+Vector2(-axis.y,axis.x)*70.0*side
+		waypoint=Vector2(clampf(waypoint.x,8,sim.terrain.world_size.x-8),clampf(waypoint.y,8,sim.terrain.world_size.y-8))
+		if sim.terrain.is_water(waypoint) or not sim.terrain.traversable(waypoint,"land",2.65):continue
+		sim.issue(flank,waypoint,"move")
+		sim.issue(flank,target,"attack_move",true)
+		break
+	if flank.size()>0 and sim.get_unit(flank[0]).orders.is_empty():sim.issue(flank,target,"attack_move")
+	sim.events.append({"type":"warning","text":"ENEMY ASSAULT WAVE %d • %d units inbound" % [state.index,state.active.size()]})
+
+# The enemy counterattack is staged from its command post or ammunition depot;
+# with both destroyed the reserve never forms. Maps without them keep the old rule.
+static func enemy_logistics_alive(sim)->bool:
+	var authored:bool=sim.scenario.get("enemy_works",[]).any(func(w):return str(w.kind) in ["command_post","ammo_depot"])
+	if not authored:return true
+	return sim.units.any(func(u):return sim.alive(u) and u.team==1 and u.kind in ["command_post","ammo_depot"])
+
+# Offmap entries are bounded to a small ring around the configured insertion
+# and must clear every living body on the same layer, including soldiers.
+static func entry_position(sim,kind:String,origin:Vector2,safe_forward:bool=false)->Vector2:
+	var d:Dictionary=sim.definitions[kind]
+	for ring in range(0,7):
+		for index in (1 if ring==0 else 12):
+			var candidate:Vector2=origin+Vector2.from_angle(index*TAU/12.0)*ring*2.0
+			if not sim.terrain.inside(candidate) or not sim.location_clear(candidate,kind):continue
+			if d.domain=="land" and not occupied_clear(sim,candidate,kind,false):continue
+			if safe_forward and sim.units.any(func(enemy):return sim.alive(enemy) and enemy.team==1 and enemy.seen_by[0] and not enemy.get("structure",false) and enemy.pos.distance_to(candidate)<FORWARD_SAFE_RADIUS):continue
+			return candidate
+	return Vector2(-1,-1)
+
+static func insertion_for(sim,kind:String,team:int=0)->Vector2:
+	if sim.definitions[kind].domain=="sea":
+		if team==1 and sim.field_ops.enemy_sea_insertion.x>=0:return sim.field_ops.enemy_sea_insertion
+		return sim.field_ops.sea_insertion
+	if team==0 and sim.definitions[kind].domain=="land":
+		var forward:=forward_point(sim)
+		if forward.x>=0:return forward
+	return sim.field_ops.insertion if team==0 else sim.field_ops.enemy_insertion
+
+# Newest completed, unthreatened forward supply point; (-1,-1) when none.
+static func forward_point(sim)->Vector2:
+	var best:Dictionary={}
+	for site in sim.units:
+		if not sim.alive(site) or site.team!=0 or site.kind!="forward_supply_point" or site.get("build_left",0.0)>0:continue
+		var threatened:=false
+		for enemy in sim.units:
+			if sim.alive(enemy) and enemy.team==1 and enemy.seen_by[0] and not enemy.get("structure",false) and enemy.pos.distance_to(site.pos)<FORWARD_SAFE_RADIUS:
+				threatened=true
+				break
+		if not threatened and (best.is_empty() or site.id>best.id):best=site
+	if best.is_empty():return Vector2(-1,-1)
+	var rect:=footprint(sim,best.kind,best.pos,best.get("rotated",false))
+	return best.pos+Vector2(0,rect.size.y/2+4.0)
+
+# Purchases queue: supply is paid on click, units deploy one at a time every
+# DEPLOY_INTERVAL seconds, and a crowded entry waits instead of failing.
+const QUEUE_LIMIT:=12
+const DEPLOY_INTERVAL:=3.0
+
+static func queue(sim)->Array:
+	if not sim.field_ops.has("queue"):sim.field_ops["queue"]=[]
+	return sim.field_ops.queue
+
+static func queued(sim,kind:String)->int:
+	return queue(sim).count(kind)
+
+static func purchase(sim,kind:String)->bool:
+	sim.field_ops.last_purchase_error=""
+	sim.field_ops["last_entry_forward"]=false
+	sim.field_ops["last_deployed"]=false
+	if sim.result!="" or kind not in PURCHASES:return purchase_fail(sim,"Reinforcements unavailable")
+	if queue(sim).size()>=QUEUE_LIMIT:return purchase_fail(sim,"Queue full (%d)" % QUEUE_LIMIT)
+	if sim.credits<float(sim.definitions[kind].cost):return purchase_fail(sim,"Need %d more supply" % ceili(float(sim.definitions[kind].cost)-sim.credits))
+	sim.credits-=float(sim.definitions[kind].cost)
+	queue(sim).append(kind)
+	process_queue(sim)
+	return true
+
+# Right-click cancel: removes the newest queued unit of this kind with a full refund.
+static func cancel_queued(sim,kind:String)->bool:
+	var items:=queue(sim)
+	for i in range(items.size()-1,-1,-1):
+		if items[i]==kind:
+			items.remove_at(i)
+			sim.credits+=float(sim.definitions[kind].cost)
+			return true
+	return false
+
+# Deploy the head of the queue when the interval has elapsed and its entry is clear.
+static func process_queue(sim)->void:
+	var items:=queue(sim)
+	if items.is_empty() or sim.recruit_clock>0 or sim.result!="":return
+	var kind:String=items[0]
+	if deploy(sim,kind):
+		items.remove_at(0)
+		sim.field_ops.last_deployed=true
+		sim.events.append({"type":"reinforcement","kind":kind,"forward":sim.field_ops.get("last_entry_forward",false)})
+
+static func deploy(sim,kind:String)->bool:
+	var origin:=insertion_for(sim,kind)
+	var forward:bool=sim.definitions[kind].domain=="land" and origin!=sim.field_ops.insertion
+	var pos:=entry_position(sim,kind,origin,forward)
+	# A forward depot shortens deployment, but cannot bypass a disconnected route.
+	if forward:
+		if pos.x<0 or sim.terrain.path(sim.field_ops.insertion,pos,"land",float(sim.definitions[kind].radius),[],sim.terrain.mobility_profile(kind)).is_empty():
+			pos=entry_position(sim,kind,sim.field_ops.insertion)
+			forward=false
+	if pos.x<0:return purchase_fail(sim,"Sea lane crowded" if sim.definitions[kind].domain=="sea" else "Landing zone crowded")
+	var unit:Dictionary=sim.spawn(kind,0,pos)
+	if unit.is_empty() or unit.pos.distance_to(pos)>0.01:
+		if not unit.is_empty():unit.hp=0.0
+		return purchase_fail(sim,"Landing zone crowded")
+	sim.recruit_clock=DEPLOY_INTERVAL
+	sim.field_ops.last_entry_forward=forward
+	return true
+
+static func purchase_fail(sim,message:String)->bool:
+	sim.field_ops.last_purchase_error=message
+	return false
+
+# Reserve composition and entry come from scenario metadata. The objective is
+# chosen from public sector ownership, never from hidden player positions.
+static func reserve_records(sim)->Array:
+	if sim.scenario.has("reserve_force"):return force_records(sim.scenario.reserve_force)
+	return ["tank","rifle","atgm"].map(func(kind):return {"kind":kind,"pos":sim.field_ops.enemy_insertion})
+
+static func reserve_target(sim)->Vector2:
+	for objective in sim.objectives:
+		if objective.owner==0:return objective.pos
+	return sim.objectives[0].pos if not sim.objectives.is_empty() else sim.field_ops.insertion
+
+# Enemy ships without an authored sea entry fall back to their own start, never
+# to the player's sea lane.
+static func rally_point(sim,u:Dictionary)->Vector2:
+	if u.team==1 and sim.definitions[u.kind].domain=="sea" and sim.field_ops.enemy_sea_insertion.x<0:return u.home
+	return insertion_for(sim,u.kind,u.team)
+
+static func footprint(sim,kind:String,pos:Vector2,rotated:bool=false)->Rect2:
+	var size:Array=sim.definitions[kind].footprint
+	var dimensions:=Vector2(size[1],size[0]) if rotated and kind in ROTATABLE else Vector2(size[0],size[1])
+	return Rect2(pos-dimensions/2,dimensions)
+
+# Preview occupancy follows team-0 knowledge. Commit checks all physical bodies
+# separately, so moving a placement ghost cannot scan hidden enemy positions.
+static func known_occupant(unit:Dictionary)->bool:
+	return unit.team==0 or unit.get("seen_by",[false,false])[0]
+
+static func occupied_clear(sim,pos:Vector2,kind:String,known_only:bool,ignore:Array=[],rect:Rect2=Rect2())->bool:
+	var radius:float=sim.definitions[kind].radius
+	if not sim.terrain.traversable(pos,"land",radius):return false
+	for unit in sim.units:
+		if unit.id in ignore or not sim.alive(unit) or sim.definitions[unit.kind].domain!="land":continue
+		if known_only and not known_occupant(unit):continue
+		var clearance:float=radius+float(sim.definitions[unit.kind].radius)+0.12
+		if rect.has_area():
+			if sim.terrain.circle_rect(unit.pos,float(sim.definitions[unit.kind].radius)+0.12,rect):return false
+		elif pos.distance_squared_to(unit.pos)<clearance*clearance:return false
+		for member in unit.members:
+			if member.hp<=0:continue
+			var body_radius:float=float(member.get("body_radius",0.8))+0.1
+			if rect.has_area():
+				if sim.terrain.circle_rect(member.pos,body_radius,rect):return false
+			elif pos.distance_to(member.pos)<radius+body_radius:return false
+	return true
+
+static func valid_site(sim,structure_id:int)->bool:
+	var site:Dictionary=sim.get_unit(structure_id)
+	return not sim.field_ops.is_empty() and sim.result=="" and sim.alive(site) and site.team==0 and site.kind in KINDS and site.get("build_left",0.0)>0
+
+static func engineer_available(sim,engineer:Dictionary,structure_id:int=-1)->bool:
+	if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or sim.comms_blocked(engineer):return false
+	if not engineer.members.any(func(member):return member.hp>0):return false
+	for site in sim.units:
+		if site.id!=structure_id and sim.alive(site) and site.get("engineer_id",-1)==engineer.id and site.get("build_left",0.0)>0 and not site.get("build_paused",false):return false
+	return true
+
+# UI query: eligibility and nearest distance only. Reachability is checked by
+# resume, not repeatedly by a menu draw. Ties retain simulation insertion order.
+static func available_engineer(sim,structure_id:int)->int:
+	if not valid_site(sim,structure_id):return -1
+	var site:Dictionary=sim.get_unit(structure_id)
+	var busy:Dictionary={}
+	for other in sim.units:
+		if other.id!=structure_id and sim.alive(other) and other.get("build_left",0.0)>0 and not other.get("build_paused",false):busy[other.get("engineer_id",-1)]=true
+	var nearest:=-1
+	var distance:=INF
+	for engineer in sim.units:
+		if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or busy.has(engineer.id) or sim.comms_blocked(engineer):continue
+		if not engineer.members.any(func(member):return member.hp>0):continue
+		var gap:float=engineer.pos.distance_squared_to(site.pos)
+		if gap<distance:nearest=engineer.id;distance=gap
+	return nearest
+
+# A conservative temporary circle encloses the reserved footprint and engineer
+# radius. Existing reservations stay in terrain; only the site's unit record is
+# ignored for work-point body checks. Never remove the site's physical blocker.
+static func work_plan(sim,kind:String,pos:Vector2,engineer:Dictionary,known_only:bool=true,structure_id:int=-1,rotated:bool=false)->Dictionary:
+	var rect:=footprint(sim,kind,pos,rotated)
+	var radius:float=sim.definitions.engineer.radius
+	var avoid:Array=[{"pos":pos,"radius":rect.size.length()*0.5+radius+0.27}]
+	var candidates:Array[Vector2]=[]
+	# Non-solid works use small body radii, so stand clear of the whole footprint.
+	var reach:float=float(sim.definitions[kind].radius)+radius+0.5
+	if not sim.definitions[kind].get("solid",true):reach=rect.size.length()*0.5+radius+0.5
+	# Wider rings rescue sites hemmed in by trees, walls or neighbouring segments.
+	for ring in [0.0,1.5,3.0]:
+		for index in 16:candidates.append(pos+Vector2.from_angle((index+ring)*TAU/16.0)*(reach+ring))
+	# Preserve near-side-first routing for both initial work and manual resume.
+	candidates.sort_custom(func(a,b):return a.distance_squared_to(engineer.pos)<b.distance_squared_to(engineer.pos))
+	for work in candidates:
+		if not occupied_clear(sim,work,"engineer",known_only,[engineer.id,structure_id]):continue
+		var route:Array=sim.terrain.path(engineer.pos,work,"land",radius,avoid,"infantry")
+		if not route.is_empty():return {"reason":"","work_point":work,"route":route}
+	return {"reason":"No clear engineer work route"}
+
+static func proposal(sim,kind:String,pos:Vector2,engineer_id:int,rotated:bool=false)->Dictionary:
+	if sim.field_ops.is_empty() or sim.result!="":return {"reason":"Field operations unavailable"}
+	if kind not in KINDS:return {"reason":"Unknown field structure"}
+	var engineer:Dictionary=sim.get_unit(engineer_id)
+	if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer":return {"reason":"Select a living engineer section"}
+	if sim.comms_blocked(engineer):return {"reason":"Engineer link unavailable"}
+	if sim.credits<float(sim.definitions[kind].cost):return {"reason":"Insufficient supply"}
+	if not engineer_available(sim,engineer):return {"reason":"Engineer assigned to another site"}
+	if not sim.visible_cells.has(sim.terrain.cell(pos)):return {"reason":"Site must be currently visible"}
+	if not occupied_clear(sim,pos,kind,true,[],footprint(sim,kind,pos,rotated)):return {"reason":"Site obstructed"}
+	if not site_ground_clear(sim,kind,pos,rotated):return {"reason":"Site obstructed"}
+	return work_plan(sim,kind,pos,engineer,true,-1,rotated)
+
+# Works occupy their whole footprint: no buildings, water or other field works.
+static func site_ground_clear(sim,kind:String,pos:Vector2,rotated:bool)->bool:
+	var rect:=footprint(sim,kind,pos,rotated)
+	for corner in [rect.position,Vector2(rect.end.x,rect.position.y),rect.end,Vector2(rect.position.x,rect.end.y),rect.get_center()]:
+		if not sim.terrain.inside(corner) or sim.terrain.is_water(corner) or sim.terrain.blocked(corner):return false
+	# Rectangle intersection catches thin walls wholly between corner samples.
+	for blocker in sim.terrain._static_candidates("solid",rect.get_center(),rect.size.length()*0.5):
+		if blocker.intersects(rect):return false
+	# Sweep the reservation in strips; coast checks include thin polygon edges.
+	var strips:=maxi(1,ceili(rect.size.x/0.4))
+	for i in strips+1:
+		var x:float=lerpf(rect.position.x,rect.end.x,float(i)/strips)
+		if not sim.terrain.segment_clear(Vector2(x,rect.position.y),Vector2(x,rect.end.y),"land",0.21):return false
+	for other in sim.units:
+		if sim.alive(other) and other.get("structure",false) and footprint(sim,other.kind,other.pos,other.get("rotated",false)).intersects(rect):return false
+	return true
+
+static func build_reason(sim,kind:String,pos:Vector2,engineer_id:int,rotated:bool=false)->String:
+	return proposal(sim,kind,pos,engineer_id,rotated).reason
+
+static func can_build(sim,kind:String,pos:Vector2,engineer_id:int,rotated:bool=false)->bool:
+	return build_reason(sim,kind,pos,engineer_id,rotated)==""
+
+static func fail(sim,message:String)->bool:
+	if not sim.field_ops.is_empty():sim.field_ops.last_build_error=message
+	return false
+
+static func assign_builder(sim,site:Dictionary,engineer:Dictionary,plan:Dictionary)->void:
+	var previous:Dictionary=sim.get_unit(site.get("engineer_id",-1))
+	if not previous.is_empty() and previous.id!=engineer.id and previous.get("building_id",-1)==site.id:
+		# Stop only the superseded construction assignment, not unrelated orders.
+		sim.stop([previous.id])
+		previous.erase("building_id")
+	sim.Director.cancel(engineer)
+	for member in engineer.members:sim.Infantry.Cover.clear(member)
+	engineer.orders=[{"mode":"move","pos":plan.work_point,"target":-1}]
+	engineer.intent=engineer.orders[0].duplicate()
+	engineer.path=plan.route
+	engineer["building_id"]=site.id
+	site.engineer_id=engineer.id
+	site["last_engineer_id"]=engineer.id
+	site.work_point=plan.work_point
+	site.build_paused=false
+	site.state="UNDER CONSTRUCTION"
+	sim.field_ops.last_build_error=""
+
+static func build(sim,kind:String,pos:Vector2,engineer_id:int,rotated:bool=false)->bool:
+	rotated=rotated and kind in ROTATABLE
+	var plan:=proposal(sim,kind,pos,engineer_id,rotated)
+	if plan.reason!="":return fail(sim,plan.reason)
+	# Full physical validation only at commitment. Do not identify hidden units,
+	# relocate the requested site, or charge/spawn anything on rejection.
+	if not occupied_clear(sim,pos,kind,false,[],footprint(sim,kind,pos,rotated)) or not occupied_clear(sim,plan.work_point,"engineer",false,[engineer_id]):return fail(sim,"Site unavailable")
+	var unit:Dictionary=sim.spawn(kind,0,pos)
+	if unit.is_empty():return fail(sim,"Site unavailable")
+	unit.merge({"structure":true,"build_left":float(sim.definitions[kind].build_seconds),"engineer_id":engineer_id,"work_point":plan.work_point,"build_paused":false,"rotated":rotated},true)
+	unit.hp=unit.max_hp*0.2
+	assign_builder(sim,unit,sim.get_unit(engineer_id),plan)
+	sim.credits-=float(sim.definitions[kind].cost)
+	sync_obstacles(sim)
+	return true
+
+# Explicit orders pause and release the builder, but preserve the paid site.
+# Returning to the work point does not resume automatically; Resume is explicit.
+static func pause_builder(sim,engineer_id:int)->void:
+	if sim.field_ops.is_empty():return
+	var engineer:Dictionary=sim.get_unit(engineer_id)
+	if not engineer.is_empty():engineer.erase("building_id")
+	# A segment of a dragged line rejoins that line's queue; a single site waits for RESUME.
+	var in_line:bool=sim.units.any(func(s):return sim.alive(s) and s.get("queued_for",-1)==engineer_id and s.get("build_left",0.0)>0)
+	for unit in sim.units:
+		if sim.alive(unit) and unit.get("engineer_id",-1)==engineer_id and unit.get("build_left",0.0)>0:
+			unit.build_paused=true
+			unit["last_engineer_id"]=engineer_id
+			unit.engineer_id=-1
+			unit.state="CONSTRUCTION PAUSED"
+			if in_line:unit["queued_for"]=engineer_id
+
+static func resume(sim,structure_id:int,engineer_id:int=-1)->bool:
+	if not valid_site(sim,structure_id):return fail(sim,"Site unavailable")
+	var site:Dictionary=sim.get_unit(structure_id)
+	if engineer_id<0:engineer_id=available_engineer(sim,structure_id)
+	# No idle section: take the section this site is queued for (or last built it)
+	# and swap its current segment back into its queue rather than refusing.
+	if engineer_id<0:engineer_id=switch_builder(sim,site)
+	var engineer:Dictionary=sim.get_unit(engineer_id)
+	if not engineer_available(sim,engineer,structure_id):return fail(sim,"No available engineer")
+	site.erase("queued_for")
+	var plan:=work_plan(sim,site.kind,site.pos,engineer,true,structure_id,site.get("rotated",false))
+	if plan.reason!="":return fail(sim,"Unable to reach work point")
+	if not occupied_clear(sim,plan.work_point,"engineer",false,[engineer_id,structure_id]):return fail(sim,"Work point unavailable")
+	assign_builder(sim,site,engineer,plan)
+	return true
+
+static func switch_builder(sim,site:Dictionary)->int:
+	var engineer:Dictionary=sim.get_unit(site.get("queued_for",site.get("last_engineer_id",-1)))
+	if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or sim.comms_blocked(engineer):return -1
+	for other in sim.units:
+		if other.id!=site.id and sim.alive(other) and other.get("engineer_id",-1)==engineer.id and other.get("build_left",0.0)>0 and not other.get("build_paused",false):
+			pause_builder(sim,engineer.id)
+			other["queued_for"]=engineer.id
+	return engineer.id
+
+# Engineers left idle (no orders, not building) pick up their queued segments.
+static func idle_engineers_continue(sim)->void:
+	for engineer in sim.units:
+		if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or engineer.has("building_id") or not engineer.orders.is_empty():continue
+		if sim.units.any(func(s):return sim.alive(s) and s.get("queued_for",-1)==engineer.id and s.get("build_left",0.0)>0):
+			continue_queue(sim,engineer)
+
+static func cancel(sim,structure_id:int)->bool:
+	var unit:Dictionary=sim.get_unit(structure_id)
+	if sim.field_ops.is_empty() or sim.result!="" or not sim.alive(unit) or unit.team!=0 or unit.kind not in KINDS or unit.get("build_left",0.0)<=0:return fail(sim,"Site unavailable")
+	var definition:Dictionary=sim.definitions[unit.kind]
+	sim.credits+=float(definition.cost)*unit.build_left/float(definition.build_seconds)
+	unit.hp=0.0
+	unit.state="CANCELLED"
+	var engineer:Dictionary=sim.get_unit(unit.engineer_id)
+	if sim.alive(engineer) and engineer.get("building_id",-1)==unit.id:
+		engineer.erase("building_id")
+		if not unit.build_paused:sim.stop([engineer.id])
+	sync_obstacles(sim)
+	sim.field_ops.last_build_error=""
+	return true
+
+static func sync_obstacles(sim)->void:
+	var structures:Array=sim.units.filter(func(u):return sim.alive(u) and u.get("structure",false))
+	var key:String=str(structures.map(func(u):return [u.id,u.get("build_left",0.0)<=0]))
+	if key==sim.field_ops.obstacle_key:return
+	sim.field_ops.obstacle_key=key
+	var blocks:Array=[]
+	var covers:Array=[]
+	var zones:Array=[]
+	for unit in structures:
+		var rect:=footprint(sim,unit.kind,unit.pos,unit.get("rotated",false))
+		var definition:Dictionary=sim.definitions[unit.kind]
+		if definition.get("solid",true):blocks.append(rect)
+		elif unit.build_left<=0:
+			var zone:Dictionary=definition.get("zone",{})
+			zones.append({"rect":rect,"speed":zone.get("speed",{}),"cover":zone.get("cover",[]),"conceal":float(zone.get("conceal",1.0)),"dug":unit.kind=="fighting_trench","front":Vector2.LEFT if unit.get("rotated",false) else Vector2.UP})
+		if unit.kind=="tactical_cover" and unit.build_left<=0:covers.append(rect)
+	var changed:bool=sim.terrain.update_field_geometry(blocks,covers)
+	if sim.terrain.update_field_zones(zones) or changed:sim.visibility_cache.clear()
+
+# Tracked vehicles of either side flatten wire they drive across.
+static func crush_wire(sim,wire:Dictionary)->void:
+	var rect:=footprint(sim,wire.kind,wire.pos,wire.get("rotated",false))
+	for vehicle in sim.units:
+		if not sim.alive(vehicle) or vehicle.get("structure",false) or sim.definitions[vehicle.kind].domain!="land":continue
+		if sim.terrain.mobility_profile(vehicle.kind)!="tracked":continue
+		if rect.grow(float(sim.definitions[vehicle.kind].radius)*0.5).has_point(vehicle.pos):
+			wire.hp=0.0
+			wire.state="CRUSHED"
+			sim.events.append({"type":"warning","text":"Wire crushed by armour"})
+			return
+
+static func tick(sim,dt:float)->void:
+	if sim.result!="":return
+	sim.credits+=dt*float(sim.field_ops.income_rate)
+	process_queue(sim)
+	enemy_offensive(sim)
+	idle_engineers_continue(sim)
+	for unit in sim.units:
+		if not sim.alive(unit) or not unit.get("structure",false):continue
+		if unit.build_left>0:
+			var engineer:Dictionary=sim.get_unit(unit.engineer_id)
+			unit.state="QUEUED" if unit.has("queued_for") else "CONSTRUCTION PAUSED"
+			if unit.build_paused or not sim.alive(engineer):continue
+			var working:bool=engineer.pos.distance_to(unit.work_point)<0.8 and engineer.suppression<=0.6
+			working=working and engineer.members.any(func(m):return m.hp>0 and m.pos.distance_to(unit.work_point)<3.0 and m.suppression<=0.6)
+			if not working:continue
+			var used:float=minf(dt,unit.build_left)
+			unit.build_left=maxf(0,unit.build_left-used)
+			unit.hp=minf(unit.max_hp,unit.hp+unit.max_hp*0.8*used/float(sim.definitions[unit.kind].build_seconds))
+			unit.state="BUILDING" if unit.build_left>0 else "READY"
+			if unit.build_left<=0:
+				engineer.erase("building_id")
+				continue_queue(sim,engineer)
+			continue
+		if unit.kind=="concertina_wire":crush_wire(sim,unit)
+		if unit.kind not in ["aid_post","repair_point"]:continue
+		for ally in sim.units:
+			if not sim.alive(ally) or ally.team!=unit.team or ally.get("structure",false) or sim.definitions[ally.kind].domain!="land":continue
+			if ally.pos.distance_to(unit.pos)>10 or sim.time-ally.last_hit<6 or ally.suppression>0.6:continue
+			if not sim.terrain.line_clear(unit.pos,ally.pos):continue
+			if unit.kind=="aid_post" and not ally.members.is_empty():sim.Infantry.recover(ally,dt*6)
+			elif unit.kind=="repair_point" and ally.members.is_empty():ally.hp=minf(ally.max_hp,ally.hp+dt*6)
+	sync_obstacles(sim)
+	if sim.field_ops.started:
+		if sim.counterattack_at<0 and sim.objectives.any(func(objective):return objective.owner==0):sim.counterattack_at=sim.time+12
+		if sim.counterattack_at>=0 and sim.time>=sim.counterattack_at and not sim.counterattack_sent and enemy_logistics_alive(sim):
+			sim.counterattack_sent=true
+			var force:Array=[]
+			for record in reserve_records(sim):
+				var enemy:Dictionary=sim.spawn(record.kind,1,record.pos)
+				if not enemy.is_empty():force.append(enemy.id);sim.counterattack_ids.append(enemy.id)
+			sim.issue(force,reserve_target(sim),"attack_move")
+		if sim.living(0).filter(func(u):return not u.get("structure",false)).is_empty():sim.result="DEFEAT"

@@ -1,0 +1,12 @@
+.godot/
+.DS_Store
+.dan-team-*/
+builds/
+artifacts/*.png
+artifacts/*.log
+artifacts/*.json
+artifacts/*.svg
+artifacts/*.html
+output/
+.team-leader/
+.claude/

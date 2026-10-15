@@ -1,0 +1,360 @@
+[
+  {
+    "kind": "pipe_stack",
+    "variant": "paired_large",
+    "category": "industry",
+    "label": "Large bore stock pipes",
+    "footprint": [
+      -1.85,
+      -0.85,
+      3.7,
+      1.7
+    ],
+    "height": 0.98,
+    "placement": [
+      "stockyard",
+      "loading_apron"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Two hollow large-bore pipes on timber sleepers with end chocks."
+  },
+  {
+    "kind": "pipe_stack",
+    "variant": "pyramid",
+    "category": "industry",
+    "label": "Pyramid pipe stack",
+    "footprint": [
+      -1.65,
+      -0.85,
+      3.3,
+      1.7
+    ],
+    "height": 1.57,
+    "placement": [
+      "stockyard",
+      "loading_apron"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Six hollow pipes in tangent three-two-one courses; bottom course held by sleeper chocks."
+  },
+  {
+    "kind": "gantry",
+    "variant": "fixed",
+    "category": "industry",
+    "label": "Fixed lifting gantry",
+    "footprint": [
+      -2.66,
+      -0.9,
+      5.32,
+      1.8
+    ],
+    "height": 3.91,
+    "placement": [
+      "workshop_yard",
+      "quay_service"
+    ],
+    "collision": "overhead",
+    "cover": false,
+    "description": "Grounded baseplates, braced columns and I beam carry an offset hoist and open hook. Clear span is visual only; no navigation clearance is implied."
+  },
+  {
+    "kind": "gantry",
+    "variant": "travelling",
+    "category": "industry",
+    "label": "Travelling lifting gantry",
+    "footprint": [
+      -2.55,
+      -0.95,
+      5.1,
+      1.9
+    ],
+    "height": 3.91,
+    "placement": [
+      "workshop_yard",
+      "quay_service"
+    ],
+    "collision": "overhead",
+    "cover": false,
+    "description": "Wheeled braced chassis carries I beam, shifted trolley, cables and hook. Static display only."
+  },
+  {
+    "kind": "tyre_fender",
+    "variant": "single",
+    "category": "waterfront",
+    "label": "Single tyre fender",
+    "footprint": [
+      -0.52,
+      -0.13,
+      1.04,
+      0.66
+    ],
+    "height": 1.4,
+    "placement": [
+      "quay_wall"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Open rubber tyre suspended from a grounded wall-side steel stand; mounting side +Z, working face -Z."
+  },
+  {
+    "kind": "tyre_fender",
+    "variant": "double",
+    "category": "waterfront",
+    "label": "Twin tyre fender",
+    "footprint": [
+      -1.08,
+      -0.13,
+      2.16,
+      0.66
+    ],
+    "height": 1.4,
+    "placement": [
+      "quay_wall"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Two open rubber tyres with individual hangers and grounded supports; mounting side +Z."
+  },
+  {
+    "kind": "railings",
+    "variant": "straight",
+    "category": "waterfront",
+    "label": "Straight quay rail",
+    "footprint": [
+      -1.51,
+      -0.11,
+      3.02,
+      0.22
+    ],
+    "height": 1.14,
+    "placement": [
+      "quay_edge",
+      "service_walkway"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Three baseplated posts with two continuous rails and a toe plate."
+  },
+  {
+    "kind": "railings",
+    "variant": "corner",
+    "category": "waterfront",
+    "label": "Return quay rail",
+    "footprint": [
+      -1.51,
+      -0.11,
+      3.02,
+      2.02
+    ],
+    "height": 1.14,
+    "placement": [
+      "quay_corner",
+      "service_walkway"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Right angle return with supported posts, two rails and toe plates; return extends +Z."
+  },
+  {
+    "kind": "access_ladder",
+    "variant": "wall",
+    "category": "waterfront",
+    "label": "Quay access ladder",
+    "footprint": [
+      -0.41,
+      -0.11,
+      0.82,
+      0.45
+    ],
+    "height": 3.1,
+    "placement": [
+      "quay_wall",
+      "service_wall"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Grounded feet, rungs and three wall stand-offs per stile; mounting wall is at +Z."
+  },
+  {
+    "kind": "access_ladder",
+    "variant": "guarded",
+    "category": "waterfront",
+    "label": "Guarded access ladder",
+    "footprint": [
+      -0.41,
+      -0.68,
+      0.82,
+      1.02
+    ],
+    "height": 3.1,
+    "placement": [
+      "quay_wall",
+      "service_wall"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Wall ladder with three connected half hoops and vertical cage straps projecting -Z."
+  },
+  {
+    "kind": "mooring_rope",
+    "variant": "coil",
+    "category": "waterfront",
+    "label": "Laid mooring coil",
+    "footprint": [
+      -0.52,
+      -0.52,
+      1.33,
+      1.04
+    ],
+    "height": 0.16,
+    "placement": [
+      "quay_surface",
+      "deck"
+    ],
+    "collision": "flat",
+    "cover": false,
+    "description": "Two supported courses of rope rings with a short free tail; no tension or mooring simulation."
+  },
+  {
+    "kind": "mooring_rope",
+    "variant": "bollard",
+    "category": "waterfront",
+    "label": "Twin bitt mooring rope",
+    "footprint": [
+      -0.575,
+      -0.33,
+      1.15,
+      0.66
+    ],
+    "height": 0.75,
+    "placement": [
+      "quay_surface",
+      "deck"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Grounded twin bitts with horns and three rope turns joined across both posts."
+  },
+  {
+    "kind": "small_boat",
+    "variant": "rowing",
+    "category": "waterfront",
+    "label": "Open rowing boat",
+    "footprint": [
+      -0.875,
+      -2.045,
+      1.75,
+      4.09
+    ],
+    "height": 0.88,
+    "placement": [
+      "dry_gallery",
+      "water_placement_pending"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Open tapered hull, gunwales, three supported benches, stowed oars and rowlocks. Gallery bottom datum y=0; later water placement must choose immersion depth explicitly."
+  },
+  {
+    "kind": "small_boat",
+    "variant": "outboard",
+    "category": "waterfront",
+    "label": "Outboard utility boat",
+    "footprint": [
+      -0.875,
+      -2.045,
+      1.75,
+      4.57
+    ],
+    "height": 1.15,
+    "placement": [
+      "dry_gallery",
+      "water_placement_pending"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Open tapered hull, two supported benches and transom-mounted motor with tiller, leg and propeller. Gallery bottom datum y=0; later water placement must choose immersion depth explicitly."
+  },
+  {
+    "kind": "barge",
+    "variant": "flat_deck",
+    "category": "waterfront",
+    "label": "Flat deck lighter",
+    "footprint": [
+      -1.845,
+      -3.545,
+      3.69,
+      7.09
+    ],
+    "height": 1.2,
+    "placement": [
+      "dry_gallery",
+      "water_placement_pending"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Broad blunt hull, flush timber cargo deck and four supported mooring cleats; unpowered lighter. Gallery bottom datum y=0; later water placement must choose immersion depth explicitly."
+  },
+  {
+    "kind": "barge",
+    "variant": "cargo_hold",
+    "category": "waterfront",
+    "label": "Open hold lighter",
+    "footprint": [
+      -1.845,
+      -3.545,
+      3.69,
+      7.09
+    ],
+    "height": 1.2,
+    "placement": [
+      "dry_gallery",
+      "water_placement_pending"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Broad blunt hull, open ribbed floor, raised hatch coaming and four supported cleats; unpowered lighter. Gallery bottom datum y=0; later water placement must choose immersion depth explicitly."
+  },
+  {
+    "kind": "lifebuoy",
+    "variant": "post",
+    "category": "waterfront",
+    "label": "Post-mounted lifebuoy",
+    "footprint": [
+      -0.465,
+      -0.15,
+      0.93,
+      0.53
+    ],
+    "height": 1.765,
+    "placement": [
+      "quay_surface",
+      "service_walkway"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Open rescue ring with four pale bands and perimeter grab rope, hung from a grounded post."
+  },
+  {
+    "kind": "lifebuoy",
+    "variant": "cabinet",
+    "category": "waterfront",
+    "label": "Open rescue station",
+    "footprint": [
+      -0.51,
+      -0.15,
+      1.02,
+      0.53
+    ],
+    "height": 1.86,
+    "placement": [
+      "quay_surface",
+      "service_walkway"
+    ],
+    "collision": "solid",
+    "cover": false,
+    "description": "Open-front supported cabinet contains rescue ring, bands and perimeter grab rope."
+  }
+]
