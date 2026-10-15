@@ -144,6 +144,7 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 	var formation: Dictionary = {}
 	var spacing: Dictionary = {}
 	var slots: Array[Dictionary] = []
+	var open:Dictionary={} # formation_slot memo for this command
 	terrain.begin_path_memo()
 	for id in ids:
 		var member:=get_unit(int(id))
@@ -193,7 +194,7 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 		var planned:=take_route_budget(u.pos,target)
 		if mode!="attack":
 			terrain.path_probe=not planned
-			target=formation_slot(target,u,slots)
+			target=formation_slot(target,u,slots,open)
 			terrain.path_probe=false
 			if target.x<0: continue
 		var route:Array=[]
@@ -1474,18 +1475,40 @@ func spawn_position(origin: Vector2, kind: String) -> Vector2:
 			return pos
 	return Vector2(-1,-1)
 
-func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary]) -> Vector2:
+# `open` memoises candidate checks for one command (unchanged terrain, slots
+# only added): units sent to the same spot rescan the same rings, skipping
+# candidates already found taken by a slot or blocked by terrain.
+func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary], open:Dictionary={}) -> Vector2:
 	var d: Dictionary=definitions[u.kind]
+	var domain:String=d.domain
+	var radius:=float(d.radius)
+	var layer:=collision_layer(u)
+	var crowd:=crowd_radius(u.kind)
+	var known:Dictionary=open.get_or_add("terrain:%s:%s" % [domain,radius],{})
+	var taken:Dictionary=open.get_or_add("slots:%s:%s" % [layer,crowd],{})
+	var profile:String=terrain.mobility_profile(u.kind)
+	# Probing from open ground, reachable() runs the straight-line check first.
+	var probe:=terrain.path_probe and terrain.traversable(u.pos,domain,radius)
 	for ring in 18:
 		for i in (1 if ring==0 else 16):
 			var p:=origin+Vector2.from_angle(i*TAU/16.0)*ring
-			if not terrain.traversable(p,d.domain,float(d.radius)): continue
+			if taken.has(p):continue
 			var clear:=true
 			for slot in slots:
-				if slot.layer==collision_layer(u) and p.distance_to(slot.pos)<crowd_radius(u.kind)+float(slot.radius)+0.3:
+				if slot.layer==layer and p.distance_to(slot.pos)<crowd+float(slot.radius)+0.3:
 					clear=false
 					break
-			if clear and (terrain.segment_clear(u.pos,p,d.domain,float(d.radius)) or not terrain.path(u.pos,p,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind)).is_empty()): return p
+			if not clear:
+				taken[p]=true
+				continue
+			var free=known.get(p)
+			if free==null:
+				free=terrain.traversable(p,domain,radius)
+				known[p]=free
+			if not free: continue
+			if probe:
+				if terrain.reachable(u.pos,p,domain,radius,profile): return p
+			elif terrain.segment_clear(u.pos,p,domain,radius) or not terrain.path(u.pos,p,domain,radius,[],profile).is_empty(): return p
 	return Vector2(-1,-1)
 
 func movement_clear(u: Dictionary, to: Vector2, neighbors: Array) -> bool:

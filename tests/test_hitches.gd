@@ -141,6 +141,22 @@ func paths()->void:
 	t.end_path_memo()
 	check(batched==expected and expected.count(true)>=5 and not expected.back(),"batched reachability equals per-query searches %s %s" % [expected,batched])
 	check(memo==t.path(starts[0],goal,"land",2.65,[],"infantry"),"memoised route equals a fresh plan")
+	# Across components (quay pockets near the click, starts south of the
+	# yard): a batch answers every pair exactly like single searches.
+	var ends:Array=[goal]
+	for ring in range(1,18,2):
+		for i in 16:
+			var end:=Vector2(860,200)+Vector2.from_angle(i*TAU/16.0)*ring
+			if t.traversable(end,"land",2.45):ends.append(end)
+	var origins:Array=[Vector2(250,630),Vector2(277,630),Vector2(247.2,651.8),Vector2(250,689),Vector2(277,689)]
+	for profile in [[2.45,"tracked"],[2.65,"infantry"]]:
+		var single:Array=[]
+		for s in origins:for e in ends:single.append(t.reachable(s,e,"land",profile[0],profile[1]))
+		t.begin_path_memo()
+		var batch:Array=[]
+		for s in origins:for e in ends:batch.append(t.reachable(s,e,"land",profile[0],profile[1]))
+		t.end_path_memo()
+		check(batch==single and single.count(true)>0 and single.count(false)>0,"batched reachability across components equals single searches: %s (%d pairs, %d reachable)" % [profile[1],single.size(),single.count(true)])
 
 func order_group(sim)->Array:
 	var group:Array=[]
@@ -178,6 +194,25 @@ func routes()->void:
 		var progressed:=group.filter(func(id):var u=sim.get_unit(id);return u.pos.distance_to(u.home)>8.0 and not u.orders.is_empty() and not u.path.is_empty()).size()
 		check(progressed==group.size(),"every queued unit departs on its planned route (%d/%d)" % [progressed,group.size()])
 		print("HITCH group order: issue=%.1fms queued=%d drained_after=%d ticks worst_tick=%.1fms" % [issue_ms,queued,routed_at,worst])
-		check(issue_ms<250.0,"16-unit cross-map command stays far below the old ~900 ms stall")
+		# Was ~47 ms idle (~250 ms under load); ~11 ms idle now.
+		check(issue_ms<100.0,"16-unit cross-map command click stays cheap (%.1f ms)" % issue_ms)
 		runs.append(var_to_str(group.map(func(id):var u=sim.get_unit(id);return [u.pos,u.path,u.orders])))
 	check(runs[0]==runs[1],"budgeted planning is deterministic across identical runs")
+	large_order()
+
+# 40 units to a crowded quay corner: many find no formation slot or no route,
+# the costly case (~330 ms idle before batch memos, ~42 ms now).
+func large_order()->void:
+	var sim=Sim.new(false,harbor_index())
+	for kind in ["rifle","tank"]:
+		var definition:Dictionary=sim.definitions[kind]
+		sim.terrain.nav_grid(definition.domain,float(definition.radius),sim.terrain.mobility_profile(kind))
+	var group:Array=[]
+	for i in 30:group.append(sim.spawn("rifle",0,Vector2(250+(i%4)*7,600+(i/4)*7)).id)
+	for i in 10:group.append(sim.spawn("tank",0,Vector2(250+(i%6)*9,680+(i/6)*9)).id)
+	var started:=Time.get_ticks_usec()
+	var accepted:int=sim.issue(group,Vector2(860,200),"move")
+	var issue_ms:=(Time.get_ticks_usec()-started)/1000.0
+	print("HITCH large order: issue=%.1fms accepted=%d/%d queued=%d" % [issue_ms,accepted,group.size(),sim.route_queue.size()])
+	check(accepted>=16 and sim.route_queue.size()>0,"40-unit order accepts the units that fit and queues their routes")
+	check(issue_ms<200.0,"40-unit order click stays cheap (%.1f ms)" % issue_ms)

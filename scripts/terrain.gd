@@ -648,10 +648,17 @@ func reachable_destination(from:Vector2, desired:Vector2, domain:String, radius:
 	if is_water(desired) or blocked(desired):return Vector2(-1,-1)
 	for rect in dynamic_blocks:
 		if rect.has_point(desired):return Vector2(-1,-1)
+	# In a batch every unit of a group scans the same candidates: memoise their
+	# terrain checks (only reachability depends on `from`).
+	var known:Dictionary=destination_memo.get_or_add("%s:%s" % [domain,radius],{}) if path_memo_active else {}
 	for ring in range(0,13):
 		for i in (1 if ring==0 else 32):
 			var candidate:=desired+Vector2.from_angle(i*TAU/32.0)*(ring*0.5)
-			if not traversable(candidate,domain,radius):continue
+			var open=known.get(candidate)
+			if open==null:
+				open=traversable(candidate,domain,radius)
+				known[candidate]=open
+			if not open:continue
 			if not path(from,candidate,domain,radius,[],profile).is_empty():return candidate
 	return Vector2(-1,-1)
 
@@ -677,9 +684,9 @@ func path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid:
 var path_memo_active:=false
 var path_memo:Dictionary={}
 func begin_path_memo()->void:
-	path_memo_active=true;path_memo.clear();path_links.clear()
+	path_memo_active=true;path_memo.clear();path_links.clear();path_link_memo.clear();destination_memo.clear()
 func end_path_memo()->void:
-	path_memo_active=false;path_memo.clear();path_links.clear()
+	path_memo_active=false;path_memo.clear();path_links.clear();path_link_memo.clear();destination_memo.clear()
 
 # While set, obstacle-free path() calls only answer reachability ([to] or []):
 # lets a caller validate a destination now and plan the real route later.
@@ -702,16 +709,26 @@ func _reachable(from:Vector2,to:Vector2,domain:String,radius:float,profile:Strin
 	if not traversable(from,domain,radius) or not traversable(to,domain,radius):return false
 	if domain=="air" or segment_clear(from,to,domain,radius):return true
 	var grid:=_nav_grid(domain,radius,profile,not incremental_weights)
-	var start:=nearest_cell(from,grid,domain,radius)
-	var end:=nearest_cell(to,grid,domain,radius)
-	if start.x<0 or end.x<0:return false
-	if not path_memo_active:return not grid.get_id_path(start,end).is_empty()
+	if not path_memo_active:
+		var start:=nearest_cell(from,grid,domain,radius)
+		var end:=nearest_cell(to,grid,domain,radius)
+		if start.x<0 or end.x<0:return false
+		return not grid.get_id_path(start,end).is_empty()
 	# Within a batch the grid is fixed, so connectivity is transitive: link both
 	# ends to a cell of a route found earlier with short searches instead of a
-	# cross-map one (exact; a failed link falls back to the full search).
+	# cross-map one (exact). When only one end links to a route, the ends lie
+	# in different components: no full search (each failed one explores the
+	# whole start component, ~3 ms on the harbor map). Nearest cells and link
+	# answers repeat across a group's queries: memoised for the batch.
+	var memo:Dictionary=path_link_memo.get_or_add(grid,{})
+	var start:=_memo_cell(from,grid,domain,radius,memo)
+	var end:=_memo_cell(to,grid,domain,radius,memo)
+	if start.x<0 or end.x<0:return false
 	var links:Array=path_links.get_or_add(grid,[])
-	for linked in links:
-		if _linked(grid,start,linked) and _linked(grid,end,linked):return true
+	for i in links.size():
+		var linked:=_memo_linked(grid,start,i,links,memo)
+		if linked!=_memo_linked(grid,end,i,links,memo):return false
+		if linked:return true
 	var ids:=grid.get_id_path(start,end)
 	if ids.is_empty():return false
 	var cells:=PackedVector2Array()
@@ -720,6 +737,21 @@ func _reachable(from:Vector2,to:Vector2,domain:String,radius:float,profile:Strin
 	return true
 
 var path_links:Dictionary={}
+var path_link_memo:Dictionary={}
+var destination_memo:Dictionary={}
+func _memo_cell(p:Vector2,grid:AStarGrid2D,domain:String,radius:float,memo:Dictionary)->Vector2i:
+	var cell=memo.get(p)
+	if cell==null:
+		cell=nearest_cell(p,grid,domain,radius)
+		memo[p]=cell
+	return cell
+func _memo_linked(grid:AStarGrid2D,id:Vector2i,link:int,links:Array,memo:Dictionary)->bool:
+	var key:=Vector3i(id.x,id.y,link)
+	var linked=memo.get(key)
+	if linked==null:
+		linked=_linked(grid,id,links[link])
+		memo[key]=linked
+	return linked
 func _linked(grid:AStarGrid2D,id:Vector2i,cells:PackedVector2Array)->bool:
 	var best:=Vector2.ZERO
 	var nearest:=INF
