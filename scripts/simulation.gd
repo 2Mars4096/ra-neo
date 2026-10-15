@@ -678,7 +678,7 @@ func infantry_exposure(u:Dictionary,other:Dictionary,aimed:Dictionary={}) -> flo
 		elif posture=="CROUCHED":exposure*=0.75
 		if victim.get("in_trench",false):exposure*=0.5
 		elif terrain.cover(victim.pos) or VehicleDamage.wreck_cover(self,victim.pos,u.pos):exposure*=0.7
-	if Garrison.inside(other):exposure*=0.6
+	if Garrison.member_indoors(other,victim):exposure*=0.6
 	if definitions[u.kind].get("combat_alias",u.kind) in HE_WEAPONS:return 0.95*(0.55+0.45*exposure)
 	var fraction:=clampf(shot_distance(u,other,victim)/maxf(1,weapon_range(u.kind,definitions[other.kind])),0,1)
 	return RIFLE_HIT*exposure*lerpf(1.0,0.45,fraction)
@@ -722,7 +722,7 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float,victim:Dictionary={
 	if definitions[target.kind].domain=="land" and definitions[target.kind].armor==0:
 		# Sustained machine-gun fire from a bunker pins infantry harder than rifles.
 		var pin:float=0.18 if u.kind=="bunker" else (0.09 if definitions[u.kind].get("combat_alias",u.kind)=="rifle" else 0.23)
-		if Garrison.inside(target):pin*=Garrison.SUPPRESSION_SCALE
+		if Garrison.member_indoors(target,victim):pin*=Garrison.SUPPRESSION_SCALE
 		# Fallen comrades shake a section: casualties raise suppression.
 		if not target.members.is_empty():pin*=1.0+0.25*Infantry.casualties(target)
 		target.suppression=minf(1,target.suppression+pin)
@@ -751,7 +751,8 @@ func damage_amount(u: Dictionary, other: Dictionary, victim:Dictionary={}) -> fl
 		if member.hp>0 and member.pos.distance_squared_to(u.pos)<nearest_member:
 			nearest_member=member.pos.distance_squared_to(u.pos)
 			cover_pos=member.pos
-	if Garrison.inside(other):
+			victim=member
+	if Garrison.member_indoors(other,victim):
 		# Walls stop small arms; HE shells and missiles punch through windows.
 		damage *= Garrison.DAMAGE_SCALE if u.kind in ["rifle","engineer","drone","helo","aa","boat"] else 0.85
 	elif td.armor == 0 and td.domain == "land" and terrain.cover(cover_pos):

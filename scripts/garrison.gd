@@ -157,7 +157,8 @@ static func step_transit(sim,u:Dictionary,dt:float)->void:
 					if m.pos.distance_to(door)<0.3:m.at_door=true
 				else:
 					walk(sim,u,m,wall,dt)
-					if m.pos.distance_to(wall)<0.25:m.indoors=true
+					# Through the wall: still and low, as once the section is seated.
+					if m.pos.distance_to(wall)<0.25:m.indoors=true;m.travel=0.0;m.state="HOLDING";m.posture="CROUCHED"
 			else:walk(sim,u,m,door+outward*QUEUE_SPACING*queue,dt)
 		if done:
 			u.erase("garrison_transit")
@@ -306,3 +307,9 @@ static func evict(sim,u:Dictionary)->void:
 
 static func inside(u:Dictionary)->bool:
 	return u.get("garrison",-1)>=0
+
+# Protection follows the soldier: while a section files in or out, those
+# already through the wall are sheltered and those outside are not. Without a
+# soldier (vehicles, empty sections) the section state decides.
+static func member_indoors(u:Dictionary,m:Dictionary)->bool:
+	return inside(u) or bool(m.get("indoors",false))
