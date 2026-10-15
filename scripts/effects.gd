@@ -328,12 +328,11 @@ class Pool extends RefCounted:
 			if visible_count>0:instance.custom_aabb=bounds
 
 var wind:=Vector3.ZERO
+# audio_fx.gd stays silent while this is set; tests set it to keep battles quiet.
 var muted:=false
+# Sound lives in audio_fx.gd. These idle players remain only for callers that still free them by name.
 var flashes:=AudioStreamPlayer.new()
 var explosion_audio:=AudioStreamPlayer.new()
-var shot_stream:AudioStreamWAV
-var explosion_stream:AudioStreamWAV
-var sound_clock:=0.0
 var rng:=RandomNumberGenerator.new()
 var time:=0.0
 var volume:=Pool.new(VOLUME_CAPACITY,false)
@@ -408,12 +407,6 @@ func _ready() -> void:
 		add_child(pool.instance)
 	add_child(flashes)
 	add_child(explosion_audio)
-	flashes.volume_db=-23
-	explosion_audio.volume_db=-18
-	shot_stream=make_sound(0.13,100)
-	explosion_stream=make_sound(0.65,48)
-	flashes.stream=shot_stream
-	explosion_audio.stream=explosion_stream
 
 # Seamless value noise generated natively by the engine; no external texture asset.
 static func make_noise_texture() -> ImageTexture:
@@ -428,38 +421,9 @@ static func make_noise_texture() -> ImageTexture:
 	image.generate_mipmaps()
 	return ImageTexture.create_from_image(image)
 
-func make_sound(duration:float, frequency:float) -> AudioStreamWAV:
-	var stream:=AudioStreamWAV.new()
-	stream.format=AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate=22050
-	var count:=int(22050*duration)
-	var data:=PackedByteArray()
-	data.resize(count*2)
-	var filtered:=0.0
-	for i in count:
-		var t:=float(i)/count
-		filtered=lerpf(filtered,rng.randf_range(-1,1),0.12)
-		var value:float=(filtered*0.7+sin(i*TAU*frequency/22050.0)*0.3)*pow(1-t,2)*20000
-		data.encode_s16(i*2,int(value))
-	stream.data=data
-	return stream
-
-func _audible() -> bool:
-	return not muted and DisplayServer.get_name()!="headless" and is_inside_tree()
-
-func _shot_sound(weapon_class:String) -> void:
-	if not _audible():return
-	if weapon_class=="fpv":return
-	var heavy:=weapon_class in ["cannon","naval","atgun"]
-	if sound_clock>0 and not heavy:return
-	flashes.pitch_scale={"small":1.4,"autocannon":1.15,"cannon":0.6,"naval":0.7,"atgun":0.75,"missile":0.85,"rocket":1.0}.get(weapon_class,1.0)
-	flashes.play()
-	sound_clock=0.12
-
-func _boom(scale:float) -> void:
-	if not _audible():return
-	explosion_audio.pitch_scale=clampf(1.25-scale*0.3,0.7,1.4)
-	explosion_audio.play()
+# Explosion sound now comes from the destroyed event in audio_fx.gd; kept for effects_explosions.gd callers.
+func _boom(_scale:float) -> void:
+	pass
 
 # ---------------------------------------------------------------- primitives
 func _jitter(radius:float, vertical:float=-1.0) -> Vector3:
@@ -578,7 +542,6 @@ func _launch(shot:Dictionary) -> void:
 func _muzzle(weapon:String, pos:Vector3, direction:Vector3, round_index:int, on_water:bool) -> void:
 	var weapon_class:String=WEAPONS.get(weapon,WEAPONS.rifle)["class"]
 	var flat:=_flat(direction)
-	_shot_sound(weapon_class)
 	match weapon_class:
 		"small":
 			# Brief star and short forward tongue; a faint wisp only on some rounds.
@@ -845,7 +808,6 @@ func _destroy_now(kind:String, pos:Vector3, water:bool) -> void:
 # then a sustained wreck fire. Tanks add brief ammunition cook-off pops.
 func vehicle_explosion(pos:Vector3, scale:float=1.0, water:bool=false, cook_off:bool=false) -> void:
 	var g:=Vector3(pos.x,FLOOR,pos.z)
-	_boom(scale)
 	flash(pos+Vector3(0,0.6,0),4.2*scale,0.09,Color(1.0,0.86,0.55))
 	bloom(pos+Vector3(0,0.6,0),4.6*scale,0.4,Color(1.0,0.55,0.22,0.36),ESSENTIAL)
 	for n in 4:
@@ -880,7 +842,6 @@ func _cook_off(pos:Vector3) -> void:
 
 # Aircraft or UAV destroyed in flight: airburst, burning fragments falling, and a ground impact on landing.
 func air_burst(pos:Vector3, scale:float, crash:bool) -> void:
-	_boom(scale*0.8)
 	flash(pos,3.2*scale,0.08,Color(1.0,0.86,0.55))
 	for n in (3 if scale>0.7 else 1):
 		fireball(pos+_jitter(0.5*scale),_jitter(1.4*scale),0.7*scale,2.6*scale,rng.randf_range(0.4,0.6))
@@ -987,7 +948,6 @@ func explosion(pos:Vector3, water:bool=false) -> void:
 # ---------------------------------------------------------------- frame update
 func _process(dt:float) -> void:
 	time+=dt
-	sound_clock=maxf(0,sound_clock-dt)
 	if not pending_muzzles.is_empty():_flush_muzzles()
 	var due:Array[Callable]=[]
 	for i in range(cues.size()-1,-1,-1):
@@ -1009,9 +969,3 @@ func stats() -> Dictionary:
 func clear() -> void:
 	volume.clear();glow.clear();ground.clear()
 	projectiles.clear();cues.clear();emitters.clear();pending_muzzles.clear()
-
-func _exit_tree() -> void:
-	flashes.stop()
-	explosion_audio.stop()
-	flashes.stream=null
-	explosion_audio.stream=null

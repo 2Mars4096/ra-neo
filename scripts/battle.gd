@@ -127,6 +127,7 @@ func _ready() -> void:
 			for i in 9:art.make_rock(deposit,Vector3(sin(i*2.4)*2,0.3,cos(i*2.4)*2),Vector3(0.65,0.6,0.7),i)
 	add_child(effects)
 	effects.set_world_bounds(sim.terrain.world_size,sim.terrain.shore_x)
+	audio=preload("res://scripts/audio_fx.gd").new();audio.setup(sim,effects);add_child(audio)
 	add_child(weather_fx)
 	add_child(camera)
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
@@ -246,6 +247,21 @@ func world_pos(p: Vector2) -> Vector2:
 	if ground==null:
 		return Vector2(-1,-1)
 	return Vector2(ground.x,ground.z)
+
+var _wreck_material:StandardMaterial3D
+func show_wreck(node:Node3D,u:Dictionary)->void:
+	node.set_meta("wreck_shown",true)
+	if _wreck_material==null:
+		_wreck_material=StandardMaterial3D.new()
+		_wreck_material.albedo_color=Color(0.07,0.065,0.06)
+		_wreck_material.roughness=1.0
+	node.position=Vector3(u.pos.x,0.0,u.pos.y)
+	var model:Node3D=node.get_meta("model")
+	model.rotation.y=atan2(-u.facing.x,-u.facing.y)
+	model.rotation.z=0.06
+	for mesh in model.find_children("*","MeshInstance3D",true,false):mesh.material_override=_wreck_material
+	var selection:Node3D=node.get_meta("selection")
+	selection.visible=false
 
 func altitude(u: Dictionary) -> float:
 	# Strike drones carry a live altitude while they dive.
@@ -406,6 +422,7 @@ func _process(dt: float) -> void:
 					effects.damage_smoke(Vector3(unit.pos.x,altitude(unit)+1,unit.pos.y),unit.hp/unit.max_hp)
 	lap=flap("trails",lap)
 	consume_events()
+	if audio!=null:audio.frame(dt,camera_focus,camera.global_basis,camera_size,benchmark or (not paused and not show_help))
 	lap=flap("events",lap)
 	for i in range(fx.size()-1,-1,-1):
 		fx[i].life-=dt
@@ -469,6 +486,11 @@ func sync_units(dt: float) -> void:
 			if not u.members.is_empty():nodes[u.id].set_meta("infantry_shadow_meshes",nodes[u.id].get_node("Model").find_children("*","MeshInstance3D",true,false))
 			nodes[u.id].set_meta("fine_shadow_meshes",nodes[u.id].find_children("*","MeshInstance3D",true,false).filter(func(mesh):return mesh.get_meta("fine_shadow",false)))
 		var node: Node3D=nodes[u.id]
+		# Destroyed/abandoned vehicles stay on the map as dark burnt-out wrecks.
+		if not sim.alive(u) and u.get("wrecked",false):
+			node.visible=true
+			if not node.has_meta("wreck_shown"):show_wreck(node,u)
+			continue
 		node.visible=sim.alive(u) and u.visible
 		if not node.visible:
 			continue
@@ -539,8 +561,11 @@ void fragment(){float d=length((UV-vec2(0.5))*2.0);ALBEDO=vec3(0.035,0.04,0.035)
 	material.shader=shader;contact_shadows.material_override=material
 	add_child(contact_shadows)
 
+# Procedural sound layer (scripts/audio_fx.gd), created in _ready.
+var audio:Node3D=null
 func consume_events() -> void:
 	for event in sim.events:
+		if audio!=null:audio.event(event)
 		if event.type=="warning":
 			notify(event.text)
 		elif event.type=="crushed":
@@ -562,23 +587,7 @@ func notify(message: String) -> void:
 	toast_time=4
 
 func ping() -> void:
-	if DisplayServer.get_name()=="headless":
-		return
-	if sound.stream!=null:
-		sound.stop()
-		sound.play()
-		return
-	var wav:=AudioStreamWAV.new()
-	wav.format=AudioStreamWAV.FORMAT_16_BITS
-	wav.mix_rate=22050
-	var bytes:=PackedByteArray()
-	bytes.resize(2200)
-	for i in 1100:
-		var value:=int(sin(i*TAU*620/22050.0)*2800*(1-i/1100.0))
-		bytes.encode_s16(i*2,value)
-	wav.data=bytes
-	sound.stream=wav
-	sound.play()
+	if audio!=null:audio.ui("order")
 
 func pick(p: Vector2, enemy: bool = false) -> int:
 	var best:=-1
@@ -957,6 +966,7 @@ func _input(event: InputEvent) -> void:
 			KEY_M:
 				effects.muted=not effects.muted
 				sound.volume_db=-80 if effects.muted else -19
+				if audio!=null:audio.set_muted(effects.muted)
 				notify("Audio muted" if effects.muted else "Audio enabled")
 			KEY_TAB: selected=all_sections()
 		if event.keycode>=KEY_1 and event.keycode<=KEY_9:

@@ -12,6 +12,7 @@ var field_ops:Dictionary={}
 
 const Director = preload("res://scripts/tactical_director.gd")
 const Infantry = preload("res://scripts/infantry.gd")
+const VehicleDamage = preload("res://scripts/vehicle_damage.gd")
 const Terrain = preload("res://scripts/terrain.gd")
 static var scenario_selection:=5
 var scenario:Dictionary
@@ -419,6 +420,7 @@ func emplacement_fire(u:Dictionary,d:Dictionary,dt:float)->void:
 		resolve_shot(u,target,1.0)
 
 func can_fire(u: Dictionary, other: Dictionary) -> bool:
+	if not VehicleDamage.weapon_ready(self,u):return false
 	var ud:Dictionary=definitions[u.kind]
 	if ud.get("structure",false) and (not ud.get("armed",false) or u.get("build_left",0.0)>0):return false
 	if u.maneuver.get("phase","")=="WITHDRAW" or (not u.orders.is_empty() and u.orders[0].mode=="retreat"):return false
@@ -524,6 +526,8 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float) -> bool:
 	var hit:bool=combat_rng.randf()<hit_chance(u,target)
 	if hit:
 		var amount:float=damage_amount(u,target)*scale
+		# Vehicles: penetration and component damage decide the integrity loss.
+		if target.members.is_empty():amount=VehicleDamage.strike(self,u,target,amount)
 		# Explosive rounds also wound soldiers standing near the one hit.
 		if not target.members.is_empty() and definitions[u.kind].get("combat_alias",u.kind) in HE_WEAPONS:Infantry.blast(target,amount,u.pos,time)
 		else:Infantry.hit(target,amount,u.pos,time)
@@ -549,9 +553,8 @@ func damage_amount(u: Dictionary, other: Dictionary) -> float:
 	var d: Dictionary = definitions[u.kind]
 	var td: Dictionary = definitions[other.kind]
 	var damage := float(d.damage)*float(effectiveness[u.kind][other.kind])
-	if other.kind in ["tank","aa"] and damage>0:
-		var facing:float=other.facing.dot((u.pos-other.pos).normalized())
-		damage *= 0.7 if facing>0.35 else (1.35 if facing< -0.35 else 1.0)
+	# Vehicles: expected loss given penetration odds by weapon, hull face and range.
+	if other.members.is_empty() and damage>0 and td.has("armor_mm"):damage*=VehicleDamage.expected_scale(self,u,other)
 	var cover_pos:Vector2=other.pos
 	var nearest_member:=INF
 	for member in other.get("members",[]):
@@ -897,6 +900,9 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		u.last_shot=time
 
 func move_unit(u: Dictionary, dt: float) -> void:
+	var mobility:float=VehicleDamage.before_move(self,u)
+	if mobility<=0.0:return
+	dt*=mobility
 	var d: Dictionary = definitions[u.kind]
 	var order: Dictionary = u.maneuver if not u.maneuver.is_empty() else u.orders[0]
 	if order.mode == "attack" and u.repath <= 0 and u.blocked_time<=1.5:
@@ -1233,6 +1239,7 @@ func movement_clear(u: Dictionary, to: Vector2, neighbors: Array) -> bool:
 	# Vehicles cannot enter anti-tank obstacles (they may always back out).
 	if d.domain=="land" and terrain.mobility_profile(u.kind) in terrain.VEHICLE_PROFILES:
 		if terrain.vehicle_barrier(to,float(d.radius)*0.6) and not terrain.vehicle_barrier(u.pos,float(d.radius)*0.6):return false
+	if u.members.is_empty() and has_meta(VehicleDamage.WRECKS) and VehicleDamage.wreck_blocks(self,u,to):return false
 	for member in u.members:
 		if member.hp>0 and member.pos.distance_to(to)>(Infantry.Cover.LEASH if scenario.get("autonomy",false) else 1.75):return false
 	if scenario.get("autonomy",false) and d.domain=="land":

@@ -48,7 +48,20 @@
     "air": false,
     "members": 1,
     "radius": 2.45,
-    "altitude": 0.0
+    "altitude": 0.0,
+    "armor_mm": [
+      760,
+      160,
+      90
+    ],
+    "crew": 2,
+    "nonpen_damage": 0.08,
+    "damage_effects": {
+      "catastrophic": 0.18,
+      "mobility": 0.27,
+      "firepower": 0.2,
+      "crew": 0.35
+    }
   },
   "drone": {
     "name": "GHOST UAV",
@@ -82,7 +95,20 @@
     "air": true,
     "members": 1,
     "radius": 3.5,
-    "altitude": 9.0
+    "altitude": 9.0,
+    "armor_mm": [
+      10,
+      10,
+      10
+    ],
+    "crew": 2,
+    "nonpen_damage": 0.5,
+    "damage_effects": {
+      "catastrophic": 0.15,
+      "mobility": 0.35,
+      "firepower": 0.2,
+      "crew": 0.3
+    }
   },
   "boat": {
     "name": "LITTORAL CORVETTE",
@@ -99,7 +125,20 @@
     "air": true,
     "members": 1,
     "radius": 3.3,
-    "altitude": 0.0
+    "altitude": 0.0,
+    "armor_mm": [
+      25,
+      25,
+      25
+    ],
+    "crew": 3,
+    "nonpen_damage": 0.3,
+    "damage_effects": {
+      "catastrophic": 0.06,
+      "mobility": 0.3,
+      "firepower": 0.3,
+      "crew": 0.34
+    }
   },
   "aa": {
     "name": "SKYGUARD IFV",
@@ -116,7 +155,20 @@
     "air": true,
     "members": 1,
     "radius": 2.45,
-    "altitude": 0.0
+    "altitude": 0.0,
+    "armor_mm": [
+      45,
+      30,
+      25
+    ],
+    "crew": 2,
+    "nonpen_damage": 0.15,
+    "damage_effects": {
+      "catastrophic": 0.3,
+      "mobility": 0.25,
+      "firepower": 0.2,
+      "crew": 0.25
+    }
   },
   "fpv_drone": {
     "name": "FPV STRIKE DRONE",
