@@ -50,6 +50,18 @@
 
 - [ ] [7: Combined-arms showcase](plans/7-combined-arms-showcase.md) — implemented showcase autonomy, local cover, articulated firing postures, terrain/weather and material pass; human review and performance acceptance remain open.
 
+## Open player requests (2026-10-15)
+
+- [ ] Hitch removal: spread nav-grid re-weighting (wetness change, 140-220 ms stalls) over frames; move pathfinding off the main thread.
+- [ ] Renderer: evaluate Godot's direct Metal path (Mobile/Forward+) vs GL Compatibility; native frame-time benchmark and screenshot comparison before switching.
+- [ ] Explosion VFX: ~3x larger, layered flash/fireball/shockwave/debris/dust column, camera shake; native screenshot review loop.
+- [ ] World damage: buildings (damaged -> breached -> collapsed rubble, garrison casualties), field works degrade under HE, boats (flooding/engine/fire), helicopters (forced landing/crash), drones fragile, HE destroys nearby props/trees.
+- [ ] Vehicle follow-ups: abandoned vehicles should not explode; wreck cover for infantry; field repair of components.
+- [ ] Player-bought drone swarm strike (HUD purchase).
+- [ ] Test failures: garrison "halted section takes cover against buildings (1 of 3)"; regroup recovery (3) - design call: halted cover distance vs 2.8 m regroup limit.
+- [ ] Testing economy: restore normal supply (1600, 3/s) when testing ends.
+- [ ] Deferred by player: wounded marker / bleed-out countdown, rescue of stranded wounded.
+
 ## Next development priorities
 
 - [ ] Meet the provisional 16.7 ms frame-p95 target; see validation.md for the current rainy-showcase measurement.
