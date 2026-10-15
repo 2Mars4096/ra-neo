@@ -26,8 +26,11 @@ static func setup(sim)->void:
 			var ta:String=sim.definitions[target].get("combat_alias",target)
 			var multiplier:float=original[wa][ta]
 			if sim.definitions[weapon].get("structure",false) and not sim.definitions[weapon].get("armed",false):multiplier=0.0
-			elif target in KINDS:multiplier=0.25 if wa=="rifle" else (0.0 if wa=="drone" else 0.8)
+			elif target in KINDS:multiplier=0.25 if wa=="rifle" else (0.0 if wa in ["drone","fpv_drone"] else 0.8)
 			sim.effectiveness[weapon][target]=multiplier
+	# Strike drones cruise in the scout drone's authored flight band (rooflines).
+	if sim.definitions.has("fpv_drone") and sim.scenario.get("air_altitudes",{}).has("drone"):
+		sim.definitions.fpv_drone.altitude=maxf(float(sim.definitions.fpv_drone.altitude),float(sim.scenario.air_altitudes.drone))
 	var config:Dictionary=sim.scenario
 	var insertion:=point(config.get("field_insertion",config.get("insertion",[14,97])))
 	sim.credits=float(config.get("field_supply",900.0))
@@ -207,6 +210,7 @@ static func enemy_offensive(sim)->void:
 			sim.events.append({"type":"warning","text":"Enemy assault broken • survivors falling back"})
 			state.active=[]
 	local_counterattacks(sim,state)
+	swarm_strikes(sim,state,plan)
 	if not state.get("warned",false) and sim.time>=state.next-20.0 and state.index<int(plan.get("max_wave",8)) and enemy_logistics_alive(sim):
 		state.warned=true
 		sim.events.append({"type":"warning","text":"Enemy assault forming in the north-east • ~20 s"})
@@ -223,6 +227,9 @@ static func enemy_offensive(sim)->void:
 		elif kind in ["rifle","atgm"] and flank.size()<main.size()/2+1:flank.append(unit.id)
 		else:main.append(unit.id)
 	state.index+=1
+	if not state.has("swarm_next"):state.swarm_next=sim.time+float(plan.get("interval",120.0))*0.5
+	# From the second wave on, an FPV swarm strikes ahead of the assault.
+	if state.index>=2:launch_swarm(sim,target,mini(8,4+state.index/2))
 	state.active=main+flank+scouts
 	state.strength=0.0
 	for id in state.active:state.strength+=float(sim.get_unit(id).hp)
@@ -239,6 +246,60 @@ static func enemy_offensive(sim)->void:
 		break
 	if flank.size()>0 and sim.get_unit(flank[0]).orders.is_empty():sim.issue(flank,target,"attack_move")
 	sim.events.append({"type":"warning","text":"ENEMY ASSAULT WAVE %d • %d units inbound" % [state.index,state.active.size()]})
+
+# FPV swarms: groups of 4-8 loitering munitions fly straight in from the
+# launcher's side and dive on assigned units. Between assault waves the enemy
+# strikes the densest cluster of player units it can see. AA and massed rifles
+# are the counter. Live drones per side are capped to keep the sim cheap.
+const SWARM_LIVE_LIMIT:=16
+const SWARM_STANDOFF:=90.0
+const SWARM_TARGET_RADIUS:=30.0
+
+static func swarm_strikes(sim,state:Dictionary,plan:Dictionary)->void:
+	if sim.time<float(state.get("swarm_next",INF)):return
+	state.swarm_next=sim.time+float(plan.get("interval",120.0))
+	if state.index>=int(plan.get("max_wave",8)) or not enemy_logistics_alive(sim):return
+	var aim:=densest_cluster(sim,0)
+	if aim.x>=0:launch_swarm(sim,aim,4)
+
+# Centre of the largest group of seen, mobile units of a team; (-1,-1) if none.
+static func densest_cluster(sim,team:int)->Vector2:
+	var seen:Array=sim.units.filter(func(u):return sim.alive(u) and u.team==team and not u.get("structure",false) and u.seen_by[1-team] and sim.definitions[u.kind].domain!="air")
+	var best:=Vector2(-1,-1)
+	var most:=0
+	for u in seen:
+		var count:=0
+		for other in seen:
+			if u.pos.distance_squared_to(other.pos)<15.0*15.0:count+=1
+		if count>most:most=count;best=u.pos
+	return best
+
+# Launch count strike drones from the attacker's side toward aim. Vehicles near
+# the aim point are preferred targets, then squads, then works. Returns ids.
+static func launch_swarm(sim,aim:Vector2,count:int,team:int=1)->Array:
+	var victims:Array=sim.units.filter(func(u):return sim.alive(u) and u.team!=team and sim.definitions[u.kind].domain!="air" and u.pos.distance_to(aim)<SWARM_TARGET_RADIUS)
+	if victims.is_empty():return []
+	victims.sort_custom(func(a,b):return swarm_rank(a,aim)<swarm_rank(b,aim))
+	var live:int=sim.units.filter(func(u):return sim.alive(u) and u.team==team and u.kind=="fpv_drone").size()
+	count=mini(count,SWARM_LIVE_LIMIT-live)
+	var home:Vector2=sim.field_ops.enemy_insertion if team==1 else sim.field_ops.insertion
+	var axis:Vector2=home-aim
+	var origin:Vector2=aim+axis.normalized()*minf(axis.length(),SWARM_STANDOFF)
+	var ids:Array=[]
+	for i in count:
+		var drone:Dictionary=sim.spawn("fpv_drone",team,origin+Vector2.from_angle(i*TAU/maxf(1,count))*2.5)
+		if drone.is_empty():continue
+		drone.strike_target=victims[i%victims.size()].id
+		ids.append(drone.id)
+	if not ids.is_empty() and team==1:
+		sim.events.append({"type":"warning","text":"FPV SWARM INBOUND • %d strike drones • AA and massed rifles can shoot them down" % ids.size()})
+	return ids
+
+static func swarm_rank(u:Dictionary,aim:Vector2)->float:
+	var rank:float=u.pos.distance_to(aim)
+	if u.get("structure",false):rank+=60.0
+	elif u.members.is_empty():rank-=15.0
+	return rank
 
 # The enemy counterattack is staged from its command post or ammunition depot;
 # with both destroyed the reserve never forms. Maps without them keep the old rule.

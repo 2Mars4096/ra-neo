@@ -7,11 +7,13 @@ extends Node3D
 
 const VOLUME_CAPACITY:=480
 const GLOW_CAPACITY:=256
-const GROUND_CAPACITY:=48
+const GROUND_CAPACITY:=64
 const CAPACITY:=VOLUME_CAPACITY+GLOW_CAPACITY+GROUND_CAPACITY
 const PROJECTILE_CAPACITY:=128
 const CUE_CAPACITY:=96
 const EMITTER_CAPACITY:=12
+# Live debris cards across all explosions; further fragments are skipped rather than recycling smoke slots.
+const DEBRIS_CAP:=64
 const FLOOR:=0.03
 const DECAL_HEIGHT:=0.045
 const BREEZE:=Vector3(0.28,0,0.12)
@@ -70,9 +72,19 @@ const WEAPONS:={
 	"boat":{"class":"naval","barrel":1.6,"speed":220.0,"tracer_every":1,"rounds":1,"gap":0.0},
 	"atgm":{"class":"missile","barrel":0.5,"speed":32.0,"tracer_every":0,"rounds":1,"gap":0.0},
 	"helo":{"class":"rocket","barrel":0.9,"speed":75.0,"tracer_every":0,"rounds":2,"gap":0.14},
+	# Field emplacements and loitering munitions, used when an event names them instead of their combat alias.
+	"bunker":{"class":"small","barrel":0.4,"speed":200.0,"tracer_every":2,"rounds":2,"gap":0.06},
+	"at_gun":{"class":"atgun","barrel":1.9,"speed":320.0,"tracer_every":1,"rounds":1,"gap":0.0},
+	"fpv_drone":{"class":"fpv","barrel":0.0,"speed":28.0,"tracer_every":0,"rounds":1,"gap":0.0},
 }
-const TARGET_SURFACE:={"rifle":"soft","atgm":"soft","tank":"armor","aa":"armor","boat":"armor","harvester":"armor","helo":"air","drone":"air","hq":"structure","power":"structure","refinery":"structure","barracks":"structure","factory":"structure"}
+const TARGET_SURFACE:={"rifle":"soft","atgm":"soft","engineer":"soft","tank":"armor","aa":"armor","boat":"armor","harvester":"armor","helo":"air","drone":"air","fpv_drone":"air","hq":"structure","power":"structure","refinery":"structure","barracks":"structure","factory":"structure",
+	"bunker":"structure","command_post":"structure","ammo_depot":"structure","observation_post":"structure","tactical_cover":"structure","at_gun":"armor","tank_obstacles":"armor",
+	"fighting_trench":"earth","vehicle_berm":"earth","concertina_wire":"soft","camouflage_net":"soft","repair_point":"soft","aid_post":"soft","forward_supply_point":"soft"}
 const STRUCTURES:=["hq","power","refinery","barracks","factory"]
+const INFANTRY:=["rifle","atgm","engineer"]
+# Kinds that get the full vehicle kill; "" is the legacy kind-less explosion(). Unknown kinds get a small blast.
+const VEHICLES:=["tank","aa","boat","harvester",""]
+const Explosions:=preload("res://scripts/effects_explosions.gd")
 
 class Pool extends RefCounted:
 	const STRIDE:=20
@@ -107,12 +119,17 @@ class Pool extends RefCounted:
 	var kind:=PackedByteArray()
 	var flags:=PackedByteArray()
 	var free_slots:=PackedInt32Array()
+	# Live particles per kind, so individual layers (debris) can be capped inside a shared pool.
+	var kind_live:=PackedInt32Array()
 	var buffer:=PackedFloat32Array()
 	var live:=0
 	var visible_count:=0
 	var dropped:=0
 	var recycled:=0
 	var steal_cursor:=0
+	# Highest slot that may be live; step() scans only up to it. Free slots are reused lowest-first (LIFO).
+	var top:=-1
+	var spawned_top:=-1 # highest slot allocated while step() runs (trail puffs spawn mid-scan)
 	var bounds:=AABB()
 	var limit:=AABB()
 	var front_kind:=-1
@@ -126,6 +143,7 @@ class Pool extends RefCounted:
 		timer.resize(count);variant.resize(count);kind.resize(count);flags.resize(count)
 		buffer.resize(count*STRIDE)
 		for i in count:free_slots.append(count-1-i)
+		kind_live.resize(8)
 		multimesh.transform_format=MultiMesh.TRANSFORM_3D
 		multimesh.use_colors=true
 		multimesh.use_custom_data=true
@@ -155,11 +173,15 @@ class Pool extends RefCounted:
 		var slot:=free_slots[free_slots.size()-1]
 		free_slots.resize(free_slots.size()-1)
 		live+=1
+		if slot>top:top=slot
+		if slot>spawned_top:spawned_top=slot
 		return slot
 
 	func spawn(p:Vector3, v:Vector3, k:int, s0:float, s1:float, duration:float, c:Color, drag_rate:float, fall:float, wait:float, priority:int, bits:int, turn:float, turn_rate:float, variety:float) -> int:
 		var i:=alloc(priority)
 		if i<0:return -1
+		if life[i]>0.0:kind_live[kind[i]]-=1 # recycled slot
+		kind_live[k]+=1
 		pos[i]=p;vel[i]=v;kind[i]=k;size0[i]=s0;size1[i]=s1
 		life[i]=maxf(duration,0.0001);age[i]=0.0;color[i]=c;drag[i]=drag_rate;gravity[i]=fall
 		delay[i]=maxf(wait,0.0);flags[i]=bits|FRESH;rot[i]=turn;spin[i]=turn_rate;variant[i]=variety
@@ -167,6 +189,7 @@ class Pool extends RefCounted:
 		return i
 
 	func kill(i:int) -> void:
+		kind_live[kind[i]]-=1
 		life[i]=0.0
 		free_slots.append(i)
 		live-=1
@@ -174,6 +197,7 @@ class Pool extends RefCounted:
 	func clear() -> void:
 		for i in capacity:
 			if life[i]>0.0:kill(i)
+		top=-1
 		visible_count=0
 		multimesh.visible_instance_count=0
 		if instance:instance.visible=false
@@ -184,9 +208,12 @@ class Pool extends RefCounted:
 		var lo:=Vector3(INF,INF,INF)
 		var hi:=Vector3(-INF,-INF,-INF)
 		var margin:=0.0
-		for i in capacity:
+		var highest:=-1
+		spawned_top=-1
+		for i in top+1:
 			var duration:=life[i]
 			if duration<=0.0:continue
+			highest=i
 			var h:=dt
 			if delay[i]>0.0:
 				delay[i]-=dt
@@ -276,6 +303,7 @@ class Pool extends RefCounted:
 			margin=maxf(margin,s)
 			if front:f+=1
 			else:n+=1
+		top=maxi(highest,spawned_top)
 		# Rows already inside the target range stay; reads come from rows >= capacity-f, writes land below it.
 		var dst:=n
 		for r in range(maxi(capacity-f,n+f),capacity):
@@ -421,9 +449,10 @@ func _audible() -> bool:
 
 func _shot_sound(weapon_class:String) -> void:
 	if not _audible():return
-	var heavy:=weapon_class in ["cannon","naval"]
+	if weapon_class=="fpv":return
+	var heavy:=weapon_class in ["cannon","naval","atgun"]
 	if sound_clock>0 and not heavy:return
-	flashes.pitch_scale={"small":1.4,"autocannon":1.15,"cannon":0.6,"naval":0.7,"missile":0.85,"rocket":1.0}.get(weapon_class,1.0)
+	flashes.pitch_scale={"small":1.4,"autocannon":1.15,"cannon":0.6,"naval":0.7,"atgun":0.75,"missile":0.85,"rocket":1.0}.get(weapon_class,1.0)
 	flashes.play()
 	sound_clock=0.12
 
@@ -447,6 +476,9 @@ func fireball(pos:Vector3, vel:Vector3, size0:float, size1:float, life:float, de
 	return volume.spawn(pos,vel,FIRE,size0,size1,life,Color(1,1,1,1),2.2,-1.2,delay,priority,0,rng.randf()*TAU,rng.randf_range(-1.2,1.2),rng.randf())
 
 func debris(pos:Vector3, vel:Vector3, size:float, life:float, col:Color, bounce:bool=true, trail:bool=false, priority:int=NORMAL) -> int:
+	if volume.kind_live[DEBRIS]>=DEBRIS_CAP:
+		volume.dropped+=1
+		return -1
 	var bits:=(BOUNCE if bounce else GROUND_KILL)|(TRAIL if trail else 0)
 	return volume.spawn(pos,vel,DEBRIS,size,size,life,col,0.0,9.8,0.0,priority,bits,rng.randf()*TAU,rng.randf_range(-9,9),rng.randf())
 
@@ -458,6 +490,12 @@ func flash(pos:Vector3, size:float, life:float, col:Color=FLAME, delay:float=0.0
 
 func ember(pos:Vector3, vel:Vector3, size:float, life:float, col:Color=FLAME, priority:int=NORMAL) -> int:
 	return glow.spawn(pos,vel,EMBER,size,size*0.7,life,col,1.5,-0.6,0.0,priority,0,0.0,0.0,rng.randf())
+
+# Soft additive light spill over the ground and nearby models, standing in for a dynamic light: a light in the
+# Compatibility renderer costs an extra pass per lit mesh and new shader variants on first use.
+func bloom(pos:Vector3, size:float, life:float, col:Color=Color(1.0,0.55,0.22,0.32), priority:int=NORMAL, delay:float=0.0) -> int:
+	var s:=minf(size,5.2)
+	return glow.spawn(pos,Vector3.ZERO,EMBER,s,s*1.1,life,col,0.0,0.0,delay,priority,0,0.0,0.0,rng.randf())
 
 # Axial glow: tracer bodies, flame tongues and sparks. Position is the streak centre.
 func streak(pos:Vector3, direction:Vector3, length:float, thickness:float, life:float, col:Color, vel:Vector3=Vector3.ZERO, fall:float=0.0, priority:int=NORMAL, delay:float=0.0) -> int:
@@ -551,9 +589,9 @@ func _muzzle(weapon:String, pos:Vector3, direction:Vector3, round_index:int, on_
 			flash(pos,0.62,0.04,Color(1.0,0.76,0.4))
 			streak(pos+direction*0.45,-direction,0.9,0.28,0.04,FLAME)
 			smoke(pos+direction*0.3,direction*2.0+Vector3(0,0.4,0),0.2,0.85,0.8,Color(PROPELLANT,0.3),2.2,0.2,0.0,OPTIONAL)
-		"cannon","naval":
-			var heavy:=weapon_class=="cannon"
-			var k:=1.0 if heavy else 0.75
+		"cannon","naval","atgun":
+			var heavy:=weapon_class!="naval"
+			var k:float={"cannon":1.0,"naval":0.75,"atgun":0.8}[weapon_class]
 			# Blast: white-hot core, forward flame tongue and a short-lived fireball ahead of the muzzle.
 			flash(pos,1.5*k,0.06,Color(1.0,0.82,0.5))
 			streak(pos+direction*1.3*k,-direction,2.6*k,0.9*k,0.07,FLAME,Vector3.ZERO,0.0,ESSENTIAL)
@@ -607,6 +645,9 @@ func _update_projectiles(dt:float) -> void:
 		var moved:=p-last
 		var heading:Vector3=moved.normalized() if moved.length_squared()>0.000001 else shot.dir
 		match String(shot["class"]):
+			"fpv":
+				# Loitering munition on its terminal dive: only a small motor glint is visible.
+				ember(p,Vector3.ZERO,0.28,0.0001,Color(1.0,0.45,0.3,0.8),NORMAL)
 			"missile","rocket":
 				var missile:bool=shot["class"]=="missile"
 				ember(p,Vector3.ZERO,0.55 if missile else 0.42,0.0001,Color(1.0,0.82,0.55),ESSENTIAL)
@@ -624,8 +665,8 @@ func _update_projectiles(dt:float) -> void:
 				if shot.tracer:
 					var weapon_class:String=shot["class"]
 					var length:=clampf(float(shot.speed)*dt*1.15,0.9,4.0)
-					var thickness:float={"small":0.05,"autocannon":0.075,"cannon":0.09,"naval":0.08}.get(weapon_class,0.05)
-					var col:=TRACER if weapon_class!="cannon" else Color(1.0,0.78,0.5)
+					var thickness:float={"small":0.05,"autocannon":0.075,"cannon":0.09,"naval":0.08,"atgun":0.1}.get(weapon_class,0.05)
+					var col:=TRACER if not weapon_class in ["cannon","atgun"] else Color(1.0,0.78,0.5)
 					streak(p-heading*length*0.5,heading,length,thickness,0.0001,Color(col,0.8 if weapon_class=="small" else 1.0),Vector3.ZERO,0.0,NORMAL)
 		shot.last=p
 		if progress>=1.0:
@@ -637,19 +678,24 @@ func _arrive(shot:Dictionary) -> void:
 	var p:Vector3=shot.b
 	var direction:Vector3=shot.dir
 	var surface:String=shot.surface
+	if surface=="earth":surface="ground" # trenches and berms read as soil
 	match String(shot["class"]):
 		"small":
 			match surface:
 				"ground":bullet_strike(p,direction)
 				"water":water_strike(p,0.35)
 				"soft":soft_strike(p,direction)
-				"armor","structure":ricochet(p,direction,0.4)
+				"armor":ricochet(p,direction,0.4)
+				"structure":Explosions.masonry_hit(self,p,direction,0.2)
 				"air":air_hit(p,0.4)
 		"autocannon":
 			match surface:
 				"ground","soft":he_burst(p,direction,0.4)
 				"water":water_strike(p,0.6)
-				"armor","structure":armor_hit(p,direction,0.6)
+				"armor":armor_hit(p,direction,0.6)
+				"structure":
+					flash(p,0.6,0.04,Color(1.0,0.8,0.5),0.0,NORMAL)
+					Explosions.masonry_hit(self,p,direction,0.45)
 				"air":air_hit(p,0.75)
 				"sky":flak(p)
 		"cannon","naval":
@@ -657,15 +703,29 @@ func _arrive(shot:Dictionary) -> void:
 				"ground","soft":he_burst(p,direction,1.0)
 				"water":water_strike(p,1.0)
 				"armor":armor_hit(p,direction,1.0)
-				"structure":armor_hit(p,direction,1.0);he_burst(p,direction,0.6)
+				"structure":Explosions.shell_on_masonry(self,p,direction,1.0)
 				"air":air_hit(p,1.0)
+		"atgun":
+			match surface:
+				"armor":Explosions.ap_strike(self,p,direction,1.0)
+				"structure":
+					Explosions.ap_strike(self,p,direction,0.7)
+					Explosions.masonry_hit(self,p,direction,0.8)
+				"ground","soft":Explosions.ap_ground(self,p,direction)
+				"water":water_strike(p,0.7)
+				"air","sky":air_hit(p,0.7)
 		"missile","rocket":
 			var k:=1.0 if shot["class"]=="missile" else 0.75
 			match surface:
-				"ground","soft":he_burst(p,direction,0.9*k)
+				"ground","soft":Explosions.missile_burst(self,p,direction,0.9*k,false)
 				"water":water_strike(p,0.85*k)
-				"armor","structure":armor_hit(p,direction,1.2*k)
+				"armor":Explosions.missile_burst(self,p,direction,1.1*k,true)
+				"structure":
+					Explosions.missile_burst(self,p,direction,k,true)
+					Explosions.masonry_hit(self,p,direction,0.8*k)
 				"air","sky":air_hit(p,1.1*k)
+		"fpv":
+			Explosions.drone_strike(self,p,surface=="water",surface=="armor")
 
 # Rifle round into soil: a small dirt spurt thrown back toward the shooter, no flash.
 func bullet_strike(pos:Vector3, direction:Vector3) -> void:
@@ -712,6 +772,11 @@ func he_burst(pos:Vector3, direction:Vector3, scale:float) -> void:
 	for n in int(round(2+3*scale)):
 		smoke(g+Vector3(0,0.35,0)+_jitter(0.4*scale,0.0),Vector3(0,rng.randf_range(1.4,3.0)*scale,0)+_jitter(0.6),0.5*scale,rng.randf_range(1.9,2.7)*scale,rng.randf_range(1.6,2.6),Color(DUST.darkened(0.12),0.62),1.6,0.2,rng.randf()*0.08,NORMAL if n<2 else OPTIONAL)
 	if scale>=0.6:sparks(p,int(4*scale),8.0,Vector3.UP*0.6,0.4,OPTIONAL)
+	if scale>=0.9:
+		# Shell burst: a narrow dirt geyser that stalls and hangs, the read that separates HE from a missile.
+		bloom(p+Vector3(0,0.3,0),2.6*scale,0.16,Color(1.0,0.6,0.28,0.26))
+		for n in 3:
+			smoke(g+Vector3(0,0.3+n*0.25,0)+_jitter(0.15,0.0),Vector3(0,rng.randf_range(5.0,8.5)*scale,0)+_jitter(0.35,0.0),0.35*scale,rng.randf_range(1.1,1.5)*scale,rng.randf_range(1.3,1.9),Color(SOIL.lerp(DUST,0.35),0.78),2.4,0.0,n*0.02,NORMAL if n==0 else OPTIONAL)
 	decal(g,DUST_RING,0.5,4.0*scale,0.5,Color(DUST,0.5))
 	decal(g,SCORCH,1.4*scale+0.4,1.6*scale+0.5,30.0,Color(SCORCH_COLOR,0.55),OPTIONAL)
 
@@ -752,7 +817,7 @@ func _pending_arrival(pos:Vector3) -> float:
 	return wait
 
 func _destroy_now(kind:String, pos:Vector3, water:bool) -> void:
-	if kind in ["rifle","atgm"]:
+	if kind in INFANTRY:
 		# A casualty is not an explosion: a little dust where the last soldier fell.
 		for n in 2:smoke(Vector3(pos.x,0.25,pos.z)+_jitter(0.4,0.0),Vector3(0,0.3,0)+_jitter(0.3,0.0),0.3,0.9,0.9,Color(DUST,0.45),2.0)
 		return
@@ -762,10 +827,19 @@ func _destroy_now(kind:String, pos:Vector3, water:bool) -> void:
 	if kind=="helo":
 		air_burst(pos,1.0,true)
 		return
+	if kind=="fpv_drone":
+		Explosions.drone_strike(self,pos,water,false)
+		return
 	if kind in STRUCTURES:
 		structure_collapse(pos)
 		return
-	vehicle_explosion(Vector3(pos.x,maxf(pos.y,0.4),pos.z),1.15 if kind=="harvester" else 1.0,water,kind=="tank")
+	if Explosions.FIELD_WORKS.has(kind):
+		Explosions.field_work_destroyed(self,kind,pos,water)
+		return
+	if kind in VEHICLES:
+		vehicle_explosion(Vector3(pos.x,maxf(pos.y,0.4),pos.z),1.15 if kind=="harvester" else 1.0,water,kind=="tank")
+		return
+	Explosions.generic_blast(self,pos,water)
 
 # Staged vehicle kill: flash, fireball lobes, sparks and debris at once; ground dust, then rolling soot,
 # then a sustained wreck fire. Tanks add brief ammunition cook-off pops.
@@ -773,6 +847,7 @@ func vehicle_explosion(pos:Vector3, scale:float=1.0, water:bool=false, cook_off:
 	var g:=Vector3(pos.x,FLOOR,pos.z)
 	_boom(scale)
 	flash(pos+Vector3(0,0.6,0),4.2*scale,0.09,Color(1.0,0.86,0.55))
+	bloom(pos+Vector3(0,0.6,0),4.6*scale,0.4,Color(1.0,0.55,0.22,0.36),ESSENTIAL)
 	for n in 4:
 		fireball(pos+Vector3(0,0.4,0)+_jitter(0.6*scale,0.3),Vector3(0,rng.randf_range(1.2,2.4),0)+_jitter(1.2*scale,0.0),0.9*scale,rng.randf_range(2.6,3.4)*scale,rng.randf_range(0.45,0.7),n*0.03)
 	sparks(pos+Vector3(0,0.5,0),int(16*scale),12.0*scale,Vector3.UP*0.8,1.1,ESSENTIAL)
@@ -788,13 +863,18 @@ func vehicle_explosion(pos:Vector3, scale:float=1.0, water:bool=false, cook_off:
 			smoke(g+Vector3(0,0.25,0)+out*0.8*scale,out*rng.randf_range(4.0,7.0)*scale,0.6*scale,rng.randf_range(2.4,3.0)*scale,rng.randf_range(1.6,2.6),Color(DUST,0.55),2.2,0.05,0.06)
 	for n in 9:
 		smoke(pos+Vector3(0,0.8,0)+_jitter(0.7*scale,0.3),Vector3(0,rng.randf_range(1.5,2.6),0)+_jitter(0.6),1.0*scale,rng.randf_range(3.2,4.0)*scale,rng.randf_range(3.5,5.5),Color(SOOT,0.78),0.6,1.0,0.15+n*0.05,ESSENTIAL)
-	add_emitter(g,9.0 if cook_off else 6.5,scale,water)
+	# Wreck fire and a black column that keeps rising for roughly 10-14 s after the kill.
+	add_emitter(g,11.0 if cook_off else 9.5,scale,water)
+	# Secondary pops: every hull vents a fuel flare; tanks then cook off their ammunition.
+	cue(rng.randf_range(0.35,0.55),_cook_off.bind(pos+Vector3(0,0.6,0)+_jitter(0.5*scale,0.0)))
 	if cook_off:
-		for when in [rng.randf_range(0.6,0.9),rng.randf_range(1.3,2.0)]:
-			cue(when,_cook_off.bind(pos+Vector3(0,0.7,0)))
+		for when in [rng.randf_range(0.8,1.1),rng.randf_range(1.5,2.1),rng.randf_range(2.6,3.4)]:
+			cue(when,_cook_off.bind(pos+Vector3(0,0.7,0)+_jitter(0.4,0.0)))
 
 func _cook_off(pos:Vector3) -> void:
 	flash(pos,1.2,0.05,Color(1.0,0.8,0.45),0.0,NORMAL)
+	bloom(pos,2.4,0.14,Color(1.0,0.55,0.22,0.24),OPTIONAL)
+	fireball(pos+Vector3(0,0.2,0),Vector3(0,2.2,0)+_jitter(0.6,0.0),0.35,1.2,0.3,0.0,NORMAL)
 	sparks(pos,6,8.0,Vector3.UP,0.7)
 	smoke(pos,Vector3(0,1.2,0),0.4,1.6,2.2,Color(SOOT,0.6),1.0,0.6)
 
@@ -842,10 +922,12 @@ func _update_emitters(dt:float) -> void:
 			e.fire_clock=rng.randf_range(0.16,0.28)
 			ember(p+Vector3(0,0.5,0)+_jitter(0.45*k,0.2),Vector3(0,0.8,0),rng.randf_range(0.7,1.1)*k,rng.randf_range(0.22,0.34),Color(1.0,0.6,0.25,0.75),OPTIONAL)
 			if rng.randf()<0.5:fireball(p+Vector3(0,0.45,0)+_jitter(0.35*k,0.1),Vector3(0,1.0,0),0.35*k,0.85*k,0.38,0.0,OPTIONAL)
+			# Firelight flicker on the ground around the burning hull.
+			if rng.randf()<0.35:bloom(p+Vector3(0,0.4,0),rng.randf_range(2.0,2.8)*k,0.22,Color(1.0,0.5,0.2,rng.randf_range(0.14,0.24)),OPTIONAL)
 		e.smoke_clock-=dt
 		if e.smoke_clock<=0:
 			e.smoke_clock=lerpf(0.28,0.7,f)
-			smoke(p+Vector3(0,0.9,0)+_jitter(0.35*k,0.1),Vector3(0,rng.randf_range(1.2,1.9),0),0.5*k,rng.randf_range(2.4,3.0)*k,rng.randf_range(3.0,4.2),Color(SOOT.lerp(GREY_SMOKE,f),0.66*(1.0-f*0.5)),0.8,0.9,0.0,OPTIONAL)
+			smoke(p+Vector3(0,0.9,0)+_jitter(0.35*k,0.1),Vector3(0,rng.randf_range(1.2,1.9),0),0.5*k,rng.randf_range(2.6,3.4)*k,rng.randf_range(3.5,4.8),Color(SOOT.lerp(GREY_SMOKE,f),0.7*(1.0-f*0.5)),0.8,1.0,0.0,OPTIONAL)
 
 # ---------------------------------------------------------------- movement and damage presentation
 func dust(pos:Vector3, direction:Vector2, sea:bool) -> void:

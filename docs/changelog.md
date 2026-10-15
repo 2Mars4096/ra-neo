@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-15 — Parallel round: vehicle routing, explosions, presentation cost, counter-drone and FPV swarms
+
+- Vehicle routing. Coarse 4 u vehicle cells now stay open when any of 8 sub-points fits the hull; that point becomes the cell's waypoint. Shortcuts keep a 0.3 u margin. Hulls accept passed waypoints. Routes avoid parked units, oncoming tanks pass on their own right, and idle friendlies make way (`Terrain._refresh_land_cell`, `_anchor`, `_path`; `Simulation.standing_bodies`, `make_way`). `tests/probe_vehicle_path.gd`: mean route ratio 1.233 -> 1.017, worst 3.80 -> 1.09, false "no route" 2 -> 0, head-on tank deadlock fixed. The tank grid build at load rose 0.2 -> 0.4 s.
+- Explosions (`scripts/effects_explosions.gd`). Distinct tank HE, ATGM/rocket, AT gun, FPV, masonry and generic recipes. Vehicle kills get secondary pops, cook-offs, a lingering smoke column, burning-wreck flicker and a scorch fading over 30-60 s. Bunker and depot kills have their own effects. Engineers die as infantry. Everything is pooled: no per-shot nodes, no dynamic lights. AT gun and bunker shots now report their own kind. `test_effects` 156/0.
+- Presentation cost. The HUD draws in three canvases, and the sidebar redraws only on change or at 20 Hz. Fog and minimap repaint only cells that changed. Settled animation joints and unchanged transforms are not rewritten. Harbor ground detail casts no shadows and is merged into tiles (793 -> 300 instances). Headless per-frame scripting fell from 1.73 to 1.02 ms mean, and the worst frame per second from ~5 to ~2 ms. The sim step is unchanged. Its 140-220 ms spikes are nav-grid re-weighting after weather wetness changes, still open.
+- Counter-drone. AA is the strong counter, rifles hit drones only up close, and the tank coax is weak. Attack orders on drones work, and AA prioritises aircraft.
+- FPV swarms. The new `fpv_drone` flies straight in, hovers to line up, dives and detonates (60 dmg, 4.5 m). From wave 2, each enemy wave brings 4-8 drones, and mid-wave strikes hit the densest visible player cluster. A toast warns on launch. Idle units do not chase strike drones, and the dive is visible. `test_counter_drone` 39/0.
+
 ## 2026-10-15 — Hull steering, crushable street furniture, obstacle clearing, garrison fire
 
 - Tanks, AA and boats move only along their hull axis. They turn (pivot when blocked) and back out of jams instead of sliding sideways (`Simulation.hull_step`).

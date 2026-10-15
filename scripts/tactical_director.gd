@@ -16,7 +16,9 @@ static func plan(sim,u:Dictionary,pos:Vector2,phase:String,reason:String,duratio
 	for other in sim.units:
 		if other.id==u.id or not sim.alive(other) or other.team!=u.team:continue
 		if not other.maneuver.is_empty() and pos.distance_to(other.maneuver.pos)<float(d.radius)+float(sim.definitions[other.kind].radius)+0.4:return false
+	var t0:int=Time.get_ticks_usec() if sim.profiling else 0
 	var route:Array=route_hint if not route_hint.is_empty() else sim.terrain.path(u.pos,pos,d.domain,d.radius,[],sim.terrain.mobility_profile(u.kind))
+	if sim.profiling:sim._lap("director_path",t0)
 	if route.is_empty():return false
 	u.maneuver={"pos":pos,"mode":"retreat" if phase=="WITHDRAW" else "maneuver","phase":phase,"arrived":u.pos.distance_to(pos)<0.15,"progress_pos":u.pos,"progress_at":sim.time,"deadline":sim.time+duration+(37.0 if phase=="WITHDRAW" else 12.0)}
 	u.path=[] if u.maneuver.arrived else route
@@ -34,7 +36,9 @@ static func resume(sim,u:Dictionary,reason:String="Regrouping toward objective")
 	u.commit_until=sim.time+5.0
 	if not u.orders.is_empty():
 		var d:Dictionary=sim.definitions[u.kind]
+		var t0:int=Time.get_ticks_usec() if sim.profiling else 0
 		u.path=sim.terrain.path(u.pos,u.orders[0].pos,d.domain,d.radius,[],sim.terrain.mobility_profile(u.kind))
+		if sim.profiling:sim._lap("director_path",t0)
 
 static func update(sim) -> void:
 	if not sim.scenario.get("autonomy",false):return
@@ -151,7 +155,7 @@ static func engage_idle(sim,u:Dictionary)->void:
 	var enemy:Dictionary={};var best:=INF
 	# Weapon-range candidate lists are too short here: scan everything (throttled).
 	for other in sim.units:
-		if not sim.alive(other) or other.team==u.team or sim.passive_work(other) or not sim.effective_unit(u,other.kind):continue
+		if not sim.alive(other) or other.team==u.team or sim.passive_work(other) or sim.definitions[other.kind].get("strike",false) or not sim.effective_unit(u,other.kind):continue
 		var dist:float=u.pos.distance_to(other.pos)
 		if dist<sight and dist<best and sim.contact_known(u,other):best=dist;enemy=other
 	if enemy.is_empty():return
@@ -183,7 +187,9 @@ static func flank_choice(sim,u:Dictionary,goal:Vector2,contacts:Array) -> Dictio
 		if destination.distance_to(goal)>u.pos.distance_to(goal)+3:continue
 		if not sim.terrain.traversable(destination,d.domain,d.radius):continue
 		if avoid.any(func(body):return destination.distance_to(body.pos)<body.radius):continue
+		var t0:int=Time.get_ticks_usec() if sim.profiling else 0
 		var route:Array=sim.terrain.path(u.pos,destination,d.domain,d.radius,avoid,sim.terrain.mobility_profile(u.kind))
+		if sim.profiling:sim._lap("director_path",t0)
 		if route.is_empty():continue
 		var length:=0.0
 		var previous:Vector2=u.pos

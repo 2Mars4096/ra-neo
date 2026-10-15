@@ -32,13 +32,41 @@ var hover := ""
 var map_texture: ImageTexture
 var map_background=preload("res://scripts/minimap_background.gd").new()
 var map_clock := -1.0
+var map_image:Image
+var map_revision:=-1
+var map_drawn_visible:Dictionary={}
+var map_drawn_explored:=0
 var blocked_regions: Array[Rect2] = []
 var styles: Dictionary = {}
 var portraits: Dictionary = {}
 var minimap_road_cells: Dictionary = {}
+# The HUD draws through three child canvases so the screen-fixed sidebar can keep
+# its recorded commands between frames. World overlays (0) and the top layer (2:
+# placement preview, toasts, guide, results) redraw every frame; the sidebar (1)
+# redraws when the pointer or interaction state changes, else at 20 Hz for live
+# values. queue_redraw() on the HUD itself still refreshes every layer at once.
+const SIDEBAR_INTERVAL_MSEC := 50
+class Layer extends Control:
+	var hud:Control
+	var part:=0
+	func _draw()->void:hud.draw_layer(self,part)
+var cv:CanvasItem=self
+var layers:Array[Control]=[]
+var layer_hits:Array=[[],[],[]]
+var layer_blocked:Array=[[],[],[]]
+var modal:=false
+var sidebar_msec:=-100000
+var sidebar_key:Array=[]
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for part in 3:
+		var layer:=Layer.new()
+		layer.hud=self;layer.part=part
+		layer.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		add_child(layer)
+		layers.append(layer)
 	font.font_names = PackedStringArray(["Avenir Next","Helvetica Neue","Arial"])
 	bold.font_names = font.font_names
 	bold.font_weight = 700
@@ -50,10 +78,10 @@ func _ready() -> void:
 			if image!=null:portraits[kind]=ImageTexture.create_from_image(image)
 
 func text_at(text: String, p: Vector2, size_px: int = 14, color: Color = WHITE, strong: bool = false) -> void:
-	draw_string(bold if strong else font,p,text,HORIZONTAL_ALIGNMENT_LEFT,-1,size_px,color)
+	cv.draw_string(bold if strong else font,p,text,HORIZONTAL_ALIGNMENT_LEFT,-1,size_px,color)
 
 func panel(r: Rect2, color: Color = PANEL) -> void:
-	draw_style_box(style(color),r)
+	cv.draw_style_box(style(color),r)
 
 func style(color: Color) -> StyleBoxFlat:
 	if styles.has(color):return styles[color]
@@ -67,7 +95,7 @@ func style(color: Color) -> StyleBoxFlat:
 func button(id: String, label: String, r: Rect2, enabled: bool = true, active: bool = false) -> void:
 	var over := r.has_point(get_local_mouse_position())
 	panel(r, Color("46513b") if active or (over and enabled) else Color("2c332c"))
-	if active:draw_rect(r,TEAL,false,1)
+	if active:cv.draw_rect(r,TEAL,false,1)
 	text_at(label,r.position+Vector2(8,r.size.y/2+4),12,WHITE if enabled else MUTED,true)
 	hits.append({"id":id,"rect":r,"enabled":enabled})
 
@@ -89,55 +117,97 @@ func action_at(p: Vector2) -> String:
 func console_panel(rect: Rect2) -> void:
 	panel(rect,INK)
 	# A narrow metal lip and recessed lower seam give the command console weight.
-	draw_line(rect.position+Vector2(2,2),rect.position+Vector2(rect.size.x-2,2),Color("626956"),1)
-	draw_line(rect.position+Vector2(2,rect.size.y-2),rect.end-Vector2(2,2),Color("101510"),1)
+	cv.draw_line(rect.position+Vector2(2,2),rect.position+Vector2(rect.size.x-2,2),Color("626956"),1)
+	cv.draw_line(rect.position+Vector2(2,rect.size.y-2),rect.end-Vector2(2,2),Color("101510"),1)
 	blocked_regions.append(rect)
 
 # Original schematic silhouettes remain readable without raster asset loads.
 func equipment_icon(kind: String, center: Vector2, color: Color) -> void:
 	if kind in ["rifle","atgm","engineer"]:
-		draw_circle(center+Vector2(-6,-8),4,color)
-		draw_line(center+Vector2(-6,-3),center+Vector2(-6,9),color,5)
-		draw_line(center+Vector2(-6,0),center+Vector2(12,-3),color,3)
-		draw_line(center+Vector2(-7,8),center+Vector2(-12,16),color,3)
-		draw_line(center+Vector2(-5,8),center+Vector2(1,16),color,3)
-		if kind=="atgm":draw_line(center+Vector2(-15,-5),center+Vector2(14,-5),color,5)
+		cv.draw_circle(center+Vector2(-6,-8),4,color)
+		cv.draw_line(center+Vector2(-6,-3),center+Vector2(-6,9),color,5)
+		cv.draw_line(center+Vector2(-6,0),center+Vector2(12,-3),color,3)
+		cv.draw_line(center+Vector2(-7,8),center+Vector2(-12,16),color,3)
+		cv.draw_line(center+Vector2(-5,8),center+Vector2(1,16),color,3)
+		if kind=="atgm":cv.draw_line(center+Vector2(-15,-5),center+Vector2(14,-5),color,5)
 		elif kind=="engineer":
 			# Entrenching spade over the shoulder marks the builder section.
-			draw_line(center+Vector2(4,16),center+Vector2(16,-12),color,2)
-			draw_rect(Rect2(center+Vector2(13,-19),Vector2(7,8)),color)
+			cv.draw_line(center+Vector2(4,16),center+Vector2(16,-12),color,2)
+			cv.draw_rect(Rect2(center+Vector2(13,-19),Vector2(7,8)),color)
 	elif kind in ["drone","helo"]:
-		draw_line(center+Vector2(-18,-5),center+Vector2(18,5),color,2)
-		draw_line(center+Vector2(-18,5),center+Vector2(18,-5),color,2)
-		draw_rect(Rect2(center-Vector2(5,8),Vector2(10,16)),color)
+		cv.draw_line(center+Vector2(-18,-5),center+Vector2(18,5),color,2)
+		cv.draw_line(center+Vector2(-18,5),center+Vector2(18,-5),color,2)
+		cv.draw_rect(Rect2(center-Vector2(5,8),Vector2(10,16)),color)
 		if kind=="drone":
-			for offset in [Vector2(-18,-5),Vector2(18,5),Vector2(-18,5),Vector2(18,-5)]:draw_arc(center+offset,5,0,TAU,10,color,1)
+			for offset in [Vector2(-18,-5),Vector2(18,5),Vector2(-18,5),Vector2(18,-5)]:cv.draw_arc(center+offset,5,0,TAU,10,color,1)
 	elif kind in ["hq","power","refinery","barracks","factory"]:
-		draw_rect(Rect2(center+Vector2(-18,-5),Vector2(36,20)),color)
-		draw_colored_polygon(PackedVector2Array([center+Vector2(-21,-5),center+Vector2(0,-17),center+Vector2(21,-5)]),color)
-		draw_rect(Rect2(center+Vector2(-4,5),Vector2(8,10)),INK)
+		cv.draw_rect(Rect2(center+Vector2(-18,-5),Vector2(36,20)),color)
+		cv.draw_colored_polygon(PackedVector2Array([center+Vector2(-21,-5),center+Vector2(0,-17),center+Vector2(21,-5)]),color)
+		cv.draw_rect(Rect2(center+Vector2(-4,5),Vector2(8,10)),INK)
 	elif kind=="boat":
-		draw_colored_polygon(PackedVector2Array([center+Vector2(-21,-5),center+Vector2(21,-5),center+Vector2(12,9),center+Vector2(-15,9)]),color)
-		draw_rect(Rect2(center+Vector2(-5,-13),Vector2(12,8)),color)
+		cv.draw_colored_polygon(PackedVector2Array([center+Vector2(-21,-5),center+Vector2(21,-5),center+Vector2(12,9),center+Vector2(-15,9)]),color)
+		cv.draw_rect(Rect2(center+Vector2(-5,-13),Vector2(12,8)),color)
 	else:
-		draw_rect(Rect2(center+Vector2(-20,4),Vector2(40,8)),color)
-		draw_rect(Rect2(center+Vector2(-15,-4),Vector2(28,10)),color)
-		draw_rect(Rect2(center+Vector2(-5,-10),Vector2(14,7)),color)
+		cv.draw_rect(Rect2(center+Vector2(-20,4),Vector2(40,8)),color)
+		cv.draw_rect(Rect2(center+Vector2(-15,-4),Vector2(28,10)),color)
+		cv.draw_rect(Rect2(center+Vector2(-5,-10),Vector2(14,7)),color)
 		if kind=="harvester":
-			draw_rect(Rect2(center+Vector2(-15,-14),Vector2(16,12)),color)
-			draw_line(center+Vector2(12,5),center+Vector2(23,13),color,4)
+			cv.draw_rect(Rect2(center+Vector2(-15,-14),Vector2(16,12)),color)
+			cv.draw_line(center+Vector2(12,5),center+Vector2(23,13),color,4)
 		elif kind=="aa":
-			draw_line(center+Vector2(3,-8),center+Vector2(17,-17),color,3)
-			draw_line(center+Vector2(10,-8),center+Vector2(24,-17),color,3)
-		else:draw_line(center+Vector2(6,-8),center+Vector2(24,-11),color,3)
+			cv.draw_line(center+Vector2(3,-8),center+Vector2(17,-17),color,3)
+			cv.draw_line(center+Vector2(10,-8),center+Vector2(24,-17),color,3)
+		else:cv.draw_line(center+Vector2(6,-8),center+Vector2(24,-11),color,3)
 
 func _draw() -> void:
+	sidebar_msec=-100000
+	for layer in layers:layer.queue_redraw()
+
+# Per rendered frame (battle._process): world and top layers always; the sidebar
+# only when something it shows may have changed.
+func frame() -> void:
+	if layers.is_empty():return
+	layers[0].queue_redraw()
+	layers[2].queue_redraw()
+	if sidebar_state()!=sidebar_key or Time.get_ticks_msec()-sidebar_msec>=SIDEBAR_INTERVAL_MSEC:layers[1].queue_redraw()
+
+# Inputs that change the sidebar at once (hover, selection, modes, supply).
+func sidebar_state() -> Array:
+	var sim=battle.sim
+	return [size,pointer(),battle.selected.hash(),battle.build_mode,battle.build_rotated,battle.attack_mode,battle.paused,battle.show_help,sim.result,int(sim.credits)]
+
+func draw_layer(canvas:CanvasItem,part:int) -> void:
 	if not is_instance_valid(battle):
 		return
-	hits.clear()
-	blocked_regions.clear()
-	hint_text=""
-	var sim = battle.sim
+	var lap:=Time.get_ticks_usec()
+	cv=canvas
+	var own_hits:Array[Dictionary]=[]
+	var own_blocked:Array[Rect2]=[]
+	hits=own_hits
+	blocked_regions=own_blocked
+	if part==0:draw_world(battle.sim)
+	elif part==1:
+		hint_text=""
+		sidebar_msec=Time.get_ticks_msec()
+		sidebar_key=sidebar_state()
+		draw_sidebar(battle.sim)
+	else:
+		modal=false
+		draw_top(battle.sim)
+	cv=self
+	layer_hits[part]=own_hits
+	layer_blocked[part]=own_blocked
+	# Guide and results are modal: only their own buttons remain clickable.
+	var combined_hits:Array[Dictionary]=[]
+	var combined_blocked:Array[Rect2]=[]
+	for i in 3:
+		if not modal or i==2:combined_hits.append_array(layer_hits[i])
+		combined_blocked.append_array(layer_blocked[i])
+	hits=combined_hits
+	blocked_regions=combined_blocked
+	battle.flap("hud_layer%d" % part,lap)
+
+func draw_world(sim) -> void:
 	var w := size.x
 	var h := size.y
 	# Selected orders remain inspectable, including queued destinations.
@@ -148,22 +218,22 @@ func _draw() -> void:
 		for member in unit.members:
 			if member.hp<=0 or member.get("cover_phase","") not in ["SEEKING","SETTLING","SHELTERED"]:continue
 			var shelter:Vector2=battle.screen_pos(member.cover_goal,0.25)
-			draw_arc(shelter,5,0,TAU,16,TEAL,1,true)
+			cv.draw_arc(shelter,5,0,TAU,16,TEAL,1,true)
 			if member.cover_phase=="SEEKING":
 				var start:Vector2=battle.screen_pos(member.pos,0.25)
 				for waypoint in member.cover_path:
 					var next:Vector2=battle.screen_pos(waypoint,0.25)
-					draw_dashed_line(start,next,Color(0.68,0.76,0.48,0.7),1,4)
+					cv.draw_dashed_line(start,next,Color(0.68,0.76,0.48,0.7),1,4)
 					start=next
 		if not unit.maneuver.is_empty():
 			var point:Vector2=battle.screen_pos(unit.maneuver.pos,0.3)
-			draw_dashed_line(battle.screen_pos(unit.pos,0.3),point,ORANGE,2,7)
-			draw_arc(point,7,0,TAU,20,ORANGE,2,true)
+			cv.draw_dashed_line(battle.screen_pos(unit.pos,0.3),point,ORANGE,2,7)
+			cv.draw_arc(point,7,0,TAU,20,ORANGE,2,true)
 		var previous: Vector2 = battle.screen_pos(unit.pos,0.3)
 		for order in unit.orders:
 			var destination: Vector2 = battle.screen_pos(order.pos,0.3)
-			draw_dashed_line(previous,destination,Color(0.68,0.76,0.48,0.6),1.0,5.0)
-			draw_arc(destination,5,0,TAU,16,TEAL,1,true)
+			cv.draw_dashed_line(previous,destination,Color(0.68,0.76,0.48,0.6),1.0,5.0)
+			cv.draw_arc(destination,5,0,TAU,16,TEAL,1,true)
 			previous=destination
 	if battle.selected.size()==1:
 		var unit: Dictionary = sim.get_unit(battle.selected[0])
@@ -173,7 +243,7 @@ func _draw() -> void:
 			var points:=PackedVector2Array()
 			for i in 65:
 				points.append(battle.screen_pos(unit.pos+Vector2(cos(i*TAU/64),sin(i*TAU/64))*radius,0.2))
-			draw_polyline(points,Color(0.68,0.76,0.48,0.25),1,true)
+			cv.draw_polyline(points,Color(0.68,0.76,0.48,0.25),1,true)
 	# In-world labels remain screen-sized and distinguish ownership with glyphs as well as color.
 	for obj in sim.objectives:
 		var p: Vector2 = battle.screen_pos(obj.pos,1)
@@ -188,8 +258,8 @@ func _draw() -> void:
 			continue
 		var selected: bool = battle.selected.has(u.id)
 		if selected or u.hp<u.max_hp or u.team==1:
-			draw_rect(Rect2(p+Vector2(-15,0),Vector2(30,4)),INK)
-			draw_rect(Rect2(p+Vector2(-15,0),Vector2(30*maxf(0,u.hp/u.max_hp),4)),TEAL if u.team==0 else RED)
+			cv.draw_rect(Rect2(p+Vector2(-15,0),Vector2(30,4)),INK)
+			cv.draw_rect(Rect2(p+Vector2(-15,0),Vector2(30*maxf(0,u.hp/u.max_hp),4)),TEAL if u.team==0 else RED)
 		if selected:
 			text_at(str(u.kind).to_upper(),p+Vector2(-15,-7),9,TEAL,true)
 			if u.suppression>0.6:
@@ -197,19 +267,19 @@ func _draw() -> void:
 			elif u.recovering:
 				text_at("REPAIR +",p+Vector2(-23,-20),10,TEAL,true)
 		if u.team==0 and u.suppression>0.1:
-			draw_rect(Rect2(p+Vector2(-15,6),Vector2(30*u.suppression,2)),ORANGE)
+			cv.draw_rect(Rect2(p+Vector2(-15,6),Vector2(30*u.suppression,2)),ORANGE)
 		if u.team==0 and float(u.get("build_left",0.0))>0:
 			var progress:=build_progress(sim,u)
 			var condition:=site_condition(sim,u)
-			draw_rect(Rect2(p+Vector2(-15,9),Vector2(30,3)),INK)
-			draw_rect(Rect2(p+Vector2(-15,9),Vector2(30*progress,3)),TEAL if condition=="building" else ORANGE)
+			cv.draw_rect(Rect2(p+Vector2(-15,9),Vector2(30,3)),INK)
+			cv.draw_rect(Rect2(p+Vector2(-15,9),Vector2(30*progress,3)),TEAL if condition=="building" else ORANGE)
 			if SITE_LABELS.has(condition):
 				var label:String=SITE_LABELS[condition]
 				text_at(label,p+Vector2(-font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,10).x/2,25),10,ORANGE,true)
 	if battle.dragging and battle.drag_start.distance_to(get_local_mouse_position())>5:
 		var rect := Rect2(battle.drag_start,get_local_mouse_position()-battle.drag_start).abs()
-		draw_rect(rect,Color(0.68,0.76,0.48,0.09))
-		draw_rect(rect,TEAL,false,1)
+		cv.draw_rect(rect,Color(0.68,0.76,0.48,0.09))
+		cv.draw_rect(rect,TEAL,false,1)
 	# A compact field console keeps the central battle unobstructed.
 	console_panel(Rect2(0,0,w,42))
 	text_at("RA / NEO",Vector2(16,27),16,WHITE,true)
@@ -239,11 +309,13 @@ func _draw() -> void:
 	if sim.score_hold>0:
 		console_panel(Rect2(12,86,124,24))
 		text_at("HOLD  %02ds" % ceili(float(sim.scenario.hold)-sim.score_hold),Vector2(22,103),13,TEAL,true)
-	draw_sidebar(sim)
+
+func draw_top(sim) -> void:
+	var w := size.x
 	if battle.build_mode!="" and not sim.field_ops.is_empty():draw_field_preview(sim)
 	elif battle.build_mode!="":
 		var world:Vector2=battle.world_pos(get_local_mouse_position())
-		draw_arc(battle.screen_pos(world),28,0,TAU,32,TEAL if sim.Classic.can_build(sim,battle.build_mode,0,world) else RED,2,true)
+		cv.draw_arc(battle.screen_pos(world),28,0,TAU,32,TEAL if sim.Classic.can_build(sim,battle.build_mode,0,world) else RED,2,true)
 	# When the badge row reaches the centre, pause and toast banners step down one row.
 	var pause_rect:=Rect2(w/2-90,50,180,30)
 	var badge_row:Array=objective_badges(sim) if sim.classic.is_empty() else []
@@ -379,8 +451,8 @@ func draw_field_preview(sim) -> void:
 	var rect:Rect2=sim.FieldOps.footprint(sim,kind,world,battle.build_rotated)
 	var outline:=PackedVector2Array()
 	for corner in [rect.position,Vector2(rect.end.x,rect.position.y),rect.end,Vector2(rect.position.x,rect.end.y),rect.position]:outline.append(battle.screen_pos(corner,0.1))
-	draw_colored_polygon(outline.slice(0,4),Color(color,0.18))
-	draw_polyline(outline,color,2,true)
+	cv.draw_colored_polygon(outline.slice(0,4),Color(color,0.18))
+	cv.draw_polyline(outline,color,2,true)
 	var choice:Dictionary=battle.field_choice(kind)
 	var label:String="%s · %d supply · %ds" % [choice.get("name",kind),int(choice.get("cost",0)),int(choice.get("build_seconds",0))]
 	var detail:String="Checking site…" if not checked else ("Click to mark site · Esc cancels" if preview_reason=="" else preview_reason)
@@ -402,8 +474,8 @@ func draw_drag_preview(sim,kind:String,world:Vector2,mouse:Vector2) -> void:
 		var color:=TEAL if clear and affordable else RED
 		var outline:=PackedVector2Array()
 		for corner in [rect.position,Vector2(rect.end.x,rect.position.y),rect.end,Vector2(rect.position.x,rect.end.y),rect.position]:outline.append(battle.screen_pos(corner,0.1))
-		draw_colored_polygon(outline.slice(0,4),Color(color,0.18))
-		draw_polyline(outline,color,2,true)
+		cv.draw_colored_polygon(outline.slice(0,4),Color(color,0.18))
+		cv.draw_polyline(outline,color,2,true)
 	var label:String="%d × %s · %d supply" % [plan.size(),battle.field_choice(kind).get("name",kind),cost]
 	var detail:String="Release to mark the line · red segments are skipped" if affordable else "Need %d more supply" % (cost-int(sim.credits))
 	var width:=maxf(font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,11).x,font.get_string_size(detail,HORIZONTAL_ALIGNMENT_LEFT,-1,11).x)+20
@@ -423,17 +495,17 @@ func draw_sidebar(sim) -> void:
 	var height:=size.y
 	console_panel(Rect2(x,42,268,height-42))
 	# Machined outer rail, recessed instruments, and fasteners form one console.
-	draw_rect(Rect2(x,42,5,height-42),Color("424a45"))
-	draw_line(Vector2(x+5,42),Vector2(x+5,height),Color("858a77"),1)
+	cv.draw_rect(Rect2(x,42,5,height-42),Color("424a45"))
+	cv.draw_line(Vector2(x+5,42),Vector2(x+5,height),Color("858a77"),1)
 	for y in [50.0,height-9]:
 		for bolt_x in [x+12,size.x-9]:
-			draw_circle(Vector2(bolt_x,y),2,LINE)
-			draw_line(Vector2(bolt_x-1,y),Vector2(bolt_x+1,y),INK,1)
+			cv.draw_circle(Vector2(bolt_x,y),2,LINE)
+			cv.draw_line(Vector2(bolt_x-1,y),Vector2(bolt_x+1,y),INK,1)
 	text_at("TACTICAL DISPLAY",Vector2(x+19,65),11,MUTED,true)
 	text_at("N ↑",Vector2(size.x-45,65),11,WHITE,true)
 	minimap=Rect2(x+19,74,230,145)
 	draw_minimap(sim)
-	draw_line(Vector2(x+18,243),Vector2(size.x-18,243),LINE,1)
+	cv.draw_line(Vector2(x+18,243),Vector2(size.x-18,243),LINE,1)
 	text_at("PRODUCTION" if not sim.classic.is_empty() else "REINFORCEMENTS",Vector2(x+19,263),12,WHITE,true)
 	var types:Array=["rifle","atgm","tank","drone","helo","boat","aa"]
 	if not sim.classic.is_empty():types.append("harvester")
@@ -449,19 +521,19 @@ func draw_sidebar(sim) -> void:
 		if field:enabled=enabled and sim.FieldOps.queue(sim).size()<sim.FieldOps.QUEUE_LIMIT
 		if not sim.classic.is_empty():enabled=enabled and sim.Classic.production_reason(sim,kind,0)==""
 		button("buy:"+kind,"",tile,enabled)
-		draw_rect(Rect2(tile.position+Vector2(2,2),Vector2(tile.size.x-4,38)),Color("151b19"))
+		cv.draw_rect(Rect2(tile.position+Vector2(2,2),Vector2(tile.size.x-4,38)),Color("151b19"))
 		if portraits.has(kind):
 			var portrait:Texture2D=portraits[kind]
 			var portrait_height:=28.0 if tile.size.y<55 else 38.0
 			var portrait_width:float=portrait_height*portrait.get_width()/portrait.get_height()
-			draw_texture_rect(portrait,Rect2(tile.position+Vector2((tile.size.x-portrait_width)*0.5,2),Vector2(portrait_width,portrait_height)),false,Color(1,1,1,1) if enabled else Color(0.65,0.68,0.63,1))
+			cv.draw_texture_rect(portrait,Rect2(tile.position+Vector2((tile.size.x-portrait_width)*0.5,2),Vector2(portrait_width,portrait_height)),false,Color(1,1,1,1) if enabled else Color(0.65,0.68,0.63,1))
 		else:
-			draw_set_transform(tile.position+Vector2(40,21),0,Vector2(1.25,1.25))
+			cv.draw_set_transform(tile.position+Vector2(40,21),0,Vector2(1.25,1.25))
 			equipment_icon(kind,Vector2.ZERO,WHITE if enabled else MUTED)
-			draw_set_transform(Vector2.ZERO)
+			cv.draw_set_transform(Vector2.ZERO)
 		text_at(str(int(definition.cost)),tile.position+Vector2(79,16),11,TEAL if enabled else MUTED,true)
 		text_at(names[i],tile.position+Vector2(5,tile.size.y-6),10,WHITE if enabled else MUTED,true)
-		if not enabled:draw_circle(tile.position+Vector2(102,33),2,ORANGE)
+		if not enabled:cv.draw_circle(tile.position+Vector2(102,33),2,ORANGE)
 		if field:draw_queue_badge(sim,kind,tile)
 		if tile.has_point(get_local_mouse_position()) and not battle.show_help:
 			var hint:String=definition.role
@@ -483,7 +555,7 @@ func draw_sidebar(sim) -> void:
 		var unit:Dictionary=sim.get_unit(id)
 		if sim.alive(unit):units.append(unit)
 	var y:=maxf(632,height-174)
-	draw_line(Vector2(x+18,y-10),Vector2(size.x-18,y-10),LINE,1)
+	cv.draw_line(Vector2(x+18,y-10),Vector2(size.x-18,y-10),LINE,1)
 	var heading:="SELECT YOUR FORCE"
 	var detail:="Drag a box or click a section."
 	var status:="Right-click to move or engage."
@@ -525,8 +597,8 @@ func draw_sidebar(sim) -> void:
 		else:
 			# Progress, RESUME and CANCEL share one row; refunds stay visible on the button.
 			text_at("%d%% · %.1fs" % [roundi(build_progress(sim,site)*100),float(site.build_left)],Vector2(x+18,y+144),10,WHITE)
-			draw_rect(Rect2(x+18,y+149,68,3),INK)
-			draw_rect(Rect2(x+18,y+149,68*build_progress(sim,site),3),TEAL if site_condition(sim,site)=="building" else ORANGE)
+			cv.draw_rect(Rect2(x+18,y+149,68,3),INK)
+			cv.draw_rect(Rect2(x+18,y+149,68*build_progress(sim,site),3),TEAL if site_condition(sim,site)=="building" else ORANGE)
 			var blocked:=resume_reason(sim,site)
 			var resume_rect:=Rect2(x+90,y+132,70,23)
 			button("resume_build","RESUME",resume_rect,blocked=="")
@@ -551,13 +623,13 @@ func draw_queue_badge(sim,kind:String,tile:Rect2) -> void:
 	if count<=0:return
 	var label:="×%d" % count
 	var badge:=Rect2(tile.position+Vector2(4,4),Vector2(font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,11).x+10,16))
-	draw_rect(badge,Color(0.05,0.08,0.07,0.85))
-	draw_rect(badge,TEAL,false,1)
+	cv.draw_rect(badge,Color(0.05,0.08,0.07,0.85))
+	cv.draw_rect(badge,TEAL,false,1)
 	text_at(label,badge.position+Vector2(5,12),11,TEAL,true)
 	var items:Array=sim.FieldOps.queue(sim)
 	if not items.is_empty() and items[0]==kind:
 		var progress:=clampf(1.0-sim.recruit_clock/sim.FieldOps.DEPLOY_INTERVAL,0.0,1.0)
-		draw_rect(Rect2(tile.position+Vector2(2,tile.size.y-3),Vector2((tile.size.x-4)*progress,2)),TEAL)
+		cv.draw_rect(Rect2(tile.position+Vector2(2,tile.size.y-3),Vector2((tile.size.x-4)*progress,2)),TEAL)
 
 func draw_field_works(sim,x:float) -> void:
 	var engineer:int=battle.selected_engineer()
@@ -581,6 +653,43 @@ func draw_field_works(sim,x:float) -> void:
 			if reason!="":hint=reason+" · "+hint
 			sidebar_hint(hint,tile.position.y)
 
+func map_color(sim,base:PackedColorArray,id:Vector2i,columns:int) -> Color:
+	var c:Color=base[id.x+id.y*columns]
+	if not sim.explored.has(id): c=Color("132630")
+	elif not sim.visible_cells.has(id): c=c.darkened(0.5)
+	return c
+
+func update_map_image(sim) -> void:
+	map_clock=sim.time
+	var base:PackedColorArray=map_background.colors_for(sim.terrain,minimap_road_cells)
+	var columns:int=sim.terrain.fog_grid_size.x
+	var changed:=false
+	# Repaint everything only when the background changed; otherwise only the
+	# cells entering or leaving sight and newly explored ones (the tail of the
+	# append-only explored keys) change colour.
+	if map_texture==null or map_image==null or map_revision!=map_background.rebuilds or sim.explored.size()<map_drawn_explored:
+		map_revision=map_background.rebuilds
+		map_image=Image.create(columns,sim.terrain.fog_grid_size.y,false,Image.FORMAT_RGB8)
+		for x in columns:
+			for y in sim.terrain.fog_grid_size.y:
+				map_image.set_pixel(x,y,map_color(sim,base,Vector2i(x,y),columns))
+		map_drawn_visible=sim.visible_cells.duplicate()
+		map_drawn_explored=sim.explored.size()
+		changed=true
+	else:
+		if sim.explored.size()>map_drawn_explored:
+			var keys:Array=sim.explored.keys()
+			for i in range(map_drawn_explored,keys.size()):map_image.set_pixelv(keys[i],map_color(sim,base,keys[i],columns))
+			map_drawn_explored=keys.size()
+			changed=true
+		for id in map_drawn_visible:
+			if not sim.visible_cells.has(id):map_image.set_pixelv(id,map_color(sim,base,id,columns));changed=true
+		for id in sim.visible_cells:
+			if not map_drawn_visible.has(id):map_image.set_pixelv(id,map_color(sim,base,id,columns));changed=true
+		if changed:map_drawn_visible=sim.visible_cells.duplicate()
+	if map_texture==null: map_texture=ImageTexture.create_from_image(map_image)
+	elif changed: map_texture.update(map_image)
+
 func draw_minimap(sim) -> void:
 	if map_texture==null:
 		minimap_road_cells.clear()
@@ -593,49 +702,39 @@ func draw_minimap(sim) -> void:
 				var center:Vector2=segment.a.lerp(segment.b,float(i)/maxi(1,steps))
 				for offset in [-0.3,0.0,0.3]:
 					minimap_road_cells[sim.terrain.cell(center+normal*segment.width*offset)]=true
-	draw_rect(minimap,Color("283d3c"))
-	if map_texture==null or absf(sim.time-map_clock)>0.3:
-		map_clock=sim.time
-		var image:=Image.create(sim.terrain.fog_grid_size.x,sim.terrain.fog_grid_size.y,false,Image.FORMAT_RGB8)
-		var base:PackedColorArray=map_background.colors_for(sim.terrain,minimap_road_cells)
-		for x in sim.terrain.fog_grid_size.x:
-			for y in sim.terrain.fog_grid_size.y:
-				var id:=Vector2i(x,y)
-				var c:Color=base[x+y*sim.terrain.fog_grid_size.x]
-				if not sim.explored.has(id): c=Color("132630")
-				elif not sim.visible_cells.has(id): c=c.darkened(0.5)
-				image.set_pixel(x,y,c)
-		if map_texture==null: map_texture=ImageTexture.create_from_image(image)
-		else: map_texture.update(image)
-	draw_texture_rect(map_texture,minimap,false)
+	cv.draw_rect(minimap,Color("283d3c"))
+	if map_texture==null or absf(sim.time-map_clock)>0.3:update_map_image(sim)
+	cv.draw_texture_rect(map_texture,minimap,false)
 	if float(sim.scenario.get("jam_radius",0))>0 and sim.objectives[0].owner==1:
 		var center:Vector2=minimap.position+sim.objectives[0].pos/sim.terrain.world_size*minimap.size
-		draw_arc(center,float(sim.scenario.jam_radius)*minimap.size.x/sim.terrain.world_size.x,0,TAU,48,ORANGE,1.5,true)
+		cv.draw_arc(center,float(sim.scenario.jam_radius)*minimap.size.x/sim.terrain.world_size.x,0,TAU,48,ORANGE,1.5,true)
 		text_at("JAM",center+Vector2(5,-7),9,ORANGE)
 	for u in sim.units:
 		if sim.alive(u) and u.visible:
 			var p: Vector2 = minimap.position+u.pos/sim.terrain.world_size*minimap.size
 			# Field works read as squares: filled when complete, outlined while unfinished.
 			if u.get("structure",false) and not sim.field_ops.is_empty():
-				draw_rect(Rect2(p-Vector2(2.5,2.5),Vector2(5,5)),WHITE if battle.selected.has(u.id) else TEAL,float(u.get("build_left",0.0))<=0,1)
-			else:draw_circle(p,3 if battle.selected.has(u.id) else 2,TEAL if u.team==0 else RED)
+				var complete:bool=float(u.get("build_left",0.0))<=0
+				# Width applies to the outline only (Godot warns when it is given with a fill).
+				cv.draw_rect(Rect2(p-Vector2(2.5,2.5),Vector2(5,5)),WHITE if battle.selected.has(u.id) else TEAL,complete,-1.0 if complete else 1.0)
+			else:cv.draw_circle(p,3 if battle.selected.has(u.id) else 2,TEAL if u.team==0 else RED)
 	for obj in sim.objectives:
 		var p: Vector2=minimap.position+obj.pos/sim.terrain.world_size*minimap.size
-		draw_rect(Rect2(p-Vector2(3,3),Vector2(6,6)),TEAL if obj.owner==0 else ORANGE,false,1)
+		cv.draw_rect(Rect2(p-Vector2(3,3),Vector2(6,6)),TEAL if obj.owner==0 else ORANGE,false,1)
 	var footprint:=PackedVector2Array()
 	var view:=battlefield_rect()
 	for corner in [view.position,Vector2(view.end.x,view.position.y),view.end,Vector2(view.position.x,view.end.y),view.position]:
 		var pos: Vector2 = battle.world_pos(corner)/sim.terrain.world_size
 		pos=pos.clamp(Vector2.ZERO,Vector2.ONE)
 		footprint.append(minimap.position+pos*minimap.size)
-	draw_polyline(footprint,WHITE,1,true)
-	draw_rect(minimap,LINE,false,1)
+	cv.draw_polyline(footprint,WHITE,1,true)
+	cv.draw_rect(minimap,LINE,false,1)
 	text_at("THEATER / CLICK TO PAN",minimap.position+Vector2(0,minimap.size.y+17),9,MUTED)
 
 func draw_guide() -> void:
 	var w:=size.x
 	var h:=size.y
-	draw_rect(Rect2(Vector2.ZERO,size),Color(0.035,0.043,0.035,0.87))
+	cv.draw_rect(Rect2(Vector2.ZERO,size),Color(0.035,0.043,0.035,0.87))
 	var r:=Rect2(w/2-350,h/2-252,700,504)
 	panel(r,INK)
 	text_at("OPERATION  /  01",r.position+Vector2(34,38),12,TEAL,true)
@@ -671,6 +770,7 @@ func draw_guide() -> void:
 	text_at("Arrows / screen edges pan  •  Wheel zoom  •  F focus  •  Space pause",r.position+Vector2(34,420),12,MUTED)
 	# Modal buttons replace background hit targets.
 	hits.clear()
+	modal=true
 	# One selector per listed scenario, sharing the 632 px row with 7 px gaps.
 	# Hidden legacy scenarios keep their numeric ids and appear only while active.
 	if scenario_entries.is_empty():
@@ -687,7 +787,7 @@ func draw_guide() -> void:
 	button("begin","DEPLOY  →",Rect2(r.position+Vector2(34,446),Vector2(632,38)))
 
 func draw_result() -> void:
-	draw_rect(Rect2(Vector2.ZERO,size),Color(0.035,0.043,0.035,0.82))
+	cv.draw_rect(Rect2(Vector2.ZERO,size),Color(0.035,0.043,0.035,0.82))
 	var r:=Rect2(size.x/2-270,size.y/2-150,540,300)
 	panel(r,INK)
 	var sim=battle.sim
@@ -696,4 +796,5 @@ func draw_result() -> void:
 	text_at(("Enemy base destroyed." if not sim.classic.is_empty() else "Sectors secured. Objective complete.") if sim.result=="VICTORY" else "Use cover, scout ahead, and reinforce before advancing.",r.position+Vector2(30,130),14,MUTED)
 	text_at("%02d:%02d   /   %d enemies destroyed   /   %d sections lost" % [int(sim.time)/60,int(sim.time)%60,sim.kills,sim.losses],r.position+Vector2(30,174),14,WHITE)
 	hits.clear()
+	modal=true
 	button("restart","REDEPLOY",Rect2(r.position+Vector2(30,215),Vector2(480,46)))

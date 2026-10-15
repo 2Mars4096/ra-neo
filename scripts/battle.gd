@@ -4,6 +4,7 @@ const Sim = preload("res://scripts/simulation.gd")
 const Visuals = preload("res://scripts/visuals.gd")
 const Effects = preload("res://scripts/effects.gd")
 const HUD = preload("res://scripts/hud.gd")
+const Motion = preload("res://scripts/unit_animation.gd")
 var sim := Sim.new()
 var art := Visuals.new()
 var effects := Effects.new()
@@ -44,6 +45,11 @@ var fx: Array[Dictionary] = []
 var fog_image := Image.create(48,36,false,Image.FORMAT_RGBA8)
 var fog_texture: ImageTexture
 var fog_clock := 0.0
+var shown_wetness:=-1.0
+var shown_fog_density:=-1.0
+const FOG_LIGHT:=Color("8eabb3")
+var fog_drawn_visible:Dictionary={}
+var fog_drawn_explored:=0
 var marker: Node3D
 var marker_time := 0.0
 var sound := AudioStreamPlayer.new()
@@ -60,6 +66,13 @@ var previous_frame_usec := 0
 var render_history:Dictionary = {}
 var contact_shadows:MultiMeshInstance3D
 var contact_shadow_count:=0
+# Opt-in presentation timing for headless profiling tools (off in play).
+var profiling_frames:=false
+var frame_profile:Dictionary={}
+func flap(key:String,started:int)->int:
+	var now:=Time.get_ticks_usec()
+	if profiling_frames:frame_profile[key]=frame_profile.get(key,0.0)+(now-started)/1000.0
+	return now
 
 func _ready() -> void:
 	if huge_world():MAX_ZOOM=float(sim.scenario.get("camera_max_zoom",220.0))
@@ -235,7 +248,8 @@ func world_pos(p: Vector2) -> Vector2:
 	return Vector2(ground.x,ground.z)
 
 func altitude(u: Dictionary) -> float:
-	return float(sim.definitions[u.kind].altitude)
+	# Strike drones carry a live altitude while they dive.
+	return float(u.get("altitude",sim.definitions[u.kind].altitude))
 
 func is_structure(u: Dictionary) -> bool:
 	return bool(u.get("structure",false)) or bool(sim.definitions.get(u.get("kind",""),{}).get("structure",false))
@@ -281,31 +295,72 @@ void fragment() { vec4 f = texture(fog_map, UV); ALBEDO=vec3(0.055,0.058,0.052);
 func update_fog_pixels() -> void:
 	for x in sim.terrain.fog_grid_size.x:
 		for y in sim.terrain.fog_grid_size.y:
-			var id:=Vector2i(x,y)
-			# Neutral shroud: unexplored ground stays legible as land, never reads as water.
-			var alpha:=0.0 if sim.visible_cells.has(id) else (0.34 if sim.explored.has(id) else 0.58)
-			fog_image.set_pixel(x,y,Color(0,0,0,alpha))
+			fog_image.set_pixel(x,y,fog_color(Vector2i(x,y)))
+	fog_drawn_visible=sim.visible_cells.duplicate()
+	fog_drawn_explored=sim.explored.size()
+
+func fog_color(id:Vector2i) -> Color:
+	# Neutral shroud: unexplored ground stays legible as land, never reads as water.
+	return Color(0,0,0,0.0 if sim.visible_cells.has(id) else (0.34 if sim.explored.has(id) else 0.58))
+
+# Play-time fog refresh: only cells entering or leaving sight, and newly explored
+# ones, change, so repaint those instead of the whole grid. Explored cells are only
+# ever appended, so new ones are the tail of its insertion-ordered keys. Returns
+# whether the texture needs an upload.
+func refresh_fog_pixels() -> bool:
+	if sim.explored.size()<fog_drawn_explored:
+		update_fog_pixels()
+		return true
+	var changed:=false
+	if sim.explored.size()>fog_drawn_explored:
+		var keys:Array=sim.explored.keys()
+		for i in range(fog_drawn_explored,keys.size()):fog_image.set_pixelv(keys[i],fog_color(keys[i]))
+		fog_drawn_explored=keys.size()
+		changed=true
+	for id in fog_drawn_visible:
+		if not sim.visible_cells.has(id):fog_image.set_pixelv(id,fog_color(id));changed=true
+	for id in sim.visible_cells:
+		if not fog_drawn_visible.has(id):fog_image.set_pixelv(id,fog_color(id));changed=true
+	if changed:fog_drawn_visible=sim.visible_cells.duplicate()
+	return changed
 
 func _physics_process(dt: float) -> void:
 	if benchmark or (not paused and not show_help):
 		var start:=Time.get_ticks_usec()
-		render_history.clear()
+		# Pre-tick poses for render interpolation, refreshed in place each tick.
 		for unit in sim.units:
-			if not sim.alive(unit):continue
-			render_history[unit.id]={"pos":unit.pos,"members":unit.members.map(func(m):return m.pos)}
+			if not sim.alive(unit):
+				render_history.erase(unit.id)
+				continue
+			var history:Dictionary=render_history.get(unit.id,{})
+			if history.is_empty():
+				history={"pos":unit.pos,"members":[]}
+				render_history[unit.id]=history
+			history.pos=unit.pos
+			var members:Array=history.members
+			members.resize(unit.members.size())
+			for i in members.size():members[i]=unit.members[i].pos
 		sim.tick(dt)
 		if benchmark and benchmark_ready and Time.get_ticks_msec()-bench_started>2000:
 			sim_costs.append((Time.get_ticks_usec()-start)/1000.0)
 
 func _process(dt: float) -> void:
 	var presentation_started:=Time.get_ticks_usec() if benchmark else 0
+	var lap:=Time.get_ticks_usec()
 	advance_zoom(dt)
 	weather_fx.sync(sim.weather,sim.time)
-	art.ground_material.set_shader_parameter("wetness",sim.weather.wetness)
+	# Material and environment writes re-send render state; only write changes.
+	if shown_wetness!=sim.weather.wetness:
+		shown_wetness=sim.weather.wetness
+		art.ground_material.set_shader_parameter("wetness",shown_wetness)
 	effects.wind=Vector3(sim.weather.wind.x,0,sim.weather.wind.y)
-	atmosphere.fog_enabled=sim.weather.rain>0.01
-	atmosphere.fog_light_color=Color("8eabb3")
-	atmosphere.fog_density=sim.weather.rain*0.0004
+	var fog_on:bool=sim.weather.rain>0.01
+	if atmosphere.fog_enabled!=fog_on:atmosphere.fog_enabled=fog_on
+	if atmosphere.fog_light_color!=FOG_LIGHT:atmosphere.fog_light_color=FOG_LIGHT
+	var density:float=sim.weather.rain*0.0004
+	if shown_fog_density!=density:
+		shown_fog_density=density
+		atmosphere.fog_density=density
 	toast_time=maxf(0,toast_time-dt)
 	marker_time=maxf(0,marker_time-dt)
 	marker.visible=marker_time>0
@@ -319,10 +374,11 @@ func _process(dt: float) -> void:
 		if Input.is_physical_key_pressed(KEY_DOWN): movement.y+=1
 		var mouse:=get_viewport().get_mouse_position()
 		var view:=get_viewport().get_visible_rect().size
-		if hud.action_at(mouse)=="" and mouse.y>0 and mouse.y<view.y:
+		var over_battlefield:bool=hud.action_at(mouse)==""
+		if over_battlefield and mouse.y>0 and mouse.y<view.y:
 			if mouse.x>=0 and mouse.x<10: movement.x-=1
 			if mouse.x<=view.x and mouse.x>view.x-10: movement.x+=1
-		if hud.action_at(mouse)=="" and mouse.x>0 and mouse.x<view.x:
+		if over_battlefield and mouse.x>0 and mouse.x<view.x:
 			if mouse.y>=0 and mouse.y<10: movement.y-=1
 			if mouse.y>view.y-10 and mouse.y<view.y: movement.y+=1
 		var right:=Vector2(camera.global_basis.x.x,camera.global_basis.x.z).normalized()
@@ -333,7 +389,9 @@ func _process(dt: float) -> void:
 		camera_focus.x+=pan.x
 		camera_focus.z+=pan.y
 		update_camera()
+	lap=flap("pre_sync",lap)
 	sync_units(dt)
+	lap=flap("sync_units",lap)
 	trail_clock-=dt
 	if trail_clock<=0:
 		trail_clock=0.13
@@ -346,7 +404,9 @@ func _process(dt: float) -> void:
 				unit_last_positions[unit.id]=unit.pos
 				if unit.hp<unit.max_hp*0.4 and unit.kind in ["tank","aa","helo","boat"]:
 					effects.damage_smoke(Vector3(unit.pos.x,altitude(unit)+1,unit.pos.y),unit.hp/unit.max_hp)
+	lap=flap("trails",lap)
 	consume_events()
+	lap=flap("events",lap)
 	for i in range(fx.size()-1,-1,-1):
 		fx[i].life-=dt
 		if fx[i].life<=0:
@@ -354,9 +414,9 @@ func _process(dt: float) -> void:
 			fx.remove_at(i)
 	fog_clock-=dt
 	if fog_clock<=0:
-		update_fog_pixels()
-		fog_texture.update(fog_image)
+		if refresh_fog_pixels():fog_texture.update(fog_image)
 		fog_clock=0.3
+	lap=flap("fog",lap)
 	for i in objective_nodes.size():
 		var show_capture_radius:=false
 		for id in selected:
@@ -370,12 +430,16 @@ func _process(dt: float) -> void:
 			var col:=Visuals.BLUE if owner==0 else Color("f0ba75")
 			objective_nodes[i].get_child(0).material_override=art.material(col,true)
 			objective_nodes[i].set_meta("owner",owner)
-	selected=selected.filter(func(id): return sim.alive(sim.get_unit(id)))
+	for id in selected:
+		if not sim.alive(sim.get_unit(id)):
+			selected=selected.filter(func(alive_id): return sim.alive(sim.get_unit(alive_id)))
+			break
 	if build_mode!="" and not sim.field_ops.is_empty() and selected_engineer()<0:
 		build_mode=""
 		notify("Placement cancelled • no living engineer selected")
 	if not sim.field_ops.is_empty():watch_sites()
-	hud.queue_redraw()
+	hud.frame()
+	lap=flap("post",lap)
 	if screenshot_path!="":
 		capture_frames+=1
 		if capture_frames==12:
@@ -416,16 +480,18 @@ func sync_units(dt: float) -> void:
 		var fraction:=1.0 if paused or show_help else Engine.get_physics_interpolation_fraction()
 		var history:Dictionary=render_history.get(u.id,{})
 		var display_pos:Vector2=u.pos
-		var display_members:Array=[]
+		var model: Node3D=node.get_meta("model")
+		# One interpolated-member array per model, refilled in place each frame.
+		if not model.has_meta("display_members"):model.set_meta("display_members",[])
+		var display_members:Array=model.get_meta("display_members")
+		display_members.resize(0 if history.is_empty() else u.members.size())
 		if not history.is_empty():
 			display_pos=(history.pos as Vector2).lerp(u.pos,fraction)
 			for i in u.members.size():
-				display_members.append((history.members[i] as Vector2).lerp(u.members[i].pos,fraction))
+				display_members[i]=(history.members[i] as Vector2).lerp(u.members[i].pos,fraction)
 		if garrisoned(u):display_pos=display_anchor(u)
-		node.position=Vector3(display_pos.x,altitude(u),display_pos.y)
-		var model: Node3D=node.get_meta("model")
+		Motion.set_position(node,Vector3(display_pos.x,altitude(u),display_pos.y))
 		model.set_meta("display_pos",display_pos)
-		model.set_meta("display_members",display_members)
 		if distant_shadows and not u.members.is_empty():
 			for i in u.members.size():
 				if u.members[i].hp<=0:continue
@@ -435,21 +501,25 @@ func sync_units(dt: float) -> void:
 		var heading:=atan2(-u.facing.x,-u.facing.y)
 		if u.get("structure",false) and not sim.field_ops.is_empty():
 			# Keep the placement turn (rotated linear works) instead of resetting it.
-			model.rotation=Vector3(0,PI/2 if u.get("rotated",false) else 0.0,0)
+			var placed:=Vector3(0,PI/2 if u.get("rotated",false) else 0.0,0)
+			if model.rotation!=placed:model.rotation=placed
 			preload("res://scripts/field_models.gd").sync_construction(model,u)
 		elif u.kind in ["tank","aa"]:
-			model.rotation.y=rotate_toward(model.rotation.y,heading,dt*1.8)
-		else:model.rotation.y=lerp_angle(model.rotation.y,heading,minf(1,dt*10))
+			Motion.set_rotation_axis(model,1,rotate_toward(model.rotation.y,heading,dt*1.8))
+		else:Motion.set_rotation_axis(model,1,lerp_angle(model.rotation.y,heading,minf(1,dt*10)))
 		var selection_node:Node3D=node.get_meta("selection")
 		selection_node.visible=selected.has(u.id)
-		selection_node.position.y=0.13-altitude(u)
+		Motion.set_position_axis(selection_node,1,0.13-altitude(u))
 		# A garrisoned section's ring encircles its building.
 		var ring_scale:=1.0
 		if garrisoned(u):
 			var bounds:Rect2=sim.Garrison.index(sim).buildings[u.garrison].bounds
 			ring_scale=(maxf(bounds.size.x,bounds.size.y)*0.5+1.2)/1.55
-		selection_node.scale=Vector3(ring_scale,1.0,ring_scale)
-		preload("res://scripts/unit_animation.gd").pose(model,u,sim,(1.0/30.0 if not model.has_meta("previous") else 0.0) if paused else maxf(dt,0.0001))
+		var ring:=Vector3(ring_scale,1.0,ring_scale)
+		if selection_node.scale!=ring:selection_node.scale=ring
+		var pose_lap:int=Time.get_ticks_usec() if profiling_frames else 0
+		Motion.pose(model,u,sim,(1.0/30.0 if not model.has_meta("previous") else 0.0) if paused else maxf(dt,0.0001))
+		if profiling_frames:flap("pose",pose_lap)
 
 	contact_shadows.multimesh.visible_instance_count=contact_shadow_count
 	contact_shadows.visible=camera_size>45.0 and contact_shadow_count>0

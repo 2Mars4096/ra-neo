@@ -14,6 +14,11 @@ static func clear(member:Dictionary) -> void:
 
 static func update(u:Dictionary,sim) -> void:
 	if u.members.is_empty() or not sim.scenario.get("autonomy",false):return
+	var t0:int=Time.get_ticks_usec() if sim.profiling else 0
+	_update(u,sim)
+	if sim.profiling:sim._lap("cover_update",t0)
+
+static func _update(u:Dictionary,sim) -> void:
 	var constrained:bool=u.has("building_id") or u.hold_command or u.get("regroup_active",false) or sim.time<u.get("cover_resume_after",0.0) or (not u.orders.is_empty() and u.orders[0].mode in ["move","retreat"]) or (not u.maneuver.is_empty() and u.maneuver.get("phase","")!="SUPPORT")
 	if constrained:
 		for member in u.members:clear(member)
@@ -71,6 +76,12 @@ static func update(u:Dictionary,sim) -> void:
 		sim.events.append({"type":"decision","unit":u.id,"phase":"COVER","reason":"Soldier moving to shelter","pos":result.pos})
 
 static func find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threats:Array=[]) -> Dictionary:
+	var t0:int=Time.get_ticks_usec() if sim.profiling else 0
+	var slot:=_find_slot(u,member,sim,threat,threats)
+	if sim.profiling:sim._lap("cover_find_slot",t0)
+	return slot
+
+static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threats:Array=[]) -> Dictionary:
 	if threats.is_empty() and not threat.is_empty():threats=[threat]
 	var candidates:Array=[]
 	var occupants:Array=sim.range_candidates(u.pos,LEASH*2+4) if sim.ticking else sim.units

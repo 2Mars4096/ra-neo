@@ -51,8 +51,12 @@ func run() -> void:
 	legacy_checks()
 	projection_checks()
 	integration_checks()
+	explosion_checks()
+	destruction_checks()
+	stress_checks()
 	FileAccess.open("res://artifacts/effects-budget.json",FileAccess.WRITE).store_string(JSON.stringify(evidence,"  "))
 	print("EFFECTS TESTS: ",checks," checks, ",errors," failures")
+	print("EFFECTS: ",checks," checks, ",errors," failures")
 	quit(1 if errors else 0)
 
 func shader_checks() -> void:
@@ -231,7 +235,7 @@ func staging_checks() -> void:
 	check(live(effects.ground,Effects.SCORCH)==0 and live(effects.volume,Effects.SPRAY)>=10,"sinking boat raises water, not scorch")
 	effects.clear()
 	effects.destroyed("factory",Vector3(50,0,50))
-	check(effects.cues.size()==3,"structure collapse adds staggered secondary blasts")
+	check(effects.cues.size()==4,"structure collapse adds staggered secondary blasts and a fuel flare")
 	release(effects)
 
 func lifecycle_checks() -> void:
@@ -561,3 +565,203 @@ func legacy_checks() -> void:
 	effects.explosion(Vector3(30,0.7,0))
 	check(effects.cues.size()==1 and live(effects.ground,Effects.SCORCH)==0,"legacy explosion is deferred to missile arrival")
 	release(effects)
+
+# ---------------------------------------------------------------- explosion variety
+func composition(effects) -> Dictionary:
+	var concrete:=0
+	for i in effects.volume.capacity:
+		if effects.volume.life[i]>0 and effects.volume.kind[i]==Effects.SMOKE and Color(effects.volume.color[i],1.0).is_equal_approx(Color(Explosions.CONCRETE,1.0)):concrete+=1
+	return {"smoke":live(effects.volume,Effects.SMOKE),"debris":live(effects.volume,Effects.DEBRIS),"spray":live(effects.volume,Effects.SPRAY),"fire":live(effects.volume,Effects.FIRE),
+		"flash":live(effects.glow,Effects.FLASH),"streak":live(effects.glow,Effects.STREAK),"ember":live(effects.glow,Effects.EMBER),
+		"scorch":live(effects.ground,Effects.SCORCH),"dust_ring":live(effects.ground,Effects.DUST_RING),"foam_ring":live(effects.ground,Effects.FOAM_RING),"concrete":concrete}
+
+# Arrival effects only: the round's surface comes from fire(), then the pools are emptied before it lands.
+func arrival(effects, weapon:String, target_kind:String, hit:bool, water:bool=false, to:=Vector3(20,0.8,0)) -> Dictionary:
+	effects.clear()
+	effects.fire(weapon,Vector3(0,0.95,0),to,hit,water,target_kind)
+	var shot:Dictionary=effects.projectiles[0]
+	effects.clear()
+	effects._arrive(shot)
+	return composition(effects)
+
+const Explosions=preload("res://scripts/effects_explosions.gd")
+
+func explosion_checks() -> void:
+	var effects=fresh()
+	var sig:={}
+	sig["tank_he_ground"]=arrival(effects,"tank","rifle",false)
+	sig["atgm_ground"]=arrival(effects,"atgm","rifle",false)
+	sig["atgm_armor"]=arrival(effects,"atgm","tank",true)
+	sig["rocket_ground"]=arrival(effects,"helo","rifle",false)
+	sig["at_gun_armor"]=arrival(effects,"at_gun","tank",true)
+	sig["at_gun_ground"]=arrival(effects,"at_gun","rifle",false)
+	sig["fpv_ground"]=arrival(effects,"fpv_drone","rifle",true,false,Vector3(20,0.8,0))
+	sig["tank_bunker"]=arrival(effects,"tank","bunker",true)
+	sig["rifle_bunker"]=arrival(effects,"rifle","bunker",true)
+	sig["rifle_tank"]=arrival(effects,"rifle","tank",true)
+	sig["atgm_water"]=arrival(effects,"atgm","boat",false,true)
+	sig["tank_trench"]=arrival(effects,"tank","fighting_trench",true)
+	evidence["impact_signatures"]=sig
+	var t:Dictionary=sig.tank_he_ground
+	var m:Dictionary=sig.atgm_ground
+	check(t.debris>=6 and t.smoke>=7 and t.dust_ring==1 and t.scorch==1 and t.flash==1,"tank HE: one flash, dirt fountain, dust geyser, blast ring and scorch")
+	check(m.flash==2 and m.fire==2 and m.debris<=3 and m.scorch==1 and m.smoke>=3,"ATGM: sharp double flash, fireball and dark smoke rather than a dirt fountain")
+	check(t.debris>m.debris and m.fire>t.fire,"tank HE throws more soil; the missile burns more")
+	check(sig.atgm_armor.scorch==0 and sig.atgm_armor.streak>=10 and sig.atgm_armor.fire==2,"ATGM on armour: jet sparks and fireball, no ground scorch")
+	check(sig.rocket_ground.flash==2 and sig.rocket_ground.fire==2,"helicopter rockets share the warhead recipe")
+	check(sig.at_gun_armor.ember>=1 and sig.at_gun_armor.streak>=14 and sig.at_gun_armor.fire==0,"AT gun AP strike: bright hot spot and dense spark fan, no fireball")
+	check(sig.at_gun_ground.scorch==0 and sig.at_gun_ground.debris>=1 and sig.at_gun_ground.fire==0,"AT gun round skips through soil without an HE crater")
+	check(sig.fpv_ground.flash==1 and sig.fpv_ground.fire==1 and sig.fpv_ground.scorch==1 and sig.fpv_ground.streak>=12,"FPV drone strike: tight burst, fragment spray, small scorch")
+	check(sig.tank_bunker.concrete>=4 and sig.tank_bunker.debris>=6 and sig.tank_bunker.scorch==0,"shell on a bunker throws masonry dust and chips")
+	check(sig.rifle_bunker.concrete==1 and sig.rifle_bunker.streak==0 and sig.rifle_bunker.debris==2,"rifle on concrete chips masonry instead of sparking")
+	check(sig.rifle_tank.streak>=2 and sig.rifle_tank.concrete==0,"rifle on armour still ricochets")
+	check(sig.atgm_water.spray>=6 and sig.atgm_water.scorch==0 and sig.atgm_water.foam_ring>=1,"missile into water raises a splash column")
+	check(sig.tank_trench.dust_ring==1 and sig.tank_trench.concrete==0,"trench and berm hits read as soil")
+	var distinct:={}
+	for key in ["tank_he_ground","atgm_ground","atgm_armor","at_gun_armor","at_gun_ground","fpv_ground","tank_bunker","rifle_bunker"]:distinct[JSON.stringify(sig[key])]=true
+	check(distinct.size()==8,"every weapon class has a distinct impact signature")
+	# Bloom: the explosion lights the ground with a soft additive card instead of a dynamic light.
+	effects.clear()
+	effects.vehicle_explosion(Vector3(10,0.7,10))
+	var widest:=0.0
+	for i in effects.glow.capacity:
+		if effects.glow.life[i]>0 and effects.glow.kind[i]==Effects.EMBER:widest=maxf(widest,effects.glow.size0[i])
+	check(widest>=4.0 and widest<=5.2,"vehicle kill spills a %.1f m firelight bloom"%widest)
+	var lights:=0
+	for child in effects.get_children():if child is Light3D:lights+=1
+	check(lights==0,"effects add no dynamic lights")
+	release(effects)
+
+func destruction_checks() -> void:
+	var effects=fresh()
+	var out:={}
+	for spec in [["engineer",Vector3(5,0.7,5),false],["fpv_drone",Vector3(5,0.7,5),false],["fpv_drone",Vector3(5,7.0,5),false],["fpv_drone",Vector3(5,0.7,5),true],
+			["mystery_walker",Vector3(5,0.7,5),false],["mystery_walker",Vector3(5,0.7,5),true],["bunker",Vector3(5,0.7,5),false],["ammo_depot",Vector3(5,0.7,5),false],
+			["at_gun",Vector3(5,0.7,5),false],["concertina_wire",Vector3(5,0.7,5),false],["aid_post",Vector3(5,0.7,5),false],["aa",Vector3(5,0.7,5),false],["tank",Vector3(5,0.7,5),false]]:
+		effects.clear()
+		effects.destroyed(spec[0],spec[1],spec[2])
+		var c:=composition(effects)
+		c["cues"]=effects.cues.size()
+		c["emitters"]=effects.emitters.size()
+		out["%s%s%s"%[spec[0],"_air" if spec[1].y>2 else "","_water" if spec[2] else ""]]=c
+	evidence["destruction_signatures"]=out
+	check(out.engineer.flash==0 and out.engineer.fire==0 and out.engineer.scorch==0,"engineer casualty is dust, not a vehicle explosion")
+	check(out.fpv_drone.fire==1 and out.fpv_drone.scorch==1 and out.fpv_drone.emitters==0 and out.fpv_drone.cues==0,"FPV drone kill is a small, complete blast")
+	check(out.fpv_drone_air.scorch==0 and out.fpv_drone_air.fire<=1 and out.fpv_drone_air.emitters==0,"FPV drone shot down bursts in the air")
+	check(out.fpv_drone_water.spray>=6 and out.fpv_drone_water.scorch==0,"FPV drone over water splashes")
+	check(out.mystery_walker.flash==1 and out.mystery_walker.fire==2 and out.mystery_walker.emitters==0 and out.mystery_walker.scorch==1,"unknown kinds get a generic small explosion")
+	check(out.mystery_walker_water.spray>=6 and out.mystery_walker_water.scorch==0,"unknown kinds on water splash")
+	check(out.bunker.concrete>=10 and out.bunker.debris>=8 and out.bunker.emitters==1,"bunker collapses into concrete dust and slab chunks")
+	check(out.ammo_depot.cues>=5 and out.ammo_depot.emitters==2,"ammo depot cooks off in a chain")
+	check(out.at_gun.cues==4 and out.at_gun.emitters==1,"AT gun pit explodes with ammunition pops")
+	check(out.concertina_wire.fire==0 and out.concertina_wire.flash==0,"wire is torn apart without a fireball")
+	check(out.aid_post.emitters==1 and out.aid_post.fire>=2,"tents burn")
+	check(out.aa.cues==1 and out.tank.cues==4,"every hull has a secondary pop; tanks cook off three more times")
+	# Lingering wreck: black column still rising 10 s after the kill; scorch fades between 30 and 60 s.
+	effects.clear()
+	effects.destroyed("tank",Vector3(30,0.7,30))
+	advance(effects,10.0,1.0/30.0)
+	var column:=0
+	var top:=0.0
+	for i in effects.volume.capacity:
+		if effects.volume.life[i]>0 and effects.volume.kind[i]==Effects.SMOKE and effects.volume.pos[i].y>2.0:
+			column+=1
+			top=maxf(top,effects.volume.pos[i].y)
+	evidence["wreck_column_at_10s"]={"puffs":column,"top":snappedf(top,0.1)}
+	check(column>=4 and top>4.0,"black smoke column still rising at 10 s (%d puffs, top %.1f m)"%[column,top])
+	check(effects.emitters.size()==1,"wreck still smoulders at 10 s")
+	advance(effects,20.0,0.1)
+	check(live(effects.ground,Effects.SCORCH)==1,"scorch decal persists at 30 s")
+	advance(effects,30.0,0.1)
+	check(live(effects.ground,Effects.SCORCH)==0 and effects.emitters.is_empty(),"scorch fades out by 60 s")
+	release(effects)
+
+func descendants(node:Node) -> int:
+	var count:=node.get_child_count()
+	for child in node.get_children():count+=descendants(child)
+	return count
+
+# Black Sea Harbor through battle.consume_events(): 300 shots of every kind (including emplacement and unknown
+# kinds) and 30 destructions (water, field works, FPV, unknown). The node tree must not grow, every pool and
+# list stays inside its cap, and everything drains.
+func stress_checks() -> void:
+	var configs:Array=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
+	var harbor:=-1
+	for i in configs.size():
+		if configs[i].id=="black_sea_harbor":harbor=i
+	check(harbor>=0,"black_sea_harbor scenario exists")
+	var Sim=load("res://scripts/simulation.gd")
+	var previous:int=Sim.scenario_selection
+	Sim.scenario_selection=harbor
+	var battle=load("res://scenes/main.tscn").instantiate()
+	root.add_child(battle)
+	Sim.scenario_selection=previous
+	battle.set_process(false)
+	battle.set_physics_process(false)
+	battle.effects.set_process(false)
+	var effects=battle.effects
+	effects.muted=true
+	effects.clear()
+	var sim=battle.sim
+	var size:Vector2=sim.terrain.world_size
+	# A land/water pair near the middle of the map for water impacts and kills.
+	var land:=Vector2(size.x*0.5,size.y*0.5)
+	var sea:=Vector2(-1,-1)
+	for x in range(0,int(size.x),8):
+		for y in range(0,int(size.y),16):
+			if sea.x<0 and sim.terrain.is_water(Vector2(x,y)):sea=Vector2(x,y)
+	check(sea.x>=0,"harbor has water for splash checks")
+	var nodes_before:=descendants(effects)
+	var objects_before:=Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
+	var kinds:=["rifle","atgm","tank","aa","drone","helo","boat","bunker","at_gun","fpv_drone","railgun"]
+	var targets:=["rifle","tank","boat","helo","drone","bunker","fighting_trench","engineer","ammo_depot",""]
+	var dead:=["tank","aa","boat","helo","drone","rifle","engineer","bunker","at_gun","ammo_depot","fpv_drone","mystery_walker","concertina_wire","command_post","harvester"]
+	var worst:={"volume":0,"glow":0,"ground":0,"debris":0,"cues":0,"emitters":0,"projectiles":0,"visible":0}
+	var samples:Array[float]=[]
+	var shots:=0
+	var kills:=0
+	var above_top:=0
+	for frame in 600:
+		if frame<300:
+			var kind:String=kinds[frame%kinds.size()]
+			var on_water:=frame%7==0 and sea.x>=0
+			var to:Vector2=(sea if on_water else land)+Vector2(frame%13-6,frame%9-4)
+			var from:=to+Vector2(-24+frame%5,10)
+			var air:bool=targets[frame%targets.size()] in ["helo","drone"]
+			sim.events.append({"type":"shot","from":from,"to":to,"kind":kind,"target_kind":targets[frame%targets.size()],"hit":frame%3!=0,"from_y":0.95,"to_y":9.0 if air else 0.8,"visible":true})
+			shots+=1
+		if frame%20==0 and kills<30:
+			var on_water:=kills%4==0 and sea.x>=0
+			var at:Vector2=(sea if on_water else land)+Vector2(kills%5*3,kills%3*3)
+			sim.events.append({"type":"destroyed","kind":dead[kills%dead.size()],"pos":at,"visible":true})
+			kills+=1
+		battle.consume_events()
+		var started:=Time.get_ticks_usec()
+		effects._process(1.0/60.0)
+		samples.append((Time.get_ticks_usec()-started)/1000.0)
+		var stats:Dictionary=effects.stats()
+		for key in ["volume","glow","ground","cues","emitters","projectiles","visible"]:worst[key]=maxi(worst[key],stats[key])
+		worst.debris=maxi(worst.debris,effects.volume.kind_live[Effects.DEBRIS])
+		for pool in [effects.volume,effects.glow,effects.ground]:
+			for i in range(pool.top+1,pool.capacity):
+				if pool.life[i]>0.0:above_top+=1
+	check(shots==300 and kills==30,"stress fed 300 shots and 30 destructions")
+	check(above_top==0,"no live particle sits above its pool's scan limit")
+	samples.sort()
+	evidence["stress"]={"worst":worst,"update_ms_p50":samples[samples.size()/2],"update_ms_p95":samples[int(samples.size()*0.95)],"update_ms_max":samples.back(),"nodes":nodes_before}
+	check(descendants(effects)==nodes_before,"effects node tree does not grow under fire (%d nodes)"%nodes_before)
+	check(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)==objects_before,"no nodes allocated anywhere during the stress run")
+	check(worst.volume<=Effects.VOLUME_CAPACITY and worst.glow<=Effects.GLOW_CAPACITY and worst.ground<=Effects.GROUND_CAPACITY and worst.visible<=Effects.CAPACITY,"pools stay within capacity: %s"%worst)
+	check(worst.debris<=Effects.DEBRIS_CAP,"debris capped at %d (peak %d)"%[Effects.DEBRIS_CAP,worst.debris])
+	check(worst.emitters<=Effects.EMITTER_CAPACITY and Effects.EMITTER_CAPACITY<=24,"smoke columns capped at %d"%Effects.EMITTER_CAPACITY)
+	check(worst.cues<=Effects.CUE_CAPACITY and worst.projectiles<=Effects.PROJECTILE_CAPACITY,"cue and projectile lists bounded")
+	for pool in [effects.volume,effects.glow,effects.ground]:
+		var counted:=0
+		for k in pool.kind_live:counted+=k
+		check(counted==pool.live and pool.free_slots.size()+pool.live==pool.capacity,"per-kind counts and free list agree")
+	advance(effects,70.0,0.1)
+	var drained:Dictionary=effects.stats()
+	check(drained.visible==0 and drained.volume==0 and drained.glow==0 and drained.ground==0 and drained.cues==0 and drained.emitters==0 and drained.projectiles==0,"stress effects drain completely")
+	check(effects.volume.kind_live[Effects.DEBRIS]==0,"debris count returns to zero")
+	root.remove_child(battle)
+	battle.free()

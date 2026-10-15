@@ -337,6 +337,13 @@ func make_unit(parent: Node3D, u: Dictionary) -> Node3D:
 		build_field_model(model,u.kind)
 		# Linear works turned during placement; footprint width/depth swap in FieldOps.
 		if u.get("rotated",false):model.rotation.y=PI/2
+	elif u.kind=="fpv_drone":
+		# Small strike quadcopter: the scout airframe at under half size.
+		var airframe:=Node3D.new()
+		airframe.name="Airframe"
+		airframe.scale=Vector3.ONE*0.45
+		model.add_child(airframe)
+		models.build(airframe,"drone",u.team)
 	else:
 		models.build(model,u.kind,u.team)
 	bake_model(model)

@@ -224,6 +224,39 @@ func _land_cell_solid(point:Vector2,radius:float,profile:String) -> bool:
 	if solid:return true
 	return profile_barrier(point,radius+nav_cell_size*0.5,profile)
 
+# Coarse vehicle grids: a cell whose centre is too close to geometry stays open
+# when one of its sub-points fits the hull. Paths then pass through that point
+# (the cell's anchor), so 4 u cells no longer close gaps a vehicle fits through.
+const ANCHOR_ROOM:=0.5
+const SHORTCUT_ROOM:=0.3
+const ANCHOR_OFFSETS:=[Vector2(1,0),Vector2(-1,0),Vector2(0,1),Vector2(0,-1),Vector2(1,1),Vector2(-1,1),Vector2(1,-1),Vector2(-1,-1)]
+func _refresh_land_cell(grid:AStarGrid2D,id:Vector2i,radius:float,profile:String)->void:
+	var point:=nav_center(id)
+	var anchors:Dictionary=grid.get_meta("anchors",{})
+	anchors.erase(id)
+	var solid:=_land_cell_solid(point,radius,profile)
+	if solid and nav_cell_size>=2.0 and profile in VEHICLE_PROFILES and not profile_barrier(point,radius+nav_cell_size*0.5,profile):
+		var spacing:=nav_cell_size/3.0
+		var reach:=spacing*1.415
+		var saved:=crush_pass
+		crush_pass=profile=="tracked"
+		# Clearance changes by at most the offset, so a centre that fails at
+		# radius-reach rules out every sub-point (one cheap test for wall cells).
+		# Prefer a sub-point with room to spare so routes keep off the walls.
+		if radius<=reach+0.01 or traversable(point,"land",radius-reach):
+			var fit:=Vector2.INF
+			for offset in ANCHOR_OFFSETS:
+				var candidate:Vector2=point+offset*spacing
+				if not traversable(candidate,"land",radius):continue
+				if traversable(candidate,"land",radius+ANCHOR_ROOM):fit=candidate;break
+				if not fit.is_finite():fit=candidate
+			if fit.is_finite():anchors[id]=fit;solid=false
+		crush_pass=saved
+	grid.set_point_solid(id,solid)
+
+func _anchor(anchors:Dictionary,id:Vector2i)->Vector2:
+	return anchors.get(id,nav_center(id))
+
 # Field zones that protect infantry standing inside them (trench, hedgehog belt).
 func zone_cover(p:Vector2) -> bool:
 	for zone in _field_zones_at(p):
@@ -296,8 +329,7 @@ func update_field_zones(zones:Array)->bool:
 				var bounds:Rect2=rect.grow(radius+0.27+nav_cell_size)
 				for x in range(maxi(0,floori(bounds.position.x/nav_cell_size)),mini(nav_size.x,ceili(bounds.end.x/nav_cell_size))):
 					for y in range(maxi(0,floori(bounds.position.y/nav_cell_size)),mini(nav_size.y,ceili(bounds.end.y/nav_cell_size))):
-						var cell_id:=Vector2i(x,y)
-						grid.set_point_solid(cell_id,_land_cell_solid(nav_center(cell_id),radius+0.15,profile))
+						_refresh_land_cell(grid,Vector2i(x,y),radius+0.15,profile)
 	return true
 
 func surface_name(p:Vector2) -> String:
@@ -390,14 +422,15 @@ func update_field_geometry(blocks:Array,covers:Array)->bool:
 			var radius:float=grid.get_meta("navigation_radius")
 			var affected:Dictionary={}
 			for rect in changed:
-				# nav_grid adds .15, traversable adds .12 for rectangles.
-				var bounds:Rect2=rect.grow(radius+0.27)
+				# nav_grid adds .15, traversable adds .12 for rectangles; anchors
+				# reach a further sub-cell diagonal.
+				var bounds:Rect2=rect.grow(radius+0.27+nav_cell_size*0.48)
 				for x in range(maxi(0,floori(bounds.position.x/nav_cell_size)),mini(nav_size.x,ceili(bounds.end.x/nav_cell_size))):
 					for y in range(maxi(0,floori(bounds.position.y/nav_cell_size)),mini(nav_size.y,ceili(bounds.end.y/nav_cell_size))):
 						affected[Vector2i(x,y)]=true
 			var grid_profile:=str(key).get_slice(":",2)
 			for cell_id in affected:
-				grid.set_point_solid(cell_id,_land_cell_solid(nav_center(cell_id),radius+0.15,grid_profile))
+				_refresh_land_cell(grid,cell_id,radius+0.15,grid_profile)
 	# Field cover changes protection, not the underlying soil/road firmness.
 	# Other showcase scenarios derive surface roughness from dynamic blocks.
 	if not changed.is_empty() and style=="showcase" and not field_mode:
@@ -453,10 +486,12 @@ func nav_grid(domain: String, radius: float, profile:String="default") -> AStarG
 	grid.offset=Vector2.ONE*nav_cell_size*0.5
 	grid.diagonal_mode=AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
 	grid.update()
+	grid.set_meta("anchors",{})
 	for x in nav_size.x:
 		for y in nav_size.y:
 			var p:=nav_center(Vector2i(x,y))
-			grid.set_point_solid(Vector2i(x,y),_land_cell_solid(p,radius+0.15,profile) if domain=="land" else not traversable(p,domain,radius+0.15))
+			if domain=="land":_refresh_land_cell(grid,Vector2i(x,y),radius+0.15,profile)
+			else:grid.set_point_solid(Vector2i(x,y),not traversable(p,domain,radius+0.15))
 			grid.set_point_weight_scale(Vector2i(x,y),weights[x*nav_size.y+y] if domain=="land" else 1.0)
 	grid.set_meta("weight_epoch",navigation_weight_epoch)
 	grid.set_meta("navigation_radius",radius)
@@ -482,11 +517,12 @@ func nearest_cell(p: Vector2, grid: AStarGrid2D, domain: String, radius: float) 
 	var base:=nav_cell(p)
 	var best:=Vector2i(-1,-1)
 	var distance:=INF
+	var anchors:Dictionary=grid.get_meta("anchors",{})
 	for x in range(base.x-3,base.x+4):
 		for y in range(base.y-3,base.y+4):
 			var id:=Vector2i(x,y)
 			if not grid.is_in_boundsv(id) or grid.is_point_solid(id): continue
-			var center:=nav_center(id)
+			var center:=_anchor(anchors,id)
 			var dist:=p.distance_squared_to(center)
 			if dist<distance and segment_clear(p,center,domain,radius):
 				distance=dist
@@ -520,7 +556,11 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 	if radius<0: radius=default_radius(domain)
 	if not traversable(from,domain,radius) or not traversable(to,domain,radius): return result
 	var direct_clear:bool=(domain=="air" or segment_clear(from,to,domain,radius)) and avoids_bodies(from,to,avoid)
-	if direct_clear and (domain!="land" or segment_travel_cost(from,to,domain,profile)<=from.distance_to(to)*1.01):
+	# Hulls cannot trace a line exactly (and footprints are sampled), so vehicle
+	# shortcuts keep a margin. Every published edge still clears the true radius.
+	var room:=radius+(SHORTCUT_ROOM if domain=="land" and profile in VEHICLE_PROFILES else 0.0)
+	var direct_roomy:bool=direct_clear and (room==radius or segment_clear(from,to,domain,room))
+	if direct_roomy and (domain!="land" or segment_travel_cost(from,to,domain,profile)<=from.distance_to(to)*1.01):
 		result.append(to)
 		return result
 	var grid:=nav_grid(domain,radius,profile)
@@ -529,13 +569,14 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 	if start.x<0 or end.x<0:
 		if direct_clear:result.append(to)
 		return result
+	var anchors:Dictionary=grid.get_meta("anchors",{})
 	var changed:Array[Vector2i]=[]
 	for body in avoid:
 		for x in range(maxi(0,floori((body.pos.x-body.radius)/nav_cell_size)),mini(nav_size.x,ceili((body.pos.x+body.radius)/nav_cell_size))):
 			for y in range(maxi(0,floori((body.pos.y-body.radius)/nav_cell_size)),mini(nav_size.y,ceili((body.pos.y+body.radius)/nav_cell_size))):
 				var id:=Vector2i(x,y)
 				if id==start or id==end or grid.is_point_solid(id):continue
-				if (nav_center(id)).distance_to(body.pos)<body.radius:
+				if _anchor(anchors,id).distance_to(body.pos)<body.radius:
 					grid.set_point_solid(id,true);changed.append(id)
 	# The nearest cell center can be inside a neighboring body even when the
 	# actual position is clear. Pick a reachable center before asking AStar.
@@ -545,7 +586,7 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 		for x in range(maxi(0,start.x-3),mini(nav_size.x,start.x+4)):
 			for y in range(maxi(0,start.y-3),mini(nav_size.y,start.y+4)):
 				var candidate:=Vector2i(x,y)
-				var point:=nav_center(candidate)
+				var point:=_anchor(anchors,candidate)
 				if grid.is_point_solid(candidate) or not segment_clear(from,point,domain,radius) or not avoids_bodies(from,point,avoid):continue
 				if from.distance_squared_to(point)<best_distance:
 					best_distance=from.distance_squared_to(point);safe_start=candidate
@@ -554,36 +595,64 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 			if direct_clear:result.append(to)
 			return result
 		start=safe_start
-	var ids:=grid.get_id_path(start,end)
+	var ids:Array[Vector2i]=[]
+	var raw: Array[Vector2]=[]
+	# An anchored cell can link to a neighbour across thin geometry. When such an
+	# edge fails, close its anchored cells for this query and plan again.
+	var skip:=0 if anchors.is_empty() else 2
+	for attempt in 5:
+		ids=grid.get_id_path(start,end)
+		raw.clear()
+		for id in ids:raw.append(_anchor(anchors,id))
+		raw.append(to)
+		if ids.is_empty() or anchors.is_empty():break
+		var failed:=_first_blocked_edge(from,raw,domain,radius,avoid,skip)
+		if failed<0:break
+		var closed:=false
+		# Last attempt: plan on cell centres only (the conservative grid).
+		for k in (range(ids.size()) if attempt==3 else [failed-1,failed]):
+			if k<0 or k>=ids.size() or ids[k]==start or ids[k]==end or not anchors.has(ids[k]):continue
+			grid.set_point_solid(ids[k],true);changed.append(ids[k]);closed=true
+		if attempt==3:
+			for id in anchors:
+				if id!=start and id!=end and not grid.is_point_solid(id):grid.set_point_solid(id,true);changed.append(id)
+		if not closed:break
 	for id in changed:grid.set_point_solid(id,false)
 	if ids.is_empty():
 		if direct_clear:result.append(to)
 		return result
 	# String-pull only where the whole footprint clears geometry.
-	var raw: Array[Vector2]=[]
-	for id in ids: raw.append(nav_center(id))
-	raw.append(to)
 	var origin:=from
 	var index:=0
 	while index<raw.size():
 		# Grid cells alone do not certify their connecting edges (or dynamic
 		# exclusions at the end cell). Never publish an unchecked first edge.
-		if not segment_clear(origin,raw[index],domain,radius) or not avoids_bodies(origin,raw[index],avoid):
+		# Anchored routes may step over a node whose own edge clips a corner.
+		index=_reach(origin,raw,index,domain,radius,avoid,skip)
+		if index<0:
 			result.clear()
 			if direct_clear:result.append(to)
 			return result
 		var furthest:=index
-		var raw_cost:=segment_travel_cost(origin,raw[index],domain,profile)
-		# Bounded look-ahead keeps smoothing linear in route length.
+		var raw_costs:Array[float]=[segment_travel_cost(origin,raw[index],domain,profile)]
+		# Bounded look-ahead keeps smoothing linear in route length. Find the
+		# visible stretch, then price shortcuts from its far end back: the first
+		# acceptable one is the furthest (as pricing every node found), and most
+		# nodes skip the sampled travel-cost check.
+		var visible:=index
 		for next in range(index+1,mini(raw.size(),index+17)):
 			if origin.distance_to(raw[next])>60.0:break
-			raw_cost+=segment_travel_cost(raw[next-1],raw[next],domain,profile)
-			if not segment_clear(origin,raw[next],domain,radius) or not avoids_bodies(origin,raw[next],avoid): break
-			if segment_travel_cost(origin,raw[next],domain,profile)<=raw_cost*1.025:furthest=next
+			raw_costs.append(raw_costs.back()+segment_travel_cost(raw[next-1],raw[next],domain,profile))
+			if not segment_clear(origin,raw[next],domain,room) or not avoids_bodies(origin,raw[next],avoid): break
+			visible=next
+		for next in range(visible,index,-1):
+			if segment_travel_cost(origin,raw[next],domain,profile)<=raw_costs[next-index]*1.025:
+				furthest=next
+				break
 		result.append(raw[furthest])
 		origin=raw[furthest]
 		index=furthest+1
-	if direct_clear:
+	if direct_roomy:
 		var route_cost:=0.0
 		var previous:=from
 		for point in result:
@@ -591,6 +660,24 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 		if segment_travel_cost(from,to,domain,profile)<=route_cost:
 			result.clear();result.append(to)
 	return result
+
+# First raw node at or up to `skip` nodes after index reachable from origin
+# with a clear footprint, or -1.
+func _reach(origin:Vector2,raw:Array[Vector2],index:int,domain:String,radius:float,avoid:Array,skip:int)->int:
+	for next in range(index,mini(raw.size(),index+skip+1)):
+		if segment_clear(origin,raw[next],domain,radius) and avoids_bodies(origin,raw[next],avoid):return next
+	return -1
+
+# Index of the first raw node that cannot be reached from the route so far,
+# or -1 when the whole chain clears geometry and avoided bodies.
+func _first_blocked_edge(from:Vector2,raw:Array[Vector2],domain:String,radius:float,avoid:Array,skip:int)->int:
+	var previous:=from
+	var index:=0
+	while index<raw.size():
+		var next:=_reach(previous,raw,index,domain,radius,avoid,skip)
+		if next<0:return index
+		previous=raw[next];index=next+1
+	return -1
 
 func segment_travel_cost(a:Vector2,b:Vector2,domain:String="land",profile:String="default")->float:
 	var length:=a.distance_to(b)
@@ -673,10 +760,10 @@ func _refresh_land_cells(rects:Array)->void:
 		var radius:float=grid.get_meta("navigation_radius")
 		var profile:=str(key).get_slice(":",2)
 		for rect in rects:
-			var bounds:Rect2=rect.grow(radius+0.27)
+			var bounds:Rect2=rect.grow(radius+0.27+nav_cell_size*0.48)
 			for x in range(maxi(0,floori(bounds.position.x/nav_cell_size)),mini(nav_size.x,ceili(bounds.end.x/nav_cell_size))):
 				for y in range(maxi(0,floori(bounds.position.y/nav_cell_size)),mini(nav_size.y,ceili(bounds.end.y/nav_cell_size))):
-					grid.set_point_solid(Vector2i(x,y),_land_cell_solid(nav_center(Vector2i(x,y)),radius+0.15,profile))
+					_refresh_land_cell(grid,Vector2i(x,y),radius+0.15,profile)
 
 func hard_cover_props()->Array:
 	return prop_blocks.filter(func(r):return maxf(r.size.x,r.size.y)>=1.5)

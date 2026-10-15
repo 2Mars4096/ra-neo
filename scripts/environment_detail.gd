@@ -245,6 +245,74 @@ static func _build_harbor(art,parent:Node3D,terrain,architecture:Array)->void:
 		var cap=art.cylinder(group,Vector3(p.x,0.016,p.y),carriage/2,0.012,Color("575b55"))
 		cap.material_override=art.road_material()
 	_build_harbor_zones(art,group,terrain,_harbor_config(terrain))
+	_merge_flat_detail(group)
+
+# Ground detail is flush paint, kerbs and slabs no more than 3 cm high: hundreds
+# of separate pieces cost one draw each, plus a shadow-pass draw for a shadow
+# under 3 cm long (below a shadow texel). None casts shadows (all still receive
+# them). Surfaces whose shading does not depend on object space (world-space
+# asphalt, flat standard paint) merge per material into 128 m tiles, which keeps
+# frustum culling local; miniature-paint pieces sample their atlas in object
+# space, so they keep their own node to look exactly the same.
+const DETAIL_TILE:=128.0
+static func _merge_flat_detail(group:Node3D)->void:
+	var batches:Dictionary={}
+	var slots:Dictionary={}
+	for child in group.get_children():_collect_flat(child,Transform3D.IDENTITY,batches,slots)
+	for child in group.get_children():
+		if child.get_meta("merged",false):child.free()
+	var keys:Array=batches.keys()
+	keys.sort()
+	for key in keys:
+		var mesh:=MeshInstance3D.new()
+		mesh.name="DetailTile_%d_%d_%d"%[key.x,key.y,key.z]
+		mesh.mesh=batches[key].surface.commit()
+		mesh.material_override=batches[key].material
+		mesh.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		group.add_child(mesh)
+
+static func _mergeable(material:Material)->bool:
+	if material is StandardMaterial3D:return material.albedo_texture==null
+	return material is ShaderMaterial and material.shader!=null and material.shader.resource_path.ends_with("road_surface.gdshader")
+
+# Collects mergeable meshes; returns whether the whole subtree was merged (and
+# may be freed). Kept meshes stop casting their sub-texel shadows.
+static func _collect_flat(node:Node,ancestor:Transform3D,batches:Dictionary,slots:Dictionary)->bool:
+	if not node is Node3D:return false
+	var transform:Transform3D=ancestor*node.transform
+	var merged:=true
+	if node is MeshInstance3D and node.mesh!=null:
+		var all:bool=node.visible
+		for index in node.mesh.get_surface_count():all=all and _mergeable(node.get_active_material(index))
+		if not all:
+			node.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			merged=false
+	if node is MeshInstance3D and node.mesh!=null and merged:
+		var tile:=Vector2i(floori(transform.origin.x/DETAIL_TILE),floori(transform.origin.z/DETAIL_TILE))
+		for index in node.mesh.get_surface_count():
+			var material:Material=node.get_active_material(index)
+			# Stable small index per material instance (keys sort deterministically).
+			var id:int=material.get_instance_id() if material!=null else 0
+			if not slots.has(id):slots[id]=slots.size()
+			var slot:int=slots[id]
+			var key:=Vector3i(tile.x,tile.y,slot)
+			if not batches.has(key):
+				var surface:=SurfaceTool.new();surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+				batches[key]={"surface":surface,"material":material}
+			var indexed:=SurfaceTool.new();indexed.create_from(node.mesh,index);indexed.index()
+			batches[key].surface.append_from(indexed.commit(),0,transform)
+		node.set_meta("merged_mesh",true)
+	var removable:Array=[]
+	for child in node.get_children():
+		if _collect_flat(child,transform,batches,slots):removable.append(child)
+		else:merged=false
+	if not merged:
+		for child in removable:child.free()
+		# A merged mesh kept only as a parent: its geometry now lives in a tile.
+		if node is MeshInstance3D and node.get_meta("merged_mesh",false):node.mesh=null
+	node.set_meta("merged",merged)
+	return merged
+
 
 # Drawn asphalt width: arterials keep most of their width; town streets and
 # lanes read narrower beside 0.6x-scale buildings (review: roads dominated views).
