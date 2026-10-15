@@ -28,16 +28,19 @@ static func index(sim)->Dictionary:
 			bounds=rect if bounds.size==Vector2.ZERO else bounds.merge(rect)
 		if rects.is_empty():continue
 		var area:=float(spec.source_size[0])*float(spec.source_size[1]) if spec.has("source_size") else bounds.get_area()
-		var building:={"id":result.buildings.size(),"design":str(spec.design),"rects":rects,"bounds":bounds,"capacity":clampi(int(area/70.0),2,8),"height":float(spec.get("floors",2))*3.2+1.5}
+		var building:={"id":result.buildings.size(),"design":str(spec.design),"rects":rects,"bounds":bounds,"capacity":clampi(int(area/70.0),2,8),"height":float(spec.get("floors",2))*3.2+1.5,
+			"floors":int(spec.get("floors",2)),"area":area,"blocks":range(first,mini(first+count,blocks.size())),"spec":spec,"damage":0.0,"state":0}
 		for k in range(first,first+count):result.owner[k]=building.id
 		result.buildings.append(building)
 	sim.set_meta("garrison_index",result)
 	return result
 
+# Collapsed buildings (structure_damage.gd) are rubble: nothing to enter.
+const COLLAPSED:=3
 static func building_at(sim,p:Vector2)->int:
 	var data:=index(sim)
 	for building in data.buildings:
-		if not building.bounds.grow(0.5).has_point(p):continue
+		if int(building.state)>=COLLAPSED or not building.bounds.grow(0.5).has_point(p):continue
 		for rect in building.rects:
 			if rect.grow(0.5).has_point(p):return building.id
 	return -1
@@ -78,6 +81,7 @@ static func order(sim,ids:Array,building_id:int)->int:
 	if building_id<0:return 0
 	var sent:=0
 	var building:Dictionary=index(sim).buildings[building_id]
+	if int(building.state)>=COLLAPSED:return 0
 	for id in ids:
 		var u:Dictionary=sim.get_unit(id)
 		if not can_garrison(sim,u):continue
@@ -285,6 +289,20 @@ static func man_windows(sim,u:Dictionary)->void:
 		m.travel=0.0
 		m.facing=(threat.pos-m.pos).normalized()
 		sim.relocate_actor(u,m,old)
+
+# The building is gone (collapse): survivors are thrown clear where they stand,
+# with no doorway walk, and drop any pending entry.
+static func evict(sim,u:Dictionary)->void:
+	u["garrison"]=-1
+	for key in ["garrison_transit","garrison_target","garrison_wall","window_threat","window_threat_pos"]:u.erase(key)
+	u.hold_command=false
+	u.orders=[];u.path=[];u.intent={}
+	u.state="READY"
+	var centre:=Vector2.ZERO;var count:=0
+	for m in u.members:
+		for key in ["indoors","at_door","transit_rank"]:m.erase(key)
+		if m.hp>0:centre+=m.pos;count+=1
+	if count>0:u.pos=centre/count
 
 static func inside(u:Dictionary)->bool:
 	return u.get("garrison",-1)>=0

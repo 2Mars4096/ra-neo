@@ -28,6 +28,8 @@ var objective_nodes: Array[Node3D] = []
 var dragging := false
 var drag_start := Vector2.ZERO
 var attack_mode := false
+# FPV strike targeting: armed from the reinforcement panel, the next map click aims it.
+var strike_mode := false
 var build_mode:=""
 var build_rotated:=false
 # Drag-to-install for linear works and net areas: world-space anchor while held.
@@ -236,6 +238,11 @@ func update_camera() -> void:
 	camera.size=camera_size
 	camera.position=camera_focus+Vector3(26,64,46)
 	camera.look_at(camera_focus,Vector3.UP)
+	camera.position+=camera_shake()
+
+# Brief screen-plane jolt from nearby blasts (effects.gd scales it by blast size and distance from the focus).
+func camera_shake() -> Vector3:
+	return effects.camera_shake(camera_focus,camera_size,camera.basis)
 
 func screen_pos(p: Vector2, height: float = 0) -> Vector2:
 	return camera.unproject_position(Vector3(p.x,height,p.y))
@@ -572,6 +579,8 @@ func consume_events() -> void:
 		elif event.type=="crushed":
 			if harbor_props==null:harbor_props=find_child("HarborProps",true,false)
 			if harbor_props!=null:preload("res://scripts/harbor_props.gd").crush(harbor_props,int(event.prop),event.heading)
+		elif event.type in ["building_damage","building_collapse","world_blast"]:
+			preload("res://scripts/ruined_building.gd").show_damage(art,self,sim,event)
 		elif event.type=="shot" and event.visible:
 			# Presentation only: effects apply each weapon's barrel offset, tracer cadence and impact surface.
 			var a:=Vector3(event.from.x,float(event.from_y),event.from.y)
@@ -684,6 +693,16 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 					ping()
 				else:notify(str(sim.field_ops.get("last_build_error","Cannot resume this site")))
 				return
+	# Attack-click (A) a city building with HE-armed vehicles: shell it.
+	if attack and enemy<0 and not sim.field_ops.is_empty():
+		var target_building:int=building_under(p)
+		if target_building>=0:
+			var shelling:int=preload("res://scripts/structure_damage.gd").bombard(sim,ids,target_building)
+			attack_mode=false
+			if shelling>0:
+				notify("%d unit%s shelling the building" % [shelling,"" if shelling==1 else "s"])
+				ping()
+				return
 	# Right-click a city building with infantry selected: garrison it.
 	if enemy<0 and not attack and not sim.field_ops.is_empty():
 		var building:int=building_under(p)
@@ -726,7 +745,9 @@ func ui_action(action: String, p: Vector2) -> void:
 		"help": show_help=true
 		"pause": paused=not paused
 		"restart": get_tree().reload_current_scene()
-		"attack": attack_mode=true
+		"attack":
+			attack_mode=true
+			strike_mode=false
 		"stop":
 			var before:=active_sites()
 			var stopped:=sim.stop(orderable())
@@ -747,6 +768,7 @@ func ui_action(action: String, p: Vector2) -> void:
 			elif action.begins_with("build:") and not sim.field_ops.is_empty():
 				var kind:=action.trim_prefix("build:")
 				attack_mode=false
+				strike_mode=false
 				if selected_engineer()<0:
 					build_mode=""
 					notify("Select a living engineer section to build")
@@ -773,6 +795,13 @@ func ui_action(action: String, p: Vector2) -> void:
 				else:notify(build_error("Unable to resume construction"))
 			elif action=="cancel_queue" and selected.size()==1:
 				sim.Classic.cancel(sim,sim.get_unit(selected[0]))
+			elif action=="strike:fpv" and not sim.field_ops.is_empty():
+				var reason:String=sim.FieldOps.strike_reason(sim)
+				strike_mode=reason==""
+				if strike_mode:
+					attack_mode=false
+					build_mode=""
+				notify("FPV strike armed • click a seen enemy • Esc cancels" if strike_mode else reason)
 			elif action.begins_with("buy:"):
 				var kind:=action.trim_prefix("buy:")
 				if sim.recruit(kind):
@@ -785,6 +814,19 @@ func ui_action(action: String, p: Vector2) -> void:
 					ping()
 				elif not sim.classic.is_empty():notify(sim.Classic.production_reason(sim,kind,0))
 				else:notify(recruit_reason(kind))
+
+# Aim at the clicked enemy, else at the point; a miss keeps targeting armed.
+func launch_strike(p:Vector2) -> void:
+	var target:=pick(p,true)
+	var aim:Vector2=sim.get_unit(target).pos if target>=0 else world_pos(p)
+	var ids:Array=sim.FieldOps.player_strike(sim,aim,target)
+	if ids.is_empty():
+		notify(str(sim.field_ops.get("last_purchase_error","FPV strike unavailable")))
+		if sim.FieldOps.strike_reason(sim)!="":strike_mode=false
+		return
+	strike_mode=false
+	notify("FPV STRIKE LAUNCHED • %d drones • %d supply" % [ids.size(),sim.FieldOps.PLAYER_STRIKE_COST])
+	ping()
 
 func place_field_structure(site:Vector2) -> void:
 	var engineer:=selected_engineer()
@@ -892,6 +934,9 @@ func _input(event: InputEvent) -> void:
 			elif event.button_index==MOUSE_BUTTON_WHEEL_DOWN:
 				if not show_help and sim.result=="":request_zoom(pow(1.0/0.90,maxf(event.factor,0.1)))
 			elif event.button_index==MOUSE_BUTTON_LEFT:
+				if strike_mode:
+					launch_strike(p)
+					return
 				if build_mode!="" and not sim.field_ops.is_empty():
 					if sim.FieldOps.draggable(build_mode) and selected_engineer()>=0:
 						build_drag=true
@@ -909,6 +954,9 @@ func _input(event: InputEvent) -> void:
 				else:
 					drag_start=p
 					dragging=true
+			elif event.button_index==MOUSE_BUTTON_RIGHT and strike_mode:
+				strike_mode=false
+				notify("FPV strike cancelled")
 			elif event.button_index==MOUSE_BUTTON_RIGHT:
 				give_order(p,false,event.shift_pressed)
 		elif event.button_index==MOUSE_BUTTON_LEFT and build_drag:
@@ -938,6 +986,9 @@ func _input(event: InputEvent) -> void:
 			if build_mode!="":
 				build_mode=""
 				notify("Placement cancelled")
+			elif strike_mode:
+				strike_mode=false
+				notify("FPV strike cancelled")
 			elif show_help: show_help=false
 			elif attack_mode: attack_mode=false
 			else: paused=not paused
@@ -950,7 +1001,9 @@ func _input(event: InputEvent) -> void:
 				if build_mode in sim.FieldOps.ROTATABLE and not sim.field_ops.is_empty():
 					build_rotated=not build_rotated
 					notify("Placement turned %s" % ("across" if build_rotated else "along"))
-			KEY_A: attack_mode=not selected.is_empty()
+			KEY_A:
+				attack_mode=not selected.is_empty()
+				if attack_mode:strike_mode=false
 			KEY_S:
 				var before:=active_sites()
 				var stopped:=sim.stop(orderable())

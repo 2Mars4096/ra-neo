@@ -53,7 +53,7 @@
 ## Open player requests (2026-10-15)
 
 - [ ] Hitch removal: spread nav-grid re-weighting (wetness change, 140-220 ms stalls) over frames; move pathfinding off the main thread.
-- [ ] Renderer: evaluate Godot's direct Metal path (Mobile/Forward+) vs GL Compatibility; native frame-time benchmark and screenshot comparison before switching.
+- [ ] Renderer: Metal/Mobile measured 2026-10-15: engine process p95 18.6 -> 10.9 ms, frame p95 unchanged (~26 ms, sim-bound); harbor looks identical but Canal Watch and effect colours wash out (linear vs sRGB colour pipeline). Stayed on GL Compatibility; recalibrate colours before switching.
 - [ ] Explosion VFX: ~3x larger, layered flash/fireball/shockwave/debris/dust column, camera shake; native screenshot review loop.
 - [ ] World damage: buildings (damaged -> breached -> collapsed rubble, garrison casualties), field works degrade under HE, boats (flooding/engine/fire), helicopters (forced landing/crash), drones fragile, HE destroys nearby props/trees.
 - [ ] Vehicle follow-ups: abandoned vehicles should not explode; wreck cover for infantry; field repair of components.

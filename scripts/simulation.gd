@@ -561,6 +561,8 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float) -> bool:
 	var hit:bool=combat_rng.randf()<hit_chance(u,target)
 	if hit:
 		var amount:float=damage_amount(u,target)*scale
+		# Buildings, field works, drones and sandbags: what reaches the target (structure_damage.gd).
+		amount=preload("res://scripts/structure_damage.gd").strike(self,u,target,amount)
 		if target.members.is_empty():
 			# Vehicles: penetration and component damage decide the integrity loss.
 			Infantry.hit(target,VehicleDamage.strike(self,u,target,amount),u.pos,time)
@@ -814,6 +816,7 @@ func tick(dt: float) -> void:
 				resolve_shot(u,target,1.0)
 
 	if profiling:lap=_lap("unit_loop",lap)
+	preload("res://scripts/structure_damage.gd").tick(self,dt)
 	update_tactics(dt)
 	if profiling:lap=_lap("tactics",lap)
 	if not field_ops.is_empty():

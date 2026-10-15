@@ -41,7 +41,8 @@
     ],
     "build_seconds": 8,
     "combat_alias": "rifle",
-    "render_alias": "tactical_cover"
+    "render_alias": "tactical_cover",
+    "small_arms_proof": true
   },
   "observation_post": {
     "name": "OBSERVATION POST",
@@ -184,7 +185,8 @@
       ]
     },
     "combat_alias": "rifle",
-    "render_alias": "tank_obstacles"
+    "render_alias": "tank_obstacles",
+    "small_arms_proof": true
   },
   "fighting_trench": {
     "name": "FIGHTING TRENCH",
@@ -220,7 +222,8 @@
       ]
     },
     "combat_alias": "rifle",
-    "render_alias": "fighting_trench"
+    "render_alias": "fighting_trench",
+    "small_arms_proof": true
   },
   "vehicle_berm": {
     "name": "VEHICLE BERM",
@@ -251,7 +254,8 @@
       ]
     },
     "combat_alias": "rifle",
-    "render_alias": "vehicle_berm"
+    "render_alias": "vehicle_berm",
+    "small_arms_proof": true
   },
   "camouflage_net": {
     "name": "CAMOUFLAGE NET",
@@ -335,7 +339,8 @@
     "zone": {},
     "armed": true,
     "combat_alias": "rifle",
-    "render_alias": "bunker"
+    "render_alias": "bunker",
+    "small_arms_proof": true
   },
   "at_gun": {
     "name": "AT GUN PIT",
@@ -363,7 +368,8 @@
     "zone": {},
     "armed": true,
     "combat_alias": "atgm",
-    "render_alias": "at_gun"
+    "render_alias": "at_gun",
+    "small_arms_proof": true
   },
   "command_post": {
     "name": "COMMAND POST",
@@ -391,7 +397,8 @@
     "zone": {},
     "armed": false,
     "combat_alias": "rifle",
-    "render_alias": "command_post"
+    "render_alias": "command_post",
+    "small_arms_proof": true
   },
   "ammo_depot": {
     "name": "AMMO DEPOT",
@@ -419,6 +426,15 @@
     "zone": {},
     "armed": false,
     "combat_alias": "rifle",
-    "render_alias": "ammo_depot"
+    "render_alias": "ammo_depot",
+    "small_arms_proof": true,
+    "cook_off": {
+      "chance": 0.2,
+      "blasts": 4,
+      "interval": 1.4,
+      "radius": 7.0,
+      "damage": 70.0,
+      "structure": 10.0
+    }
   }
 }

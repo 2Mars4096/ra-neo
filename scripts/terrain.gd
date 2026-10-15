@@ -280,6 +280,9 @@ func hull_down(p:Vector2,threat:Vector2=Vector2(INF,INF)) -> bool:
 # Replace completed field zones; only navigation weights inside changed rects
 # are recomputed, never collision solids (zones are not blockers).
 func update_field_zones(zones:Array)->bool:
+	# Rubble of collapsed buildings persists under whatever works are built.
+	_zone_input=zones
+	if not rubble_zones.is_empty():zones=zones+rubble_zones
 	var changed:Array[Rect2]=[]
 	var keys:=zones.map(func(z):return [z.rect,z.speed,z.cover,z.get("conceal",1.0),z.get("front",Vector2.UP)])
 	var old:=field_zones.map(func(z):return [z.rect,z.speed,z.cover,z.get("conceal",1.0),z.get("front",Vector2.UP)])
@@ -334,6 +337,8 @@ func update_field_zones(zones:Array)->bool:
 
 func surface_name(p:Vector2) -> String:
 	if is_water(p):return "WATER"
+	for zone in rubble_zones:
+		if zone.rect.has_point(p):return "RUBBLE · COVER · VEHICLES SLOWED"
 	if on_road(p):return "FIRM ROAD · ALL WEATHER"
 	if mud.has_point(p):return "WET MUD · VERY SLOW" if wetness>0.3 else "SOFT GROUND · SLOW"
 	if rubble.has_point(p):return "RUINS · COVER"
@@ -764,6 +769,31 @@ func _refresh_land_cells(rects:Array)->void:
 			for x in range(maxi(0,floori(bounds.position.x/nav_cell_size)),mini(nav_size.x,ceili(bounds.end.x/nav_cell_size))):
 				for y in range(maxi(0,floori(bounds.position.y/nav_cell_size)),mini(nav_size.y,ceili(bounds.end.y/nav_cell_size))):
 					_refresh_land_cell(grid,Vector2i(x,y),radius+0.15,profile)
+
+# A collapsed building: its collision rectangles leave the static index (array
+# sizes stay stable, as in crush_props) and a rubble field zone takes their
+# place: cover and slow going for infantry, slow for tracks, a planning barrier
+# for wheels. Only navigation cells around the building are refreshed.
+var rubble_zones:Array[Dictionary]=[]
+var _zone_input:Array=[]
+const RUBBLE_SPEED:={"infantry":0.55,"tracked":0.35,"wheeled":0.1}
+func collapse_blocks(indices:Array,area:Rect2)->Array:
+	var removed:Array=[]
+	for k in indices:
+		if k<0 or k>=blocks.size() or blocks[k].size==Vector2.ZERO:continue
+		var rect:Rect2=blocks[k]
+		blocks[k]=Rect2(-9999,-9999,0,0)
+		for kind in ["solid","building"]:
+			var buckets:Dictionary=_static_index.get(kind,{})
+			for x in range(floori(rect.position.x/SPATIAL_CELL),floori(rect.end.x/SPATIAL_CELL)+1):
+				for y in range(floori(rect.position.y/SPATIAL_CELL),floori(rect.end.y/SPATIAL_CELL)+1):
+					var bucket:Array=buckets.get(Vector2i(x,y),[])
+					bucket.erase(rect)
+		removed.append(rect)
+	rubble_zones.append({"rect":area,"speed":RUBBLE_SPEED.duplicate(),"cover":["infantry"],"conceal":1.0,"front":Vector2.UP,"rubble":true})
+	update_field_zones(_zone_input if not _zone_input.is_empty() else field_zones.filter(func(z):return not z.get("rubble",false)))
+	_refresh_land_cells(removed+[area])
+	return removed
 
 func hard_cover_props()->Array:
 	return prop_blocks.filter(func(r):return maxf(r.size.x,r.size.y)>=1.5)

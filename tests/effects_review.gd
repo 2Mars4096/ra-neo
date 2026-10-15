@@ -2,7 +2,11 @@ extends SceneTree
 # Deterministic native review of firing, impact and destruction effects in the accepted Canal Watch scene.
 # Native:   Godot --path . --script tests/effects_review.gd   (writes artifacts/effects-review-*.png)
 #           Scenes A-C stage effects directly; scene D (Riverside Town) goes through battle.consume_events().
-# Headless: runs the same timeline and writes only artifacts/effects-review.json (no images).
+#           Scene E is a close-up explosion review: every blast kind detonates at the centre of the frame at
+#           gameplay zoom (camera size 40) and is captured at t = 0.05, 0.25, 0.6, 1.5 and 4 s after detonation,
+#           next to a reference tank and rifle squad. Its contact sheet is artifacts/effects-review-e-sheet.png
+#           (rows = kinds, columns = times). Add `-- --only-e` to run scene E alone.
+# Headless: runs the same timeline and writes artifacts/effects-review.json plus flat-disc layout proxies.
 const Sim=preload("res://scripts/simulation.gd")
 const DT:=1.0/60.0
 var battle
@@ -10,6 +14,12 @@ var headless:=DisplayServer.get_name()=="headless"
 var captures:Array=[]
 var images:Array[Image]=[]
 var miss_rng:=RandomNumberGenerator.new()
+var e_images:Array[Image]=[]
+const E_TIMES:=[0.05,0.25,0.6,1.5,4.0]
+const E_ZOOM:=40.0
+# What each capture instant should show, printed with every scene-E capture.
+const E_STAGE:={0.05:"core flash + fireball birth, shock ring starting",0.25:"fireball at peak, shock ring at full radius, debris and sparks launching",
+	0.6:"fireball rolling up and darkening, debris arcs, dust skirt",1.5:"fireball turned to smoke, column rising, debris landing",4.0:"lingering column or wreck fire, scorch"}
 
 func _init() -> void:
 	call_deferred("run")
@@ -159,8 +169,93 @@ func shot_event(shooter:Dictionary, target:Dictionary, hit:bool) -> void:
 func destroyed_event(target:Dictionary) -> void:
 	battle.sim.events.append({"type":"destroyed","kind":target.kind,"pos":target.pos,"visible":true})
 
+# Scene E. Impacts go through fire() for their real surface routing, then land at once (the muzzle and flight
+# are cleared); kills go through destroyed(). Shake is disabled so frames stay aligned.
+const E_KINDS:=[
+	["tank_he","tank HE shell on soil (R 2.5 m)"],
+	["atgm_soil","ATGM on soft ground (R 1.5 m)"],
+	["atgm_armor","ATGM on a tank hull (R 1.8 m)"],
+	["at_gun_ap","AT gun AP round on armour (kinetic, no fireball)"],
+	["fpv","FPV drone strike on soil (R 1.3 m)"],
+	["masonry","tank HE on a bunker face (R 2.2 m)"],
+	["vehicle_kill","tank kill (R 5 m) with cook-offs and wreck fire"],
+	["bunker","bunker collapse (R 3.1 m)"],
+	["depot","ammo depot cook-off chain (R 6.5 m)"],
+	["water","tank shell into water"],
+]
+
+func explosion_review() -> void:
+	open(3)
+	battle.effects.shake_enabled=false
+	var spot:=Vector2(55,63)
+	var water_spot:=Vector2(86,24)
+	if not battle.sim.terrain.is_water(water_spot):push_warning("scene E water spot is not water")
+	place("tank",0,spot+Vector2(-9,-5))
+	place("rifle",0,spot+Vector2(-8,5))
+	battle.sim.update_visibility()
+	battle.sync_units(5.0)
+	for k in E_KINDS.size():
+		var kind:String=E_KINDS[k][0]
+		var at:Vector2=water_spot if kind=="water" else spot
+		battle.effects.clear()
+		battle.effects.reseed(3000+k)
+		var target:={}
+		if kind in ["atgm_armor","at_gun_ap","vehicle_kill"]:
+			target=place("tank",1,at)
+			battle.sim.update_visibility()
+			battle.sync_units(5.0)
+		view(Vector3(at.x,0,at.y),E_ZOOM)
+		var ground:=Vector3(at.x,0.8,at.y)
+		var from:=Vector3(at.x-24,0.95,at.y+8)
+		match kind:
+			"tank_he":land(battle.effects.fire("tank",from,ground,false,false,"rifle"))
+			"atgm_soil":land(battle.effects.fire("atgm",from,ground,false,false,"rifle"))
+			"atgm_armor":land(battle.effects.fire("atgm",from,ground,true,false,"tank"))
+			"at_gun_ap":land(battle.effects.fire("at_gun",from,ground,true,false,"tank"))
+			"fpv":land(battle.effects.fire("fpv_drone",Vector3(at.x-6,6,at.y+2),ground,true,false,"rifle"))
+			"masonry":land(battle.effects.fire("tank",from,Vector3(at.x,1.0,at.y),true,false,"bunker"))
+			"vehicle_kill":battle.effects.destroyed("tank",Vector3(at.x,0.7,at.y))
+			"bunker":battle.effects.destroyed("bunker",Vector3(at.x,0.7,at.y))
+			"depot":battle.effects.destroyed("ammo_depot",Vector3(at.x,0.7,at.y))
+			"water":land(battle.effects.fire("tank",from,ground,false,true,"boat"))
+		if kind=="vehicle_kill" and not target.is_empty():
+			# The hull becomes a burnt-out wreck under the blast, as in a real kill.
+			remove(target)
+			target.wrecked=true
+		var clock:={"t":0.0}
+		for stamp in E_TIMES:
+			frame_to(clock,stamp)
+			var name:="e%02d-%s-t%s"%[k+1,kind,str(stamp)]
+			var note:="%s | t=%.2f s after detonation | expect: %s"%[E_KINDS[k][1],stamp,E_STAGE[stamp]]
+			print("EFFECTS E kind=",kind," t=",stamp," file=artifacts/effects-review-",name,".png")
+			await capture(name,note)
+			if not headless:e_images.append(images.pop_back())
+		if not target.is_empty():
+			remove(target)
+			target.wrecked=false
+			battle.sync_units(DT)
+	if not headless and not e_images.is_empty():
+		var columns:=E_TIMES.size()
+		var sheet:=Image.create(columns*384,E_KINDS.size()*240,false,Image.FORMAT_RGBA8)
+		for i in e_images.size():
+			var tile:Image=e_images[i].duplicate()
+			tile.convert(Image.FORMAT_RGBA8)
+			tile.resize(384,240,Image.INTERPOLATE_LANCZOS)
+			sheet.blit_rect(tile,Rect2i(0,0,384,240),Vector2i(i%columns*384,i/columns*240))
+		print("EFFECTS E sheet rows=",E_KINDS.map(func(e):return e[0])," columns t=",E_TIMES," status=",sheet.save_png("res://artifacts/effects-review-e-sheet.png"))
+
+# Lands the first queued round immediately at its target, as if the flight had just ended.
+func land(_travel:float) -> void:
+	var shot:Dictionary=battle.effects.projectiles[0]
+	battle.effects.clear()
+	battle.effects._arrive(shot)
+
 func run() -> void:
 	root.size=Vector2i(1440,900)
+	if "--only-e" in OS.get_cmdline_user_args():
+		await explosion_review()
+		finish()
+		return
 	open(3)
 	# Scene A: firing line on open ground south of the village.
 	var rifles:=place("rifle",0,Vector2(46,66))
@@ -283,6 +378,10 @@ func run() -> void:
 		frame_to(clock,1.5)
 		view(Vector3(128,0,70),64)
 		await capture("d3-events-rolling","+1.2 s at gameplay zoom: soot columns near the 144 m map edge stay drawn")
+	await explosion_review()
+	finish()
+
+func finish() -> void:
 	var report:={"scenario":"Canal Watch + Riverside Town","viewport":[1440,900],"timestep":DT,"native_images":not headless,"renderer":RenderingServer.get_video_adapter_name(),"captures":captures,"note":"Paused deterministic staging; effects advanced manually at 60 Hz. Not a performance measurement."}
 	if not headless and not images.is_empty():
 		var sheet:=Image.create(4*480,int(ceil(images.size()/4.0))*300,false,Image.FORMAT_RGBA8)

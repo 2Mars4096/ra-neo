@@ -285,14 +285,65 @@ static func launch_swarm(sim,aim:Vector2,count:int,team:int=1)->Array:
 	var home:Vector2=sim.field_ops.enemy_insertion if team==1 else sim.field_ops.insertion
 	var axis:Vector2=home-aim
 	var origin:Vector2=aim+axis.normalized()*minf(axis.length(),SWARM_STANDOFF)
+	var ids:=spawn_swarm(sim,origin,victims,count,team)
+	if not ids.is_empty() and team==1:
+		sim.events.append({"type":"warning","text":"FPV SWARM INBOUND • %d strike drones • AA and massed rifles can shoot them down" % ids.size()})
+	return ids
+
+# Player FPV strike: bought from the reinforcement panel, aimed with a map click
+# and paid only on launch. Drones fly in from the forward supply point (else the
+# landing zone), at most PLAYER_STRIKE_STANDOFF out, and only at enemies the
+# player can see near the click; the clicked unit, then vehicles, come first.
+const PLAYER_STRIKE_COST:=150
+const PLAYER_STRIKE_COUNT:=5
+const PLAYER_STRIKE_COOLDOWN:=60.0
+const PLAYER_STRIKE_STANDOFF:=150.0
+
+static func strike_ready_in(sim)->float:
+	return maxf(0.0,float(sim.field_ops.get("strike_ready_at",0.0))-sim.time)
+
+# "" when a strike may be aimed now, else the reason it cannot.
+static func strike_reason(sim)->String:
+	if sim.field_ops.is_empty() or sim.result!="":return "FPV strike unavailable"
+	if strike_ready_in(sim)>0:return "FPV strike ready in %ds" % ceili(strike_ready_in(sim))
+	if sim.credits<PLAYER_STRIKE_COST:return "Need %d more supply" % ceili(PLAYER_STRIKE_COST-sim.credits)
+	return ""
+
+static func strike_victims(sim,aim:Vector2,target_id:int=-1)->Array:
+	var victims:Array=sim.units.filter(func(u):return sim.alive(u) and u.team==1 and u.seen_by[0] and sim.definitions[u.kind].domain!="air" and u.pos.distance_to(aim)<SWARM_TARGET_RADIUS)
+	victims.sort_custom(func(a,b):return swarm_rank(a,aim)-(1000.0 if a.id==target_id else 0.0)<swarm_rank(b,aim)-(1000.0 if b.id==target_id else 0.0))
+	return victims
+
+# Charges supply and starts the cooldown only when drones actually launch.
+static func player_strike(sim,aim:Vector2,target_id:int=-1)->Array:
+	sim.field_ops.last_purchase_error=strike_reason(sim)
+	if sim.field_ops.last_purchase_error!="":return []
+	var victims:=strike_victims(sim,aim,target_id)
+	if victims.is_empty():return purchase_fail_array(sim,"No visible enemy near the target")
+	var live:int=sim.units.filter(func(u):return sim.alive(u) and u.team==0 and u.kind=="fpv_drone").size()
+	var count:=mini(PLAYER_STRIKE_COUNT,SWARM_LIVE_LIMIT-live)
+	if count<=0:return purchase_fail_array(sim,"Strike drones already airborne")
+	var home:=forward_point(sim)
+	if home.x<0:home=sim.field_ops.insertion
+	var axis:Vector2=home-aim
+	var origin:Vector2=aim+axis.normalized()*minf(axis.length(),PLAYER_STRIKE_STANDOFF)
+	var ids:=spawn_swarm(sim,origin,victims,count,0)
+	if ids.is_empty():return purchase_fail_array(sim,"Strike launch failed")
+	sim.credits-=PLAYER_STRIKE_COST
+	sim.field_ops["strike_ready_at"]=sim.time+PLAYER_STRIKE_COOLDOWN
+	return ids
+
+static func purchase_fail_array(sim,message:String)->Array:
+	sim.field_ops.last_purchase_error=message
+	return []
+
+static func spawn_swarm(sim,origin:Vector2,victims:Array,count:int,team:int)->Array:
 	var ids:Array=[]
 	for i in count:
 		var drone:Dictionary=sim.spawn("fpv_drone",team,origin+Vector2.from_angle(i*TAU/maxf(1,count))*2.5)
 		if drone.is_empty():continue
 		drone.strike_target=victims[i%victims.size()].id
 		ids.append(drone.id)
-	if not ids.is_empty() and team==1:
-		sim.events.append({"type":"warning","text":"FPV SWARM INBOUND • %d strike drones • AA and massed rifles can shoot them down" % ids.size()})
 	return ids
 
 static func swarm_rank(u:Dictionary,aim:Vector2)->float:
@@ -721,7 +772,8 @@ static func cancel(sim,structure_id:int)->bool:
 
 static func sync_obstacles(sim)->void:
 	var structures:Array=sim.units.filter(func(u):return sim.alive(u) and u.get("structure",false))
-	var key:String=str(structures.map(func(u):return [u.id,u.get("build_left",0.0)<=0]))
+	# New wrecks must change the key too, so they block routes immediately.
+	var key:String=str(structures.map(func(u):return [u.id,u.get("build_left",0.0)<=0]))+"|"+str(sim.VehicleDamage.wrecks(sim).size())
 	if key==sim.field_ops.obstacle_key:return
 	sim.field_ops.obstacle_key=key
 	var blocks:Array=[]

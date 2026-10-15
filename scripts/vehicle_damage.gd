@@ -45,6 +45,23 @@ const BUTTONED_ACQUIRE:=0.4
 # A damaged gunship flies at this fraction of its speed.
 const DAMAGED_FLIGHT:=0.6
 const WRECKS:="vehicle_wrecks"
+# Hazards that run on after the hit (tick_hazards):
+#   fire       (corvette) burns integrity until the crew puts it out; a small
+#              chance per second that it reaches the magazine
+#   flooding   (corvette) water comes in at flood_rate (hull volume per s); the
+#              pumps cut the rate in proportion to surviving crew; a full hull sinks
+#   tail_rotor (gunship) spins down and crashes: destroyed, blast on impact
+#   hydraulics (gunship) controlled forced landing: out of action, crew safe
+const HAZARDS:="vehicle_hazards"
+const FIRE_SECONDS:=Vector2(9.0,16.0)
+const FIRE_DPS:=5.0
+const MAGAZINE_RISK:=0.01
+const FLOOD_RATE:=Vector2(0.025,0.045)
+const PUMP_RATE:=0.0018
+const FLOOD_DRAFT:=1.3
+const CRASH_DESCENT:=4.5
+const LANDING_DESCENT:=2.2
+const CRASH_BLAST:={"radius":4.0,"damage":45.0,"structure":5.0}
 const LABEL:={"tank":"Tank","aa":"Skyguard","boat":"Corvette","helo":"Gunship"}
 
 static func tracked(sim,u:Dictionary)->bool:
@@ -143,7 +160,97 @@ static func strike(sim,u:Dictionary,target:Dictionary,amount:float)->float:
 						_report(sim,target,"abandoned","%s crew bailed out · vehicle abandoned")
 					return _finish(sim,target,0.0)
 				_report(sim,target,effect,"%s crew casualty")
+			"fire":
+				if float(target.get("fire_until",-1.0))<sim.time:
+					var missing:int=int(target.crew_full)-int(target.crew)
+					target["fire_until"]=sim.time+rng.randf_range(FIRE_SECONDS.x,FIRE_SECONDS.y)*(1.0+0.5*missing)
+					_hazard(sim,target)
+					_report(sim,target,effect,"%s on fire")
+			"flooding":
+				target["flood_rate"]=float(target.get("flood_rate",0.0))+rng.randf_range(FLOOD_RATE.x,FLOOD_RATE.y)
+				target["flood"]=float(target.get("flood",0.0))
+				_hazard(sim,target)
+				_report(sim,target,effect,"%s holed below the waterline · flooding")
+			"tail_rotor","hydraulics":
+				if not target.has("crash"):
+					target["crash"]="spin" if effect=="tail_rotor" else "landing"
+					_hazard(sim,target)
+					_report(sim,target,effect,"%s tail rotor hit · going down" if effect=="tail_rotor" else "%s hydraulics hit · forced landing")
 	return _finish(sim,target,damage)
+
+static func _hazard(sim,target:Dictionary)->void:
+	if not sim.has_meta(HAZARDS):sim.set_meta(HAZARDS,[])
+	var list:Array=sim.get_meta(HAZARDS)
+	if not list.has(target):list.append(target)
+
+# Per tick (via structure_damage.tick): fires, flooding and falling aircraft.
+# Returns ground impacts [{pos,radius,damage,structure,team}] for the caller's
+# blast model.
+static func tick_hazards(sim,dt:float)->Array:
+	var impacts:Array=[]
+	if not sim.has_meta(HAZARDS):return impacts
+	var list:Array=sim.get_meta(HAZARDS)
+	var rng:=_rng(sim)
+	for i in range(list.size()-1,-1,-1):
+		var u:Dictionary=list[i]
+		var active:=false
+		if sim.alive(u) and u.has("crash"):
+			active=true
+			_descend(sim,u,dt,impacts)
+		if sim.alive(u) and u.has("fire_until"):
+			if sim.time<float(u.fire_until):
+				active=true
+				u.hp-=FIRE_DPS*dt
+				if rng.randf()<MAGAZINE_RISK*dt:
+					u.hp=0.0
+					_report(sim,u,"catastrophic","%s fire reached the magazine · destroyed")
+				elif u.hp<=0.0:_report(sim,u,"destroyed","%s burnt out")
+				if u.hp<=0.0:_lost(sim,u)
+			else:
+				u.erase("fire_until")
+				_event(sim,u,"fire_out")
+		if sim.alive(u) and u.has("flood"):
+			var pumps:float=float(u.get("crew",1))/maxf(1.0,float(u.get("crew_full",1)))
+			u.flood_rate=maxf(0.0,float(u.flood_rate)-PUMP_RATE*pumps*dt)
+			u.flood=float(u.flood)+float(u.flood_rate)*dt
+			# The hull settles visibly as it fills.
+			u["altitude"]=-FLOOD_DRAFT*minf(1.0,float(u.flood))
+			if float(u.flood)>=1.0:
+				u.hp=0.0
+				_report(sim,u,"sunk","%s flooded and sank")
+				_lost(sim,u)
+			elif float(u.flood_rate)>0.0:active=true
+		if not active or not sim.alive(u):list.remove_at(i)
+	return impacts
+
+static func _descend(sim,u:Dictionary,dt:float,impacts:Array)->void:
+	var spin:bool=u.crash=="spin"
+	u["altitude"]=maxf(0.0,float(u.get("altitude",sim.definitions[u.kind].altitude))-(CRASH_DESCENT if spin else LANDING_DESCENT)*dt)
+	if spin:u.facing=u.facing.rotated(dt*5.0)
+	u.state="GOING DOWN"
+	if float(u.altitude)>0.0:return
+	u.hp=0.0
+	var water:bool=sim.terrain.is_water(u.pos)
+	if spin:
+		impacts.append({"pos":u.pos,"radius":CRASH_BLAST.radius,"damage":CRASH_BLAST.damage,"structure":CRASH_BLAST.structure,"team":u.team,"kind":"crash"})
+		_report(sim,u,"crashed","%s crashed")
+	else:
+		_report(sim,u,"forced_landing","%s forced down · crew safe" if not water else "%s ditched at sea")
+		u["lost_quiet"]=true
+	if not water:
+		# The airframe stays where it came down and blocks vehicles like a wreck.
+		if not sim.has_meta(WRECKS):sim.set_meta(WRECKS,[])
+		u["wrecked"]=true
+		sim.get_meta(WRECKS).append({"id":u.id,"kind":u.kind,"team":u.team,"pos":u.pos,"facing":u.facing,"radius":float(sim.definitions[u.kind].radius)*0.7,"abandoned":not spin})
+	_lost(sim,u)
+
+# Bookkeeping for a loss that did not come from resolve_shot.
+static func _lost(sim,u:Dictionary)->void:
+	if u.get("lost_counted",false):return
+	u["lost_counted"]=true
+	if not u.get("lost_quiet",false):sim.events.append({"type":"destroyed","kind":u.kind,"pos":u.pos,"visible":u.visible})
+	if u.team==1:sim.kills+=1
+	else:sim.losses+=1
 
 static func _pick(rng:RandomNumberGenerator,weights:Dictionary,heavy:bool)->String:
 	var total:=0.0
@@ -181,7 +288,7 @@ static func _report(sim,target:Dictionary,effect:String,text:String,penetrated:b
 # applied once per shot / per new target, so the check stays idempotent.
 static func weapon_ready(sim,u:Dictionary)->bool:
 	if not u.has("crew"):return true
-	if u.firepower_kill or u.abandoned:return false
+	if u.firepower_kill or u.abandoned or u.has("crash"):return false
 	var missing:int=int(u.crew_full)-int(u.crew)
 	if missing>0 and float(u.get("last_shot",-100.0))>float(u.reload_mark):
 		u.reload_mark=u.last_shot
@@ -197,9 +304,15 @@ static func weapon_ready(sim,u:Dictionary)->bool:
 # otherwise the speed scale (a damaged gunship flies slower). Vehicles whose
 # next legs cross a wreck re-plan round it (at most once a second).
 static func before_move(sim,u:Dictionary)->float:
+	if u.has("crash"):
+		u.orders.clear()
+		u.path.clear()
+		u.speed_now=0.0
+		return 0.0
 	if not u.get("mobility_kill",false):
 		if sim.has_meta(WRECKS) and u.members.is_empty() and not u.path.is_empty():_route_round_wrecks(sim,u)
-		return 1.0
+		# A flooding hull wallows: slower as it fills.
+		return 1.0-0.6*clampf(float(u.get("flood",0.0)),0.0,1.0)
 	if sim.definitions[u.kind].domain=="air":return DAMAGED_FLIGHT
 	u.orders.clear()
 	u.path.clear()

@@ -21,6 +21,12 @@ const BREEZE:=Vector3(0.28,0,0.12)
 static var DEFAULT_VIEW:=Basis.looking_at(-Vector3(26,64,46),Vector3.UP)
 # Cards and streaks never shrink below this many screen pixels, so distant flashes still read.
 const MIN_PIXELS:=2.0
+# Camera shake: a few recent blasts, summed as trauma (capped at 1) and raised to 1.5. Peak offset is this
+# fraction of the view height (about 14 px at 900 px), so it feels the same at every zoom; it fades out over
+# SHAKE_REACH view heights from the camera focus.
+const SHAKE_CAPACITY:=8
+const SHAKE_PEAK:=0.016
+const SHAKE_REACH:=1.1
 
 # Volume kinds
 const SMOKE:=0
@@ -44,6 +50,7 @@ const WIND:=8
 const GROUND_KILL:=16
 const TRAIL:=32
 const AXIAL:=64
+const STILL:=128 # no velocity, gravity or spin: motion integration is skipped (flashes, blooms, decals)
 
 # Priorities: optional detail is thinned first under load; essential beats are allowed to recycle slots.
 const OPTIONAL:=0
@@ -184,6 +191,7 @@ class Pool extends RefCounted:
 		kind_live[k]+=1
 		pos[i]=p;vel[i]=v;kind[i]=k;size0[i]=s0;size1[i]=s1
 		life[i]=maxf(duration,0.0001);age[i]=0.0;color[i]=c;drag[i]=drag_rate;gravity[i]=fall
+		if v==Vector3.ZERO and fall==0.0 and turn_rate==0.0 and (bits&(TRAIL|WIND))==0:bits|=STILL
 		delay[i]=maxf(wait,0.0);flags[i]=bits|FRESH;rot[i]=turn;spin[i]=turn_rate;variant[i]=variety
 		timer[i]=0.0;axis[i]=Vector3.ZERO;width[i]=0.0
 		return i
@@ -229,7 +237,7 @@ class Pool extends RefCounted:
 				continue
 			age[i]=a
 			var p:=pos[i]
-			if h>0.0:
+			if h>0.0 and (bits&STILL)==0:
 				var v:=vel[i]
 				v.y-=gravity[i]*h
 				var k:=drag[i]
@@ -249,11 +257,11 @@ class Pool extends RefCounted:
 				vel[i]=v
 				rot[i]+=spin[i]*h
 				if bits&ALIGN and v.length_squared()>0.0001:axis[i]=v.normalized()
-				if bits&TRAIL:
+				if bits&TRAIL and p.y>0.35:
 					timer[i]+=h
-					if timer[i]>=0.07:
+					if timer[i]>=0.1:
 						timer[i]=0.0
-						owner.call("_trail_puff",p,1.0-a/duration)
+						owner.call("_trail_puff",p,1.0-a/duration,color[i])
 			var t:=a/duration
 			var s:=lerpf(size0[i],size1[i],1.0-(1.0-t)*(1.0-t))
 			# Front-kind rows are packed from the buffer end and moved after the rest, so they draw last.
@@ -282,13 +290,16 @@ class Pool extends RefCounted:
 				buffer[o+8]=-sn;buffer[o+10]=c;buffer[o+11]=p.z
 			else:
 				s=maxf(s,min_size)
-				var x_axis:=right*s
-				var y_axis:=up*s
+				var x_axis:Vector3
+				var y_axis:Vector3
 				if spin_cards:
-					var c:=cos(rot[i])
-					var sn:=sin(rot[i])
-					x_axis=(right*c+up*sn)*s
-					y_axis=(up*c-right*sn)*s
+					var c:=cos(rot[i])*s
+					var sn:=sin(rot[i])*s
+					x_axis=right*c+up*sn
+					y_axis=up*c-right*sn
+				else:
+					x_axis=right*s
+					y_axis=up*s
 				var z_axis:=back*s
 				# Pull the card toward the camera so ground-level puffs are not sliced by terrain.
 				var q:=p+z_axis*pull
@@ -348,6 +359,11 @@ var world_box:=AABB()
 var shore_x:=INF
 # Legacy muzzle() calls wait here for the paired projectile() that names the weapon.
 var pending_muzzles:Array[Dictionary]=[]
+# Recent blasts that shake the camera (see camera_shake()); review captures switch this off for still frames.
+var shake_enabled:=true
+var shake_pos:=PackedVector3Array()
+var shake_strength:=PackedFloat32Array()
+var shake_age:=PackedFloat32Array()
 
 func _init() -> void:
 	rng.seed=814
@@ -436,8 +452,10 @@ func _flat(direction:Vector3) -> Vector3:
 func smoke(pos:Vector3, vel:Vector3, size0:float, size1:float, life:float, col:Color, drag:float=1.5, lift:float=0.0, delay:float=0.0, priority:int=NORMAL) -> int:
 	return volume.spawn(pos,vel,SMOKE,size0,size1,life,col,drag,-lift,delay,priority,WIND,rng.randf()*TAU,rng.randf_range(-0.6,0.6),rng.randf())
 
-func fireball(pos:Vector3, vel:Vector3, size0:float, size1:float, life:float, delay:float=0.0, priority:int=ESSENTIAL) -> int:
-	return volume.spawn(pos,vel,FIRE,size0,size1,life,Color(1,1,1,1),2.2,-1.2,delay,priority,0,rng.randf()*TAU,rng.randf_range(-1.2,1.2),rng.randf())
+# drag and lift default to the original small-fireball motion; large blasts pass a stronger lift so the
+# fireball rolls upward while the shader cools it from white through orange into soot.
+func fireball(pos:Vector3, vel:Vector3, size0:float, size1:float, life:float, delay:float=0.0, priority:int=ESSENTIAL, drag:float=2.2, lift:float=1.2) -> int:
+	return volume.spawn(pos,vel,FIRE,size0,size1,life,Color(1,1,1,1),drag,-lift,delay,priority,0,rng.randf()*TAU,rng.randf_range(-1.2,1.2),rng.randf())
 
 func debris(pos:Vector3, vel:Vector3, size:float, life:float, col:Color, bounce:bool=true, trail:bool=false, priority:int=NORMAL) -> int:
 	if volume.kind_live[DEBRIS]>=DEBRIS_CAP:
@@ -457,8 +475,10 @@ func ember(pos:Vector3, vel:Vector3, size:float, life:float, col:Color=FLAME, pr
 
 # Soft additive light spill over the ground and nearby models, standing in for a dynamic light: a light in the
 # Compatibility renderer costs an extra pass per lit mesh and new shader variants on first use.
+# Capped so the largest blast (a structure) cannot cover the screen.
+const BLOOM_MAX:=24.0
 func bloom(pos:Vector3, size:float, life:float, col:Color=Color(1.0,0.55,0.22,0.32), priority:int=NORMAL, delay:float=0.0) -> int:
-	var s:=minf(size,5.2)
+	var s:=minf(size,BLOOM_MAX)
 	return glow.spawn(pos,Vector3.ZERO,EMBER,s,s*1.1,life,col,0.0,0.0,delay,priority,0,0.0,0.0,rng.randf())
 
 # Axial glow: tracer bodies, flame tongues and sparks. Position is the streak centre.
@@ -470,11 +490,12 @@ func streak(pos:Vector3, direction:Vector3, length:float, thickness:float, life:
 		glow.width[i]=thickness
 	return i
 
-func sparks(pos:Vector3, count:int, speed:float, bias:Vector3, life:float, priority:int=NORMAL) -> void:
+# size scales streak length and width: 1 for bullet ricochets, 2-2.5 for the fragments of a big blast.
+func sparks(pos:Vector3, count:int, speed:float, bias:Vector3, life:float, priority:int=NORMAL, size:float=1.0) -> void:
 	for n in count:
 		var v:=(_jitter(1.0).normalized()+bias).normalized()*rng.randf_range(speed*0.5,speed)
 		if v.y<0:v.y=-v.y*0.5
-		streak(pos,v,rng.randf_range(0.25,0.45),0.045,rng.randf_range(life*0.5,life),SPARK,v,9.8,priority)
+		streak(pos,v,rng.randf_range(0.25,0.45)*size,0.045*sqrt(size),rng.randf_range(life*0.5,life),SPARK,v,9.8,priority)
 
 func decal(pos:Vector3, kind:int, size0:float, size1:float, life:float, col:Color, priority:int=NORMAL) -> int:
 	return ground.spawn(Vector3(pos.x,DECAL_HEIGHT+(0.004 if kind!=SCORCH else 0.0),pos.z),Vector3.ZERO,kind,size0,size1,life,col,0.0,0.0,0.0,priority,0,rng.randf()*TAU,0.0,rng.randf())
@@ -486,8 +507,55 @@ func cue(delay:float, action:Callable) -> bool:
 	cues.append({"at":time+delay,"action":action})
 	return true
 
-func _trail_puff(pos:Vector3, strength:float) -> void:
-	smoke(pos,Vector3(0,0.4,0),0.18,0.7*strength+0.25,0.9,Color(SOOT,0.5),1.8,0.0,0.0,OPTIONAL)
+# Debris trail puff, tinted by the fragment: brown soil leaves dust, pale masonry leaves masonry dust and dark
+# hull fragments leave soot.
+func _trail_puff(pos:Vector3, strength:float, tint:Color=SOOT) -> void:
+	var col:=SOOT
+	if tint.r-tint.b>0.08:col=DUST.darkened(0.1)
+	elif tint.get_luminance()>0.35:col=tint.lightened(0.3)
+	smoke(pos,Vector3(0,0.3,0),0.22,0.9*strength+0.3,0.6,Color(col,0.5),1.8,0.0,0.0,OPTIONAL)
+
+# ---------------------------------------------------------------- camera shake
+# Registers a blast for camera shake. strength is 1 for a vehicle kill, ~0.35 for a tank HE round; small arms
+# never call this. The oldest entry is replaced when full.
+func shake(pos:Vector3, strength:float) -> void:
+	if strength<=0.0:return
+	if shake_pos.size()>=SHAKE_CAPACITY:
+		var oldest:=0
+		for i in shake_age.size():
+			if shake_age[i]>shake_age[oldest]:oldest=i
+		shake_pos.remove_at(oldest);shake_strength.remove_at(oldest);shake_age.remove_at(oldest)
+	shake_pos.append(pos);shake_strength.append(minf(strength,1.5));shake_age.append(0.0)
+
+func _update_shake(dt:float) -> void:
+	for i in range(shake_age.size()-1,-1,-1):
+		shake_age[i]+=dt
+		if shake_age[i]>=_shake_duration(shake_strength[i]):
+			shake_pos.remove_at(i);shake_strength.remove_at(i);shake_age.remove_at(i)
+
+static func _shake_duration(strength:float) -> float:
+	return 0.22+0.3*strength
+
+# Camera-space offset to add to the camera position this frame. Scaled by blast size, ground distance from the
+# camera focus and view height; zero at a blast's first instant (so unprocessed effects never offset the view)
+# and capped at SHAKE_PEAK of the view height.
+func camera_shake(focus:Vector3, view_size:float, view:Basis) -> Vector3:
+	if not shake_enabled or shake_age.is_empty():return Vector3.ZERO
+	var trauma:=0.0
+	for i in shake_age.size():
+		var a:=shake_age[i]
+		var d:=Vector2(shake_pos[i].x-focus.x,shake_pos[i].z-focus.z).length()
+		var near:=clampf(1.0-d/(view_size*SHAKE_REACH),0.0,1.0)
+		var fade:=1.0-a/_shake_duration(shake_strength[i])
+		trauma+=shake_strength[i]*near*minf(1.0,a/0.025)*fade*fade
+	trauma=minf(trauma,1.0)
+	if trauma<=0.0:return Vector3.ZERO
+	var amount:=trauma*sqrt(trauma)*SHAKE_PEAK*view_size
+	# Deterministic jitter with a near-constant magnitude, so the peak tracks trauma rather than noise phase.
+	var angle:=time*41.0+sin(time*13.0)*2.0
+	var wobble:=Vector2(cos(angle),sin(angle*1.37))*(0.8+0.2*sin(time*71.0))
+	wobble=wobble.limit_length(1.0)
+	return (view.x.normalized()*wobble.x+view.y.normalized()*wobble.y)*amount
 
 # ---------------------------------------------------------------- firing
 # Integration entry point: one call per visible "shot" event. Returns the presentation travel time.
@@ -712,36 +780,50 @@ func water_strike(pos:Vector3, scale:float) -> void:
 		for n in 3:spray(p,_jitter(0.3,0.0)+Vector3(0,rng.randf_range(2.6,3.6),0),0.1,0.2,0.75,0.0,OPTIONAL if n>0 else NORMAL)
 		decal(p,FOAM_RING,0.2,0.9,0.6,Color(FOAM,0.6),OPTIONAL)
 		return
-	# Shell or missile: a tall collapsing column, mist and a widening foam ring.
+	# Shell or missile: a tall collapsing column, white mist rolling out low, a fast foam ring and a slow one.
 	var height:=sqrt(scale)
 	var count:=int(round(6+8*scale))
 	for n in count:
 		var lift:=rng.randf_range(6.0,10.0)*height
-		spray(p+_jitter(0.35*scale,0.0),_jitter(0.7*scale,0.0)+Vector3(0,lift,0),0.3*scale,0.85*scale,rng.randf_range(1.4,1.9),rng.randf()*0.08,ESSENTIAL if n<4 else NORMAL)
-	for n in 3:
-		smoke(p+Vector3(0,0.5,0)+_jitter(0.5),Vector3(0,rng.randf_range(0.8,1.6),0)+_jitter(0.4),0.6*scale,2.2*scale,rng.randf_range(1.3,1.8),Color(SPRAY_WHITE,0.42),1.8,0.0,0.2)
-	decal(p,FOAM_RING,0.6*scale,4.2*scale,1.8,Color(FOAM,0.75))
-	if scale>=0.6:decal(p,FOAM_RING,0.4,2.6*scale,2.8,Color(FOAM,0.5),OPTIONAL)
+		spray(p+_jitter(0.5*scale,0.0),_jitter(1.0*scale,0.0)+Vector3(0,lift,0),0.5*scale,1.5*scale,rng.randf_range(1.4,1.9),rng.randf()*0.08,ESSENTIAL if n<4 else NORMAL)
+	for n in 5:
+		var out:=Vector3.FORWARD.rotated(Vector3.UP,n*TAU/5+rng.randf_range(-0.3,0.3))
+		smoke(p+Vector3(0,0.4,0)+out*0.6*scale,out*rng.randf_range(3.0,4.5)*scale+Vector3(0,0.3,0),0.8*scale,3.0*scale,rng.randf_range(1.6,2.2),Color(SPRAY_WHITE,0.5),2.4,0.0,0.12,NORMAL if n%2==0 else OPTIONAL)
+	decal(p,FOAM_RING,0.8*scale,8.0*scale,0.5,Color(FOAM,0.8))
+	decal(p,FOAM_RING,0.6*scale,5.0*scale,2.4,Color(FOAM,0.6),OPTIONAL if scale<0.6 else NORMAL)
+	if scale>=0.6:shake(p,0.2*scale)
 
-# High-explosive ground burst: brief flash, dirt fountain, dust column, blast ring and a scorch.
+# High-explosive ground burst. Autocannon-sized rounds (scale < 0.6) stay a small flash and dirt kick; shells
+# get the full layering around R = 2.5*scale (tank HE R = 2.5 m): flash, short fireball, a narrow dirt geyser
+# that stalls and hangs (the read that separates HE from a missile), shock ring and dust skirt, clods in arcs,
+# a lingering brown dust column and a scorch.
 func he_burst(pos:Vector3, direction:Vector3, scale:float) -> void:
 	var p:=Vector3(pos.x,maxf(pos.y,FLOOR)+0.1,pos.z)
 	var g:=Vector3(pos.x,FLOOR,pos.z)
-	flash(p+Vector3(0,0.2,0),1.1*scale+0.4,0.06,Color(1.0,0.8,0.48))
-	if scale>=0.6:fireball(p+Vector3(0,0.3,0),Vector3(0,1.5,0),0.6*scale,1.6*scale,0.25)
 	var back:=-_flat(direction)*0.5
-	for n in int(round(3+5*scale)):
-		debris(g+Vector3(0,0.1,0),back+_jitter(1.6*scale,0.0)+Vector3(0,rng.randf_range(4.5,8.0)*sqrt(scale),0),rng.randf_range(0.08,0.16)*(0.6+scale*0.5),rng.randf_range(0.9,1.4),SOIL,false,false,NORMAL if n<3 else OPTIONAL)
-	for n in int(round(2+3*scale)):
-		smoke(g+Vector3(0,0.35,0)+_jitter(0.4*scale,0.0),Vector3(0,rng.randf_range(1.4,3.0)*scale,0)+_jitter(0.6),0.5*scale,rng.randf_range(1.9,2.7)*scale,rng.randf_range(1.6,2.6),Color(DUST.darkened(0.12),0.62),1.6,0.2,rng.randf()*0.08,NORMAL if n<2 else OPTIONAL)
-	if scale>=0.6:sparks(p,int(4*scale),8.0,Vector3.UP*0.6,0.4,OPTIONAL)
-	if scale>=0.9:
-		# Shell burst: a narrow dirt geyser that stalls and hangs, the read that separates HE from a missile.
-		bloom(p+Vector3(0,0.3,0),2.6*scale,0.16,Color(1.0,0.6,0.28,0.26))
-		for n in 3:
-			smoke(g+Vector3(0,0.3+n*0.25,0)+_jitter(0.15,0.0),Vector3(0,rng.randf_range(5.0,8.5)*scale,0)+_jitter(0.35,0.0),0.35*scale,rng.randf_range(1.1,1.5)*scale,rng.randf_range(1.3,1.9),Color(SOIL.lerp(DUST,0.35),0.78),2.4,0.0,n*0.02,NORMAL if n==0 else OPTIONAL)
-	decal(g,DUST_RING,0.5,4.0*scale,0.5,Color(DUST,0.5))
-	decal(g,SCORCH,1.4*scale+0.4,1.6*scale+0.5,30.0,Color(SCORCH_COLOR,0.55),OPTIONAL)
+	if scale<0.6:
+		flash(p+Vector3(0,0.2,0),1.4*scale+0.5,0.05,Color(1.0,0.8,0.48))
+		for n in int(round(3+5*scale)):
+			debris(g+Vector3(0,0.1,0),back+_jitter(1.6*scale,0.0)+Vector3(0,rng.randf_range(4.5,8.0)*sqrt(scale),0),rng.randf_range(0.1,0.18)*(0.6+scale*0.5),rng.randf_range(0.9,1.4),SOIL,false,false,NORMAL if n<3 else OPTIONAL)
+		for n in int(round(2+3*scale)):
+			smoke(g+Vector3(0,0.35,0)+_jitter(0.4*scale,0.0),Vector3(0,rng.randf_range(1.4,3.0)*scale,0)+_jitter(0.6),0.6*scale,rng.randf_range(2.4,3.2)*scale,rng.randf_range(1.6,2.6),Color(DUST.darkened(0.12),0.66),1.6,0.2,rng.randf()*0.08,NORMAL if n<2 else OPTIONAL)
+		decal(g,DUST_RING,0.5,4.5*scale,0.5,Color(DUST,0.5))
+		decal(g,SCORCH,1.4*scale+0.4,1.6*scale+0.5,30.0,Color(SCORCH_COLOR,0.55),OPTIONAL)
+		return
+	var r:=2.5*scale
+	var c:=p+Vector3(0,0.3*r,0)
+	Explosions.core_flash(self,c,g,r,Color(1.0,0.88,0.62))
+	fireball(c,Vector3(0,0.7*r,0),1.0*r,2.8*r,0.5,0.0,ESSENTIAL,1.8,0.9*r)
+	fireball(c+back*0.4*r,back*r+Vector3(0,0.8*r,0),0.5*r,1.7*r,0.42,0.02,NORMAL,2.4,0.8*r)
+	# Geyser: dark soil puffs launched fast and nearly straight up, braking hard so they stall high.
+	for n in 3:
+		smoke(g+Vector3(0,0.3+n*0.3*r,0)+_jitter(0.12*r,0.0),back*0.6+Vector3(0,rng.randf_range(2.6,4.0)*r,0)+_jitter(0.2*r,0.0),0.5*r,rng.randf_range(1.0,1.3)*r,rng.randf_range(1.8,2.6),Color(SOIL.lerp(DUST,0.35),0.85),2.0,0.0,n*0.02,NORMAL if n==0 else OPTIONAL)
+	Explosions.shockwave(self,g,r,DUST,4)
+	Explosions.debris_arcs(self,g+Vector3(0,0.15,0),r,6,[SOIL,SOIL.darkened(0.25)],0,false)
+	Explosions.column(self,g,r,2,Color(DUST.darkened(0.15),0.74),3.2)
+	sparks(c,int(4*scale),11.0,Vector3.UP*0.6,0.5,OPTIONAL,1.6)
+	Explosions.scorch(self,g,r,30.0,0.6,OPTIONAL)
+	shake(c,0.35*scale)
 
 # Armour strike: hard white flash and a spark fan rebounding off the plate; heavy hits leave a dark puff.
 func armor_hit(pos:Vector3, direction:Vector3, scale:float) -> void:
@@ -804,52 +886,58 @@ func _destroy_now(kind:String, pos:Vector3, water:bool) -> void:
 		return
 	Explosions.generic_blast(self,pos,water)
 
-# Staged vehicle kill: flash, fireball lobes, sparks and debris at once; ground dust, then rolling soot,
-# then a sustained wreck fire. Tanks add brief ammunition cook-off pops.
+# Staged vehicle kill around R = 5*scale (a tank kill is a 5 m fireball): white core flash, fireball lobes rolling
+# up into black smoke, shock ring and dust skirt, hull fragments in arcs with smoke trails, a thick black column
+# and a sustained wreck fire. Every hull vents a fuel flare; tanks then cook off their ammunition.
 func vehicle_explosion(pos:Vector3, scale:float=1.0, water:bool=false, cook_off:bool=false) -> void:
+	var r:=minf(5.0*scale,6.5)
 	var g:=Vector3(pos.x,FLOOR,pos.z)
-	flash(pos+Vector3(0,0.6,0),4.2*scale,0.09,Color(1.0,0.86,0.55))
-	bloom(pos+Vector3(0,0.6,0),4.6*scale,0.4,Color(1.0,0.55,0.22,0.36),ESSENTIAL)
-	for n in 4:
-		fireball(pos+Vector3(0,0.4,0)+_jitter(0.6*scale,0.3),Vector3(0,rng.randf_range(1.2,2.4),0)+_jitter(1.2*scale,0.0),0.9*scale,rng.randf_range(2.6,3.4)*scale,rng.randf_range(0.45,0.7),n*0.03)
-	sparks(pos+Vector3(0,0.5,0),int(16*scale),12.0*scale,Vector3.UP*0.8,1.1,ESSENTIAL)
-	for n in int(9*scale):
-		debris(pos+Vector3(0,0.4,0),_jitter(4.0*scale,0.0)+Vector3(0,rng.randf_range(4,9),0),rng.randf_range(0.12,0.28)*scale,rng.randf_range(1.4,2.2),METAL if n%2==0 else SOOT,not water,n<3)
+	var c:=pos+Vector3(0,0.25*r,0)
+	Explosions.core_flash(self,c,g,r,Color(1.0,0.9,0.68))
+	Explosions.fireball_layer(self,c,r,4,1.0)
+	sparks(c,int(18*scale),3.0*r+2.0,Vector3.UP*0.8,1.1,ESSENTIAL,2.4)
+	for n in 4:ember(c+_jitter(0.3*r,0.2*r),Vector3(0,rng.randf_range(2.0,4.0),0)+_jitter(1.5,0.0),rng.randf_range(0.5,0.8),rng.randf_range(1.4,2.2),Color(1.0,0.55,0.22,0.9),OPTIONAL)
+	Explosions.debris_arcs(self,pos+Vector3(0,0.4,0),r,int(10*scale),[METAL,SOOT],3,not water)
+	Explosions.smoke_handoff(self,c,r,3,Color(Explosions.BLACK_SMOKE,0.88),1.0,4.5)
+	Explosions.column(self,g,r,6,Color(SOOT,0.86),5.5,ESSENTIAL)
+	shake(c,scale)
 	if water:
 		water_strike(g,1.1*scale)
 	else:
-		decal(g,DUST_RING,1.0*scale,7.0*scale,0.45,Color(DUST,0.6),ESSENTIAL)
-		decal(g,SCORCH,3.0*scale,3.4*scale,45.0,Color(SCORCH_COLOR,0.7),ESSENTIAL)
-		for n in 10:
-			var out:=Vector3.FORWARD.rotated(Vector3.UP,n*TAU/10+rng.randf_range(-0.2,0.2))
-			smoke(g+Vector3(0,0.25,0)+out*0.8*scale,out*rng.randf_range(4.0,7.0)*scale,0.6*scale,rng.randf_range(2.4,3.0)*scale,rng.randf_range(1.6,2.6),Color(DUST,0.55),2.2,0.05,0.06)
-	for n in 9:
-		smoke(pos+Vector3(0,0.8,0)+_jitter(0.7*scale,0.3),Vector3(0,rng.randf_range(1.5,2.6),0)+_jitter(0.6),1.0*scale,rng.randf_range(3.2,4.0)*scale,rng.randf_range(3.5,5.5),Color(SOOT,0.78),0.6,1.0,0.15+n*0.05,ESSENTIAL)
+		Explosions.shockwave(self,g,r,DUST,8,ESSENTIAL)
+		Explosions.scorch(self,g,r,45.0,0.72,ESSENTIAL)
 	# Wreck fire and a black column that keeps rising for roughly 10-14 s after the kill.
 	add_emitter(g,11.0 if cook_off else 9.5,scale,water)
-	# Secondary pops: every hull vents a fuel flare; tanks then cook off their ammunition.
 	cue(rng.randf_range(0.35,0.55),_cook_off.bind(pos+Vector3(0,0.6,0)+_jitter(0.5*scale,0.0)))
 	if cook_off:
 		for when in [rng.randf_range(0.8,1.1),rng.randf_range(1.5,2.1),rng.randf_range(2.6,3.4)]:
 			cue(when,_cook_off.bind(pos+Vector3(0,0.7,0)+_jitter(0.4,0.0)))
 
+# Secondary pop (fuel flare or ammunition cook-off), R = 1.2 m.
 func _cook_off(pos:Vector3) -> void:
-	flash(pos,1.2,0.05,Color(1.0,0.8,0.45),0.0,NORMAL)
-	bloom(pos,2.4,0.14,Color(1.0,0.55,0.22,0.24),OPTIONAL)
-	fireball(pos+Vector3(0,0.2,0),Vector3(0,2.2,0)+_jitter(0.6,0.0),0.35,1.2,0.3,0.0,NORMAL)
-	sparks(pos,6,8.0,Vector3.UP,0.7)
-	smoke(pos,Vector3(0,1.2,0),0.4,1.6,2.2,Color(SOOT,0.6),1.0,0.6)
+	var r:=1.2
+	flash(pos,3.0*r,0.05,Color(1.0,0.8,0.45),0.0,NORMAL)
+	bloom(pos,4.0*r,0.2,Color(1.0,0.55,0.22,0.3),OPTIONAL)
+	fireball(pos+Vector3(0,0.2,0),Vector3(0,1.4*r,0)+_jitter(0.6,0.0),0.8*r,2.4*r,0.4,0.0,NORMAL,1.8,0.9*r)
+	sparks(pos,8,10.0,Vector3.UP,0.8,NORMAL,1.8)
+	smoke(pos,Vector3(0,1.4,0),0.8*r,2.4*r,2.6,Color(SOOT,0.7),1.0,0.6,0.12)
+	shake(pos,0.12)
 
-# Aircraft or UAV destroyed in flight: airburst, burning fragments falling, and a ground impact on landing.
+# Aircraft or UAV destroyed in flight (R = 3*scale): airburst, burning fragments falling, and a ground impact on
+# landing.
 func air_burst(pos:Vector3, scale:float, crash:bool) -> void:
-	flash(pos,3.2*scale,0.08,Color(1.0,0.86,0.55))
-	for n in (3 if scale>0.7 else 1):
-		fireball(pos+_jitter(0.5*scale),_jitter(1.4*scale),0.7*scale,2.6*scale,rng.randf_range(0.4,0.6))
-	sparks(pos,int(round(14*scale)),11.0*scale,Vector3.ZERO,0.9)
+	var r:=3.0*scale
+	flash(pos,3.0*r,0.07,Color(1.0,0.88,0.62))
+	bloom(pos,2.2*r,0.1,Explosions.CORE,ESSENTIAL)
+	fireball(pos,_jitter(0.3*r),1.0*r,2.6*r,rng.randf_range(0.6,0.8),0.0,ESSENTIAL,1.8,0.5*r)
+	for n in (2 if scale>0.7 else 0):
+		fireball(pos+_jitter(0.4*r),_jitter(1.0*r),0.5*r,1.7*r,rng.randf_range(0.45,0.6),n*0.03,NORMAL,2.4,0.4*r)
+	sparks(pos,int(round(14*scale))+2,4.0*r+3.0,Vector3.ZERO,0.9,NORMAL,1.0+scale)
 	for n in int(round(8*scale))+2:
-		debris(pos,_jitter(3.5*scale,0.0)+Vector3(0,rng.randf_range(0.5,3.5),0),rng.randf_range(0.08,0.22)*scale+0.04,rng.randf_range(2.0,3.0),METAL if n%2 else SOOT,false,n<3 and crash)
+		debris(pos,_jitter(3.5*scale+0.5,0.0)+Vector3(0,rng.randf_range(0.5,3.5),0),rng.randf_range(0.12,0.3)*scale+0.06,rng.randf_range(2.0,3.0),METAL if n%2 else SOOT,false,n<3 and crash)
 	for n in (5 if scale>0.7 else 2):
-		smoke(pos+_jitter(0.5*scale),_jitter(0.5),0.8*scale,3.0*scale,rng.randf_range(2.8,4.0),Color(SOOT,0.72),0.8,0.4,0.1+n*0.05)
+		smoke(pos+_jitter(0.4*r),_jitter(0.3*r),1.0*r,rng.randf_range(2.2,2.7)*r,rng.randf_range(3.0,4.2),Color(SOOT,0.8),0.8,0.12*r,0.15+n*0.05)
+	shake(pos,0.5*scale)
 	if crash:
 		var fall:=sqrt(2.0*maxf(pos.y,0.5)/9.8)
 		cue(fall,vehicle_explosion.bind(Vector3(pos.x,0.4,pos.z),0.7,false,false))
@@ -860,7 +948,7 @@ func structure_collapse(pos:Vector3) -> void:
 		var offset:=Vector3.FORWARD.rotated(Vector3.UP,n*TAU/3+rng.randf())*rng.randf_range(1.2,2.6)
 		cue(0.35+n*0.45,he_burst.bind(Vector3(pos.x,0.6,pos.z)+offset,Vector3.DOWN,0.8))
 	for n in 8:
-		smoke(Vector3(pos.x,0.4,pos.z)+_jitter(2.2,0.0),Vector3(0,0.6,0)+_jitter(0.8,0.0),1.2,3.6,rng.randf_range(3.0,4.5),Color(DUST.darkened(0.2),0.6),1.2,0.4,0.3+n*0.1)
+		smoke(Vector3(pos.x,0.6,pos.z)+_jitter(3.0,0.0),Vector3(0,0.8,0)+_jitter(1.2,0.0),2.4,6.5,rng.randf_range(3.5,5.0),Color(DUST.darkened(0.2),0.7),1.2,0.6,0.3+n*0.1)
 	add_emitter(Vector3(pos.x,FLOOR,pos.z),14.0,1.4,false)
 
 # Sustained wreck fire. A small fixed set; the oldest is replaced when full.
@@ -881,14 +969,15 @@ func _update_emitters(dt:float) -> void:
 		e.fire_clock-=dt
 		if f<0.6 and e.fire_clock<=0:
 			e.fire_clock=rng.randf_range(0.16,0.28)
-			ember(p+Vector3(0,0.5,0)+_jitter(0.45*k,0.2),Vector3(0,0.8,0),rng.randf_range(0.7,1.1)*k,rng.randf_range(0.22,0.34),Color(1.0,0.6,0.25,0.75),OPTIONAL)
-			if rng.randf()<0.5:fireball(p+Vector3(0,0.45,0)+_jitter(0.35*k,0.1),Vector3(0,1.0,0),0.35*k,0.85*k,0.38,0.0,OPTIONAL)
+			ember(p+Vector3(0,0.6,0)+_jitter(0.6*k,0.2),Vector3(0,0.9,0),rng.randf_range(1.0,1.6)*k,rng.randf_range(0.22,0.34),Color(1.0,0.6,0.25,0.8),OPTIONAL)
+			if rng.randf()<0.5:fireball(p+Vector3(0,0.55,0)+_jitter(0.5*k,0.1),Vector3(0,1.3,0),0.6*k,1.5*k,0.45,0.0,OPTIONAL)
 			# Firelight flicker on the ground around the burning hull.
-			if rng.randf()<0.35:bloom(p+Vector3(0,0.4,0),rng.randf_range(2.0,2.8)*k,0.22,Color(1.0,0.5,0.2,rng.randf_range(0.14,0.24)),OPTIONAL)
+			if rng.randf()<0.35:bloom(p+Vector3(0,0.4,0),rng.randf_range(3.2,4.2)*k,0.22,Color(1.0,0.5,0.2,rng.randf_range(0.16,0.26)),OPTIONAL)
 		e.smoke_clock-=dt
 		if e.smoke_clock<=0:
-			e.smoke_clock=lerpf(0.28,0.7,f)
-			smoke(p+Vector3(0,0.9,0)+_jitter(0.35*k,0.1),Vector3(0,rng.randf_range(1.2,1.9),0),0.5*k,rng.randf_range(2.6,3.4)*k,rng.randf_range(3.5,4.8),Color(SOOT.lerp(GREY_SMOKE,f),0.7*(1.0-f*0.5)),0.8,1.0,0.0,OPTIONAL)
+			# Thick black column: large slow puffs that keep rising and spreading, greying as the fire dies.
+			e.smoke_clock=lerpf(0.3,0.7,f)
+			smoke(p+Vector3(0,1.2,0)+_jitter(0.5*k,0.1),Vector3(0,rng.randf_range(1.5,2.3),0),0.9*k,rng.randf_range(3.8,4.6)*k,rng.randf_range(3.8,5.0),Color(Explosions.BLACK_SMOKE.lerp(GREY_SMOKE,f),0.84*(1.0-f*0.45)),0.8,1.1,0.0,OPTIONAL)
 
 # ---------------------------------------------------------------- movement and damage presentation
 func dust(pos:Vector3, direction:Vector2, sea:bool) -> void:
@@ -957,6 +1046,7 @@ func _process(dt:float) -> void:
 	for action in due:action.call()
 	_update_emitters(dt)
 	_update_projectiles(dt)
+	if not shake_age.is_empty():_update_shake(dt)
 	var drift:=wind+BREEZE
 	_sync_view()
 	volume.step(dt,drift,self)
@@ -964,8 +1054,9 @@ func _process(dt:float) -> void:
 	ground.step(dt,drift,self)
 
 func stats() -> Dictionary:
-	return {"volume":volume.live,"glow":glow.live,"ground":ground.live,"visible":volume.visible_count+glow.visible_count+ground.visible_count,"projectiles":projectiles.size(),"cues":cues.size(),"emitters":emitters.size(),"dropped":volume.dropped+glow.dropped+ground.dropped,"recycled":volume.recycled+glow.recycled+ground.recycled,"capacity":{"volume":VOLUME_CAPACITY,"glow":GLOW_CAPACITY,"ground":GROUND_CAPACITY,"projectiles":PROJECTILE_CAPACITY,"cues":CUE_CAPACITY,"emitters":EMITTER_CAPACITY}}
+	return {"volume":volume.live,"glow":glow.live,"ground":ground.live,"shakes":shake_age.size(),"visible":volume.visible_count+glow.visible_count+ground.visible_count,"projectiles":projectiles.size(),"cues":cues.size(),"emitters":emitters.size(),"dropped":volume.dropped+glow.dropped+ground.dropped,"recycled":volume.recycled+glow.recycled+ground.recycled,"capacity":{"volume":VOLUME_CAPACITY,"glow":GLOW_CAPACITY,"ground":GROUND_CAPACITY,"projectiles":PROJECTILE_CAPACITY,"cues":CUE_CAPACITY,"emitters":EMITTER_CAPACITY}}
 
 func clear() -> void:
 	volume.clear();glow.clear();ground.clear()
 	projectiles.clear();cues.clear();emitters.clear();pending_muzzles.clear()
+	shake_pos.clear();shake_strength.clear();shake_age.clear()

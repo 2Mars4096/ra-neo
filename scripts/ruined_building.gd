@@ -261,3 +261,195 @@ static func _corner_collapse(k)->void:
 	for x in [1.6,2.0]:k.tube(Vector3(x,0.05,z1+0.45),Vector3(x,0.75,z1+0.45),0.13,Color("707f6e"))
 	k.blk(2.4,3.0,0.05,1.0,z1+0.25,z1+0.7,Color("355c46"))
 	k.yard_wall(Vector2(split,hd),Vector2(hw,hd),1.1,Color("7d7563"))
+
+# --- Battle damage (events from structure_damage.gd) -------------------------
+# Scorch, holes and fallen masonry are instances of one shared box MultiMesh
+# (one draw call for every mark on the map). A collapse removes that parcel's
+# triangles from its batched city tile (degenerate indices, no new geometry)
+# and puts down a low baked rubble mound: one small node per collapse.
+const MAX_MARKS:=1536
+const MARKS_PER_BUILDING:=14
+const SCORCH:=Color("1c1a17")
+const HOLE:=Color("0b0b0a")
+const CHIP:=Color("6c675c")
+const MOUND:=[Color("6f6a5e"),Color("7f786a"),Color("5d574d"),Color("8a8273"),Color("4f4a42")]
+
+static func show_damage(art,root:Node3D,sim,event:Dictionary)->void:
+	match str(event.type):
+		"building_damage":_mark(root,sim,event)
+		"building_collapse":_collapse(art,root,sim,event)
+		"world_blast":
+			var effects=root.get("effects")
+			var pos:=Vector3(event.pos.x,0.6,event.pos.y)
+			if effects!=null:
+				match str(event.kind):
+					"collapse":effects.structure_collapse(pos)
+					"crash":effects.vehicle_explosion(pos,1.0,sim.terrain.is_water(event.pos),false)
+					"cook_off":effects.destroyed("ammo_depot",pos,false)
+			var audio=root.get("audio")
+			if audio!=null and str(event.kind)!="cook_off":audio.event({"type":"destroyed","kind":"tank","pos":event.pos,"visible":true})
+
+static func _marks(root:Node3D)->MultiMeshInstance3D:
+	var node:=root.get_node_or_null("WorldDamageMarks") as MultiMeshInstance3D
+	if node!=null:return node
+	var multi:=MultiMesh.new()
+	multi.transform_format=MultiMesh.TRANSFORM_3D
+	multi.use_colors=true
+	var box:=BoxMesh.new();box.size=Vector3.ONE
+	multi.mesh=box
+	multi.instance_count=MAX_MARKS
+	multi.visible_instance_count=0
+	node=MultiMeshInstance3D.new()
+	node.name="WorldDamageMarks"
+	node.multimesh=multi
+	var material:=StandardMaterial3D.new()
+	material.vertex_color_use_as_albedo=true
+	material.roughness=1.0
+	node.material_override=material
+	node.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.set_meta("by_building",{})
+	root.add_child(node)
+	return node
+
+static func _add_mark(node:MultiMeshInstance3D,building:int,xf:Transform3D,color:Color)->void:
+	var multi:=node.multimesh
+	var used:Array=node.get_meta("by_building",{}).get(building,[])
+	if used.size()>=MARKS_PER_BUILDING:return
+	var slot:int=multi.visible_instance_count
+	if slot>=MAX_MARKS:return
+	multi.visible_instance_count=slot+1
+	multi.set_instance_transform(slot,xf)
+	multi.set_instance_color(slot,color)
+	used.append(slot)
+	var table:Dictionary=node.get_meta("by_building")
+	table[building]=used
+
+# One mark per structural hit on the face the round struck: chipped render while
+# intact, scorch when damaged, a dark hole and fallen masonry once breached.
+static func _mark(root:Node3D,sim,event:Dictionary)->void:
+	var building:Dictionary=sim.Garrison.index(sim).buildings[int(event.building)]
+	var bounds:Rect2=building.bounds
+	var impact:Vector2=event.impact
+	var rng:=RandomNumberGenerator.new()
+	rng.seed=int(event.building)*7919+int(float(building.damage)*13.0)
+	# Outward normal of the face nearest the impact.
+	var gaps:=[absf(impact.x-bounds.position.x),absf(bounds.end.x-impact.x),absf(impact.y-bounds.position.y),absf(bounds.end.y-impact.y)]
+	var normals:=[Vector3.LEFT,Vector3.RIGHT,Vector3.FORWARD,Vector3.BACK]
+	var face:=0
+	for k in 4:
+		if gaps[k]<gaps[face]:face=k
+	var normal:Vector3=normals[face]
+	var basis:=Basis.looking_at(-normal,Vector3.UP)
+	var height:float=rng.randf_range(0.9,clampf(float(building.height)-1.2,1.0,8.0))
+	var spot:=Vector3(impact.x,height,impact.y)+normal*0.06+basis.x*rng.randf_range(-0.6,0.6)
+	var state:int=int(event.state)
+	var node:=_marks(root)
+	if state<=0:
+		if rng.randf()<0.5:_add_mark(node,event.building,Transform3D(basis*Basis.from_scale(Vector3(0.55,0.45,0.05)),spot),CHIP)
+		return
+	_add_mark(node,event.building,Transform3D(basis*Basis.from_scale(Vector3(rng.randf_range(1.0,1.6),rng.randf_range(0.8,1.3),0.05)),spot),SCORCH)
+	if state>=2:
+		_add_mark(node,event.building,Transform3D(basis*Basis.from_scale(Vector3(rng.randf_range(0.7,1.1),rng.randf_range(0.6,0.9),0.1)),spot+normal*0.02),HOLE)
+		var foot:=Vector3(impact.x,0.15,impact.y)+normal*rng.randf_range(0.5,1.3)+basis.x*rng.randf_range(-1.0,1.0)
+		_add_mark(node,event.building,Transform3D(Basis(Vector3.UP,rng.randf()*TAU)*Basis.from_scale(Vector3(rng.randf_range(0.5,1.0),0.3,rng.randf_range(0.4,0.8))),foot),MOUND[rng.randi()%MOUND.size()])
+
+static func _collapse(art,root:Node3D,sim,event:Dictionary)->void:
+	var id:int=int(event.building)
+	var building:Dictionary=sim.Garrison.index(sim).buildings[id]
+	hide_parcel(root,sim,id)
+	var node:=_marks(root)
+	for slot in node.get_meta("by_building",{}).get(id,[]):
+		node.multimesh.set_instance_transform(slot,Transform3D(Basis.from_scale(Vector3.ONE*0.0001),Vector3(0,-20,0)))
+	var mound:=Node3D.new()
+	mound.name="Rubble_%d"%id
+	root.add_child(mound)
+	rubble_mound(art,mound,building.bounds,id,int(building.floors))
+	art.bake_model(mound)
+
+# A low collapsed-masonry mound filling the footprint, with a few wall stubs.
+static func rubble_mound(art,parent:Node3D,r:Rect2,index:int,floors:int=1)->void:
+	var k=Kit.new(art,parent,r,"north",4111+index)
+	var hw:float=k.w/2;var hd:float=k.d/2
+	var top:float=clampf(0.5+0.35*floors,0.6,2.2)
+	# Stepped core: each layer smaller and offset, so the heap slumps unevenly.
+	for layer in 3:
+		var shrink:float=0.15+layer*0.22
+		var ox:float=k.rng.randf_range(-0.12,0.12)*k.w
+		var oz:float=k.rng.randf_range(-0.12,0.12)*k.d
+		var y0:float=top*layer/3.0
+		k.blk(-hw*(1.0-shrink)+ox,hw*(1.0-shrink)+ox,y0-0.05,y0+top/3.0,-hd*(1.0-shrink)+oz,hd*(1.0-shrink)+oz,MOUND[layer%MOUND.size()])
+	k.rubble(-hw,hw,-hd,hd,clampi(int(k.w*k.d*0.35),8,40),top,MOUND)
+	# Broken wall stubs and a fallen slab at the edges.
+	for i in 3:
+		var along:float=k.rng.randf_range(-hw*0.7,hw*0.7)
+		var z:float=-hd+0.2 if i%2==0 else hd-0.2
+		var tall:float=k.rng.randf_range(0.8,1.6)+0.4*mini(floors,3)
+		k.blk(along-k.rng.randf_range(0.5,1.2),along+k.rng.randf_range(0.5,1.2),0,tall,z-0.15,z+0.15,MOUND[(i+2)%MOUND.size()])
+	var slab:MeshInstance3D=k.blk(-hw*0.5,hw*0.3,top*0.6,top*0.6+0.18,-hd*0.4,hd*0.2,MOUND[3])
+	slab.rotation=Vector3(0.18,k.rng.randf_range(-0.5,0.5),-0.12)
+	k.finish()
+
+# Drop the parcel's triangles from its batched city tile: a triangle belongs to
+# this parcel when its centroid, stepped 0.3 m back along the face normal, lies
+# closer to this footprint than to any neighbour's (shared party walls resolve
+# to their own side). Only rewritten surfaces are re-uploaded.
+const PARCEL_REACH:=1.6
+static func hide_parcel(root:Node3D,sim,building_id:int)->int:
+	var group:=root.find_child("HarborBuildings",true,false)
+	if group==null:return 0
+	var buildings:Array=sim.Garrison.index(sim).buildings
+	var building:Dictionary=buildings[building_id]
+	var spec:Dictionary=building.spec
+	if not spec.has("source_size"):return 0
+	var me:=_frame(spec)
+	var tile:=Vector2i(floori(me.center.x/96.0),floori(me.center.y/96.0))
+	var chunk:=group.get_node_or_null("Tile_%d_%d"%[tile.x,tile.y])
+	if chunk==null:return 0
+	var reach:Rect2=building.bounds.grow(PARCEL_REACH+1.0)
+	var neighbours:Array=[]
+	for other in buildings:
+		if other.id!=building_id and other.spec.has("source_size") and other.bounds.grow(PARCEL_REACH+1.0).intersects(reach):neighbours.append(_frame(other.spec))
+	var removed:=0
+	for mesh in chunk.get_children():
+		if not mesh is MeshInstance3D or mesh.mesh==null:continue
+		var arrays:Array=mesh.mesh.surface_get_arrays(0)
+		var vertices:PackedVector3Array=arrays[Mesh.ARRAY_VERTEX]
+		var normals=arrays[Mesh.ARRAY_NORMAL]
+		var indices:PackedInt32Array=arrays[Mesh.ARRAY_INDEX]
+		var has_normals:bool=normals!=null and normals.size()==vertices.size()
+		var changed:=false
+		for t in range(0,indices.size(),3):
+			var a:int=indices[t];var b:int=indices[t+1];var c:int=indices[t+2]
+			if a==b and b==c:continue
+			var centroid:Vector3=(vertices[a]+vertices[b]+vertices[c])/3.0
+			if not reach.has_point(Vector2(centroid.x,centroid.z)):continue
+			var probe:=Vector2(centroid.x,centroid.z)
+			if has_normals:
+				var n:Vector3=normals[a]+normals[b]+normals[c]
+				var flat:=Vector2(n.x,n.z)
+				if flat.length_squared()>0.0001:probe-=flat.normalized()*0.3
+			var gap:float=_gap(me,probe)
+			if gap>PARCEL_REACH:continue
+			var mine:=true
+			for other in neighbours:
+				if _gap(other,probe)<gap:mine=false;break
+			if not mine:continue
+			indices[t+1]=a;indices[t+2]=a
+			changed=true
+			removed+=1
+		if not changed:continue
+		arrays[Mesh.ARRAY_INDEX]=indices
+		var material:Material=mesh.mesh.surface_get_material(0)
+		var rebuilt:=ArrayMesh.new()
+		rebuilt.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+		if material!=null:rebuilt.surface_set_material(0,material)
+		mesh.mesh=rebuilt
+	return removed
+
+static func _frame(spec:Dictionary)->Dictionary:
+	return {"center":Vector2(float(spec.position[0]),float(spec.position[1])),"half":Vector2(float(spec.source_size[0]),float(spec.source_size[1]))*0.5,"inverse":Basis(Vector3.UP,deg_to_rad(float(spec.get("rotation_degrees",0.0)))).inverse()}
+
+# Distance from a point to a rotated footprint (0 inside).
+static func _gap(frame:Dictionary,p:Vector2)->float:
+	var local:Vector3=frame.inverse*Vector3(p.x-frame.center.x,0.0,p.y-frame.center.y)
+	return Vector2(maxf(absf(local.x)-frame.half.x,0.0),maxf(absf(local.z)-frame.half.y,0.0)).length()

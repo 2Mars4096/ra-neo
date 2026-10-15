@@ -174,7 +174,7 @@ func frame() -> void:
 # Inputs that change the sidebar at once (hover, selection, modes, supply).
 func sidebar_state() -> Array:
 	var sim=battle.sim
-	return [size,pointer(),battle.selected.hash(),battle.build_mode,battle.build_rotated,battle.attack_mode,battle.paused,battle.show_help,sim.result,int(sim.credits)]
+	return [size,pointer(),battle.selected.hash(),battle.build_mode,battle.build_rotated,battle.attack_mode,battle.strike_mode,battle.paused,battle.show_help,sim.result,int(sim.credits)]
 
 func draw_layer(canvas:CanvasItem,part:int) -> void:
 	if not is_instance_valid(battle):
@@ -321,16 +321,30 @@ func draw_top(sim) -> void:
 	var badge_row:Array=objective_badges(sim) if sim.classic.is_empty() else []
 	if not badge_row.is_empty() and badge_row[-1].intersects(pause_rect.grow(6)):pause_rect.position.y=86
 	var toast_y:=90.0 if pause_rect.position.y<86 else 122.0
-	if battle.attack_mode or battle.toast_time>0:
+	if battle.strike_mode:draw_strike_reticle(sim)
+	if battle.attack_mode or battle.strike_mode or battle.toast_time>0:
 		var message:String="ATTACK-MOVE · Choose destination · Esc cancels" if battle.attack_mode else battle.toast
+		if battle.strike_mode and battle.toast_time<=0:message="FPV STRIKE · Click a seen enemy · vehicles first · Esc cancels"
 		var width:=font.get_string_size(message,HORIZONTAL_ALIGNMENT_LEFT,-1,13).x+28
 		console_panel(Rect2(w/2-width/2,toast_y,width,30))
-		text_at(message,Vector2(w/2-width/2+14,toast_y+20),13,ORANGE if battle.attack_mode else WHITE)
+		text_at(message,Vector2(w/2-width/2+14,toast_y+20),13,ORANGE if battle.attack_mode or battle.strike_mode else WHITE)
 	if battle.paused and not battle.show_help and sim.result=="":
 		console_panel(pause_rect)
 		text_at("TACTICAL PAUSE",pause_rect.position+Vector2(21,20),13,TEAL,true)
 	if battle.show_help:draw_guide()
 	if sim.result!="":draw_result()
+
+# Strike footprint at the pointer: the radius in which seen enemies are assigned.
+func draw_strike_reticle(sim) -> void:
+	var mouse:=pointer()
+	if action_at(mouse)!="":return
+	var world:Vector2=battle.world_pos(mouse)
+	var center:Vector2=battle.screen_pos(world)
+	var radius:float=center.distance_to(battle.screen_pos(world+Vector2(sim.FieldOps.SWARM_TARGET_RADIUS,0)))
+	var color:Color=ORANGE if sim.FieldOps.strike_victims(sim,world).is_empty() else RED
+	cv.draw_arc(center,radius,0,TAU,48,color,2,true)
+	cv.draw_line(center-Vector2(10,0),center+Vector2(10,0),color,1)
+	cv.draw_line(center-Vector2(0,10),center+Vector2(0,10),color,1)
 
 # One badge per objective, sharing the space left of the weather readout; legacy
 # two-objective maps keep the original 220 px badges at 228 px spacing.
@@ -544,6 +558,7 @@ func draw_sidebar(sim) -> void:
 			var hint_width:=minf(520,font.get_string_size(hint,HORIZONTAL_ALIGNMENT_LEFT,-1,12).x+24)
 			console_panel(Rect2(x-hint_width-10,tile.position.y,hint_width,32))
 			text_at(fit_text(hint,hint_width-20,12),Vector2(x-hint_width,tile.position.y+21),12,WHITE)
+	if not sim.field_ops.is_empty():draw_strike_tile(sim,x)
 	if not sim.classic.is_empty():
 		text_at("CONSTRUCTION",Vector2(x+19,559),11,MUTED,true)
 		for i in 4:
@@ -630,6 +645,23 @@ func draw_queue_badge(sim,kind:String,tile:Rect2) -> void:
 	if not items.is_empty() and items[0]==kind:
 		var progress:=clampf(1.0-sim.recruit_clock/sim.FieldOps.DEPLOY_INTERVAL,0.0,1.0)
 		cv.draw_rect(Rect2(tile.position+Vector2(2,tile.size.y-3),Vector2((tile.size.x-4)*progress,2)),TEAL)
+
+# FPV strike shares the REINFORCEMENTS header row; a bar and countdown show the cooldown.
+func draw_strike_tile(sim,x:float) -> void:
+	var reason:String=sim.FieldOps.strike_reason(sim)
+	var tile:=Rect2(x+145,248,105,22)
+	var cooling:float=sim.FieldOps.strike_ready_in(sim)
+	button("strike:fpv","",tile,reason=="",battle.strike_mode)
+	var label:="FPV STRIKE" if cooling<=0 else "FPV %ds" % ceili(cooling)
+	text_at(label,tile.position+Vector2(6,15),10,WHITE if reason=="" else MUTED,true)
+	var price:=str(sim.FieldOps.PLAYER_STRIKE_COST)
+	text_at(price,tile.position+Vector2(tile.size.x-6-font.get_string_size(price,HORIZONTAL_ALIGNMENT_LEFT,-1,10).x,15),10,TEAL if reason=="" else MUTED,true)
+	if cooling>0:
+		var progress:=clampf(1.0-cooling/sim.FieldOps.PLAYER_STRIKE_COOLDOWN,0.0,1.0)
+		cv.draw_rect(Rect2(tile.position+Vector2(2,tile.size.y-3),Vector2((tile.size.x-4)*progress,2)),ORANGE)
+	if tile.has_point(pointer()) and not battle.show_help:
+		var hint:="%d FPV drones from the forward base · strike seen enemies at a clicked point · %ds cooldown" % [sim.FieldOps.PLAYER_STRIKE_COUNT,int(sim.FieldOps.PLAYER_STRIKE_COOLDOWN)]
+		sidebar_hint(reason+" · "+hint if reason!="" else hint,tile.position.y)
 
 func draw_field_works(sim,x:float) -> void:
 	var engineer:int=battle.selected_engineer()

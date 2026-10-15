@@ -53,6 +53,10 @@ func run() -> void:
 	integration_checks()
 	explosion_checks()
 	destruction_checks()
+	scale_checks()
+	layering_checks()
+	shake_checks()
+	barrage_checks()
 	stress_checks()
 	FileAccess.open("res://artifacts/effects-budget.json",FileAccess.WRITE).store_string(JSON.stringify(evidence,"  "))
 	print("EFFECTS TESTS: ",checks," checks, ",errors," failures")
@@ -185,9 +189,9 @@ func staging_checks() -> void:
 	var rolling:=0
 	for i in effects.volume.capacity:
 		if effects.volume.life[i]>0 and effects.volume.kind[i]==Effects.SMOKE and effects.volume.delay[i]>=0.15:rolling+=1
-	check(rolling==9,"rolling smoke waits behind the fireball")
-	check(live(effects.volume,Effects.FIRE)==4 and live(effects.volume,Effects.DEBRIS)==9,"fireball lobes and debris are present")
-	check(live(effects.ground,Effects.SCORCH)==1 and live(effects.ground,Effects.DUST_RING)==1,"blast ring and scorch are laid")
+	check(rolling>=8,"rolling smoke waits behind the fireball (%d delayed puffs)"%rolling)
+	check(live(effects.volume,Effects.FIRE)==5 and live(effects.volume,Effects.DEBRIS)==10,"central fireball, four lobes and debris are present")
+	check(live(effects.ground,Effects.SCORCH)==1 and live(effects.ground,Effects.DUST_RING)==2,"shock ring, dust ring and scorch are laid")
 	effects._process(0.05) # first rendered frame
 	effects._process(0.05)
 	effects._process(0.05)
@@ -455,7 +459,8 @@ func projection_checks() -> void:
 	for pool in [effects.volume,effects.glow]:
 		for row in pool.visible_count:largest=maxf(largest,maxf(card_pixels(camera,pool,row,0),card_pixels(camera,pool,row,1)))
 	evidence["largest_card_pixels_at_detonation"]=snappedf(largest,0.1)
-	check(largest<ppu*6.0,"no card exceeds 6 m on screen at detonation: %.0f px"%largest)
+	# Kills are now ~5 m fireballs with a ~16 m soft ground glow; the guard is two-thirds of the view height.
+	check(largest<ppu*camera.size*0.65,"no card exceeds two-thirds of the view at detonation: %.0f px"%largest)
 	camera.free()
 	release(effects)
 
@@ -604,11 +609,11 @@ func explosion_checks() -> void:
 	evidence["impact_signatures"]=sig
 	var t:Dictionary=sig.tank_he_ground
 	var m:Dictionary=sig.atgm_ground
-	check(t.debris>=6 and t.smoke>=7 and t.dust_ring==1 and t.scorch==1 and t.flash==1,"tank HE: one flash, dirt fountain, dust geyser, blast ring and scorch")
-	check(m.flash==2 and m.fire==2 and m.debris<=3 and m.scorch==1 and m.smoke>=3,"ATGM: sharp double flash, fireball and dark smoke rather than a dirt fountain")
+	check(t.debris>=6 and t.smoke>=7 and t.dust_ring==2 and t.scorch==1 and t.flash==1,"tank HE: one flash, dirt fountain, dust geyser, shock and dust rings and scorch")
+	check(m.flash==2 and m.fire==3 and m.debris<=3 and m.scorch==1 and m.smoke>=3,"ATGM: sharp double flash, fireball and dark smoke rather than a dirt fountain")
 	check(t.debris>m.debris and m.fire>t.fire,"tank HE throws more soil; the missile burns more")
-	check(sig.atgm_armor.scorch==0 and sig.atgm_armor.streak>=10 and sig.atgm_armor.fire==2,"ATGM on armour: jet sparks and fireball, no ground scorch")
-	check(sig.rocket_ground.flash==2 and sig.rocket_ground.fire==2,"helicopter rockets share the warhead recipe")
+	check(sig.atgm_armor.scorch==0 and sig.atgm_armor.streak>=10 and sig.atgm_armor.fire==3,"ATGM on armour: jet sparks and fireball, no ground scorch")
+	check(sig.rocket_ground.flash==2 and sig.rocket_ground.fire==3,"helicopter rockets share the warhead recipe")
 	check(sig.at_gun_armor.ember>=1 and sig.at_gun_armor.streak>=14 and sig.at_gun_armor.fire==0,"AT gun AP strike: bright hot spot and dense spark fan, no fireball")
 	check(sig.at_gun_ground.scorch==0 and sig.at_gun_ground.debris>=1 and sig.at_gun_ground.fire==0,"AT gun round skips through soil without an HE crater")
 	check(sig.fpv_ground.flash==1 and sig.fpv_ground.fire==1 and sig.fpv_ground.scorch==1 and sig.fpv_ground.streak>=12,"FPV drone strike: tight burst, fragment spray, small scorch")
@@ -616,7 +621,7 @@ func explosion_checks() -> void:
 	check(sig.rifle_bunker.concrete==1 and sig.rifle_bunker.streak==0 and sig.rifle_bunker.debris==2,"rifle on concrete chips masonry instead of sparking")
 	check(sig.rifle_tank.streak>=2 and sig.rifle_tank.concrete==0,"rifle on armour still ricochets")
 	check(sig.atgm_water.spray>=6 and sig.atgm_water.scorch==0 and sig.atgm_water.foam_ring>=1,"missile into water raises a splash column")
-	check(sig.tank_trench.dust_ring==1 and sig.tank_trench.concrete==0,"trench and berm hits read as soil")
+	check(sig.tank_trench.dust_ring==2 and sig.tank_trench.concrete==0,"trench and berm hits read as soil")
 	var distinct:={}
 	for key in ["tank_he_ground","atgm_ground","atgm_armor","at_gun_armor","at_gun_ground","fpv_ground","tank_bunker","rifle_bunker"]:distinct[JSON.stringify(sig[key])]=true
 	check(distinct.size()==8,"every weapon class has a distinct impact signature")
@@ -626,7 +631,7 @@ func explosion_checks() -> void:
 	var widest:=0.0
 	for i in effects.glow.capacity:
 		if effects.glow.life[i]>0 and effects.glow.kind[i]==Effects.EMBER:widest=maxf(widest,effects.glow.size0[i])
-	check(widest>=4.0 and widest<=5.2,"vehicle kill spills a %.1f m firelight bloom"%widest)
+	check(widest>=14.0 and widest<=Effects.BLOOM_MAX,"vehicle kill spills a %.1f m firelight bloom"%widest)
 	var lights:=0
 	for child in effects.get_children():if child is Light3D:lights+=1
 	check(lights==0,"effects add no dynamic lights")
@@ -674,6 +679,173 @@ func destruction_checks() -> void:
 	check(live(effects.ground,Effects.SCORCH)==1,"scorch decal persists at 30 s")
 	advance(effects,30.0,0.1)
 	check(live(effects.ground,Effects.SCORCH)==0 and effects.emitters.is_empty(),"scorch fades out by 60 s")
+	release(effects)
+
+# ---------------------------------------------------------------- impact scale and layering
+# Peak visible fireball radius: recipes size the central fireball card at 2.8 R (the shader erodes the rim).
+func fireball_radius(effects) -> float:
+	var widest:=0.0
+	for i in effects.volume.capacity:
+		if effects.volume.life[i]>0 and effects.volume.kind[i]==Effects.FIRE:widest=maxf(widest,effects.volume.size1[i])
+	return widest/2.8
+
+func scale_checks() -> void:
+	var effects=fresh()
+	var radius:={}
+	effects.destroyed("tank",Vector3(30,0.7,30))
+	radius["tank_kill"]=fireball_radius(effects)
+	arrival(effects,"tank","rifle",false)
+	radius["tank_he"]=fireball_radius(effects)
+	arrival(effects,"atgm","rifle",false)
+	radius["atgm_soil"]=fireball_radius(effects)
+	arrival(effects,"rifle","rifle",false)
+	radius["rifle"]=fireball_radius(effects)
+	var rifle_glow:=0.0
+	for i in effects.glow.capacity:
+		if effects.glow.life[i]>0:rifle_glow=maxf(rifle_glow,effects.glow.size0[i])
+	evidence["fireball_radius_m"]=radius
+	check(radius.tank_kill>=4.0 and radius.tank_kill<=6.0,"tank kill fireball radius %.1f m (target 4-6)"%radius.tank_kill)
+	check(radius.tank_he>=2.0 and radius.tank_he<=3.0,"tank HE fireball radius %.1f m (target ~2.5)"%radius.tank_he)
+	check(radius.atgm_soil>=1.2 and radius.atgm_soil<=1.8,"ATGM on soil fireball radius %.1f m (target ~1.5)"%radius.atgm_soil)
+	check(radius.rifle==0.0 and rifle_glow<0.5 and effects.shake_age.is_empty(),"small arms stay small: no fireball, no glow, no shake")
+	release(effects)
+
+# Time line of a tank kill, sampled at the review-capture instants: flash only at the start, fireball rising and
+# cooling, a fast shock ring, debris in the air, a rising column and a lingering black plume.
+func layering_checks() -> void:
+	var effects=fresh()
+	var pos:=Vector3(30,0.7,30)
+	effects.destroyed("tank",pos)
+	var timeline:={}
+	var stamps:=[0.05,0.25,0.6,1.5,4.0]
+	var elapsed:=0.0
+	var fire_y0:=-1.0
+	for stamp in stamps:
+		while elapsed<stamp-0.0001:
+			effects._process(1.0/60.0)
+			elapsed+=1.0/60.0
+		var row:={"flash":shown(effects.glow,Effects.FLASH),"fire":shown(effects.volume,Effects.FIRE),"smoke":shown(effects.volume,Effects.SMOKE),"debris_air":0,"ring":0.0,"smoke_top":0.0,"fire_y":0.0,"big_fire":0}
+		for i in effects.volume.capacity:
+			if effects.volume.life[i]<=0 or effects.volume.delay[i]>0:continue
+			var y:float=effects.volume.pos[i].y
+			if effects.volume.kind[i]==Effects.DEBRIS and y>1.5:row.debris_air+=1
+			if effects.volume.kind[i]==Effects.SMOKE:row.smoke_top=maxf(row.smoke_top,y)
+			if effects.volume.kind[i]==Effects.FIRE and effects.volume.size1[i]>=5.0:
+				row.fire_y=maxf(row.fire_y,y)
+				row.big_fire+=1
+		for i in effects.ground.capacity:
+			if effects.ground.life[i]>0 and effects.ground.kind[i]==Effects.DUST_RING:
+				var t:float=effects.ground.age[i]/effects.ground.life[i]
+				row.ring=maxf(row.ring,lerpf(effects.ground.size0[i],effects.ground.size1[i],1.0-(1.0-t)*(1.0-t)))
+		if fire_y0<0:fire_y0=row.fire_y
+		timeline[str(stamp)]=row
+	evidence["kill_timeline"]=timeline
+	var t0:Dictionary=timeline["0.05"]
+	var t1:Dictionary=timeline["0.25"]
+	var t2:Dictionary=timeline["0.6"]
+	var t3:Dictionary=timeline["1.5"]
+	var t4:Dictionary=timeline["4.0"]
+	check(t0.flash==0 and t0.big_fire>=4,"core star flash is gone by 0.05 s (1-2 frames) while the fireball is up")
+	check(t1.ring>=18.0,"shock ring has spread to %.1f m across within 0.25 s"%t1.ring)
+	check(t2.fire_y>fire_y0+0.5 and t2.big_fire>=1,"fireball rolls upward (%.1f -> %.1f m)"%[fire_y0,t2.fire_y])
+	check(t2.debris_air>=3,"debris still arcing through the air at 0.6 s (%d)"%t2.debris_air)
+	check(t3.big_fire==0 and t3.smoke>=12,"by 1.5 s the fireball has cooled into %d smoke puffs"%t3.smoke)
+	check(t4.smoke_top>=8.0,"smoke column has risen to %.1f m by 4 s"%t4.smoke_top)
+	release(effects)
+
+func shake_checks() -> void:
+	var effects=fresh()
+	var focus:=Vector3(30,0,30)
+	var view:Basis=Effects.DEFAULT_VIEW
+	check(effects.camera_shake(focus,45.0,view)==Vector3.ZERO,"no shake without blasts")
+	for i in 20:effects.fire("rifle",Vector3(20,0.95,30+i*0.2),Vector3(30,0.8,30),i%2==0,false,"rifle")
+	advance(effects,0.5)
+	check(effects.shake_age.is_empty(),"small arms never shake the camera")
+	effects.clear()
+	effects.destroyed("tank",Vector3(31,0.7,30))
+	check(effects.camera_shake(focus,45.0,view)==Vector3.ZERO,"shake starts from rest (unprocessed effects never offset the view)")
+	var peak:=0.0
+	var samples:=0
+	for frame in 30:
+		effects._process(1.0/60.0)
+		var offset:Vector3=effects.camera_shake(focus,45.0,view)
+		peak=maxf(peak,offset.length())
+		if absf(offset.dot(view.z))>0.0001:samples+=1
+	evidence["kill_shake_peak_m_at_45"]=snappedf(peak,0.001)
+	check(peak>0.05 and peak<=Effects.SHAKE_PEAK*45.0*1.001,"vehicle kill at the focus shakes the view by %.2f m (cap %.2f)"%[peak,Effects.SHAKE_PEAK*45.0])
+	check(samples==0,"shake stays in the screen plane")
+	var far:Vector3=effects.camera_shake(Vector3(31+45.0*Effects.SHAKE_REACH+0.5,0,30),45.0,view)
+	check(far==Vector3.ZERO,"blasts beyond the view reach do not shake")
+	advance(effects,1.0)
+	check(effects.shake_age.is_empty() and effects.camera_shake(focus,45.0,view)==Vector3.ZERO,"shake settles within a second")
+	# HE impact shakes less than a kill.
+	effects.clear()
+	effects.he_burst(Vector3(31,0,30),Vector3.DOWN,1.0)
+	var he_peak:=0.0
+	for frame in 30:
+		effects._process(1.0/60.0)
+		he_peak=maxf(he_peak,effects.camera_shake(focus,45.0,view).length())
+	evidence["he_shake_peak_m_at_45"]=snappedf(he_peak,0.001)
+	check(he_peak>0.0 and he_peak<peak*0.5,"tank HE shakes %.2f m, under half a kill"%he_peak)
+	# Many blasts: bounded list and capped trauma.
+	effects.clear()
+	for i in 30:effects.vehicle_explosion(Vector3(30+i%3,0.7,30),1.5)
+	var worst:=0.0
+	for frame in 20:
+		effects._process(1.0/60.0)
+		worst=maxf(worst,effects.camera_shake(focus,45.0,view).length())
+	check(effects.shake_age.size()<=Effects.SHAKE_CAPACITY and worst<=Effects.SHAKE_PEAK*45.0*1.001,"stacked blasts stay capped (%.2f m)"%worst)
+	effects.shake_enabled=false
+	check(effects.camera_shake(focus,45.0,view)==Vector3.ZERO,"shake can be switched off for still captures")
+	release(effects)
+	# battle.gd applies it through update_camera() and returns to rest afterwards.
+	var battle=load("res://scenes/main.tscn").instantiate()
+	root.add_child(battle)
+	battle.set_process(false)
+	battle.set_physics_process(false)
+	battle.effects.set_process(false)
+	battle.effects.muted=true
+	battle.update_camera()
+	var rest:Vector3=battle.camera.position
+	battle.effects.destroyed("tank",battle.camera_focus+Vector3(0,0.7,0))
+	var moved:=0.0
+	for frame in 20:
+		battle.effects._process(1.0/60.0)
+		battle.update_camera()
+		moved=maxf(moved,battle.camera.position.distance_to(rest))
+	battle.effects._process(1.5)
+	battle.effects._process(1.0/60.0)
+	battle.update_camera()
+	check(moved>0.0 and battle.camera.position.is_equal_approx(rest),"battle camera shakes on a nearby kill and returns to rest (%.2f m)"%moved)
+	root.remove_child(battle)
+	battle.free()
+
+# Larger blasts against the fixed pools: a burst of heavy kills and shells must stay inside every cap, keep
+# essential beats, keep cards bounded and drain.
+func barrage_checks() -> void:
+	var effects=fresh()
+	for i in 40:
+		effects.destroyed(["tank","aa","ammo_depot","bunker","factory"][i%5],Vector3(i%8*10,0.7,i/8*10))
+		effects.he_burst(Vector3(i%8*10+4,0,i/8*10+4),Vector3.DOWN,1.0)
+	var worst:={"volume":0,"glow":0,"ground":0,"debris":0,"cues":0,"emitters":0}
+	var largest:=0.0
+	for frame in 300:
+		effects._process(1.0/30.0)
+		var stats:Dictionary=effects.stats()
+		for key in ["volume","glow","ground","cues","emitters"]:worst[key]=maxi(worst[key],stats[key])
+		worst.debris=maxi(worst.debris,effects.volume.kind_live[Effects.DEBRIS])
+		for pool in [effects.volume,effects.glow,effects.ground]:
+			for i in pool.capacity:
+				if pool.life[i]>0:largest=maxf(largest,pool.size1[i])
+	evidence["barrage"]={"worst":worst,"largest_card_m":snappedf(largest,0.1),"recycled":effects.stats().recycled,"dropped":effects.stats().dropped}
+	check(worst.volume<=Effects.VOLUME_CAPACITY and worst.glow<=Effects.GLOW_CAPACITY and worst.ground<=Effects.GROUND_CAPACITY and worst.debris<=Effects.DEBRIS_CAP,"heavy barrage stays inside every pool: %s"%worst)
+	check(worst.cues<=Effects.CUE_CAPACITY and worst.emitters<=Effects.EMITTER_CAPACITY,"barrage cues and wreck fires bounded")
+	var card_max:=maxf(Effects.BLOOM_MAX,Explosions.RING_MAX)
+	check(largest<=card_max,"no card grows past %.0f m (largest %.1f m)"%[card_max,largest])
+	for pool in [effects.volume,effects.glow,effects.ground]:
+		check(pool.free_slots.size()+pool.live==pool.capacity and pool.multimesh.instance_count==pool.capacity,"barrage keeps the free list and fixed instance count")
+	advance(effects,70.0,0.1)
+	check(effects.stats().visible==0 and effects.cues.is_empty() and effects.emitters.is_empty() and effects.shake_age.is_empty(),"barrage drains completely")
 	release(effects)
 
 func descendants(node:Node) -> int:
