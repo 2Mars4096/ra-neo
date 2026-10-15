@@ -773,3 +773,33 @@ static func topple_tree(index:int,heading:Vector2,lookup:Array)->void:
 		entry[3]=pivot*Transform3D(entry[3])
 		multi.set_instance_transform(int(entry[1]),entry[3])
 	lookup[index]=null
+
+# Live damage pose for a unit's root node (yaw and the animated roll stay on its
+# "Model" child; the root's height is the unit altitude, which flooding already
+# lowers). A flooding hull lists to one side and settles by the stern as it
+# fills; a gunship going down banks into its spin, or noses down for a forced
+# landing. Identity when the hull is sound.
+const FLOOD_LIST:=0.24
+const FLOOD_TRIM:=0.07
+const CRASH_BANK:=0.38
+const LANDING_PITCH:=0.18
+static func damage_pose(u:Dictionary)->Basis:
+	var list:=0.0
+	var trim:=0.0
+	if u.has("crash"):
+		var spin:bool=u.crash=="spin"
+		list=CRASH_BANK if spin else 0.08
+		trim=-0.1 if spin else -LANDING_PITCH
+	elif float(u.get("flood",0.0))>0.0:
+		var filled:=clampf(float(u.flood),0.0,1.0)
+		list=FLOOD_LIST*filled*(1.0 if int(u.id)%2==0 else -1.0)
+		trim=FLOOD_TRIM*filled
+	else:return Basis.IDENTITY
+	var forward:=Vector3(u.facing.x,0,u.facing.y)
+	forward=forward.normalized() if forward.length_squared()>0.0001 else Vector3.FORWARD
+	return Basis(forward,list)*Basis(forward.cross(Vector3.UP),trim)
+
+# Writes only on change, so a settled root is not re-notified every frame.
+static func apply_damage_pose(root:Node3D,u:Dictionary)->void:
+	var pose:=damage_pose(u)
+	if not root.basis.is_equal_approx(pose):root.basis=pose

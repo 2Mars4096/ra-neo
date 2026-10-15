@@ -371,6 +371,19 @@ var shake_strength:=PackedFloat32Array()
 var shake_age:=PackedFloat32Array()
 # Permanent craters/scorch (tiled ground-damage textures) and landed debris chunks; see effects_remains.gd.
 var remains:=Remains.new()
+# Live damaged vehicles (see "live vehicle damage" below).
+var live_sim=null # explicit watch(); otherwise the parent's `sim` (battle.gd)
+var live_nodes:Dictionary={} # unit id -> root Node3D, for the hull damage pose
+var live_emitters:Array[Dictionary]=[]
+var live_bound:=false
+var _live_clock:=0.0
+var _live_wreck_seen:Dictionary={} # unit id -> effects time the wreck was first seen
+var _live_tilts:Dictionary={} # unit id -> root Node3D carrying a damage pose
+var _live_tilt_units:Array[Dictionary]=[]
+# Ground point under the view centre, ground radius of the view (INF: no culling) and a zoom LOD factor.
+var view_focus:=Vector3.ZERO
+var view_radius:=INF
+var view_zoom:=1.0
 
 func _init() -> void:
 	rng.seed=814
@@ -400,6 +413,12 @@ func _sync_view() -> void:
 	if camera.projection==Camera3D.PROJECTION_ORTHOGONAL and height>0.0:
 		smallest=MIN_PIXELS*camera.size/height
 	set_view(camera.global_basis,smallest)
+	var look:=-camera.global_basis.z
+	if camera.projection==Camera3D.PROJECTION_ORTHOGONAL and look.y<-0.05 and height>0.0:
+		var aspect:=get_viewport().get_visible_rect().size.x/height
+		view_focus=camera.global_position+look*(-camera.global_position.y/look.y)
+		view_radius=0.5*camera.size*maxf(aspect,1.0/-look.y)
+		view_zoom=clampf(LIVE_FULL_ZOOM/camera.size,LIVE_MIN_ZOOM,1.0)
 
 func reseed(value:int) -> void:
 	rng.seed=value
@@ -1027,10 +1046,186 @@ func dust(pos:Vector3, direction:Vector2, sea:bool) -> void:
 		smoke(Vector3(pos.x,0.2,pos.z)-forward*1.7+side*s*0.75,-forward*0.4+Vector3(0,0.35,0)+_jitter(0.15,0.0),0.35,1.5,1.1,Color(DUST,0.3),1.8,0.0,0.0,OPTIONAL)
 
 # hp_fraction below 0.4 smokes grey; below 0.2 adds dark smoke and flickering fire.
+# Once a simulation is bound the live-damage emitters own this (capped and view-faded); the call is ignored.
 func damage_smoke(pos:Vector3, hp_fraction:float) -> void:
+	if live_bound:return
 	var severe:=hp_fraction<0.2
 	smoke(pos,Vector3(0.1,0.9,0.05),0.35,1.5 if severe else 1.1,1.6 if severe else 1.2,Color(SOOT if severe else GREY_SMOKE,0.5 if severe else 0.38),1.0,0.5,0.0,OPTIONAL)
 	if severe and rng.randf()<0.4:ember(pos+Vector3(0,-0.2,0),Vector3(0,0.5,0),0.5,0.2,Color(1.0,0.6,0.25,0.6),OPTIONAL)
+
+# ---------------------------------------------------------------- live vehicle damage
+# Persistent cues on vehicles that are damaged but still in play, polled from the simulation (battle.gd's `sim`
+# and `nodes`, found through the parent; tests call watch()). Every LIVE_SCAN s a scan keeps at most LIVE_CAPACITY
+# emitters, fires and sinking hulls first and then nearest the view centre. Each emitter spawns a few OPTIONAL
+# particles from the shared pools on its own clocks (no nodes; under load the pools shed them first), slower and
+# fainter towards the view edge or when zoomed far out. Burning hulls vent flame and black smoke from the engine
+# deck until the fire is out; other damage trails thin grey smoke; flooding hulls throw spray at the waterline and
+# list (visuals.gd damage_pose); crashing gunships trail smoke and wrecked ones smoke for LIVE_WRECK_SECONDS.
+const LIVE_CAPACITY:=12
+const LIVE_SCAN:=0.2
+const LIVE_WRECK_SECONDS:=30.0
+const LIVE_KINDS:=["tank","aa","boat","helo","harvester"]
+const LIVE_DAMAGED:=0
+const LIVE_FLOOD:=1
+const LIVE_WRECK:=2
+const LIVE_CRASH:=3
+const LIVE_FIRE:=4
+# Ranking head start in metres of view distance.
+const LIVE_RANK:=[0.0,40.0,20.0,60.0,60.0]
+# Below this ortho size emitters run at full rate; zoomed further out they thin to LIVE_MIN_ZOOM.
+const LIVE_FULL_ZOOM:=90.0
+const LIVE_MIN_ZOOM:=0.35
+var _visuals_script:GDScript
+
+# Binds a simulation explicitly (tests and hosts without a `sim` property); nodes maps unit id to its root node.
+func watch(sim, nodes:Dictionary={}) -> void:
+	live_sim=sim
+	live_nodes=nodes
+
+func _live_host():
+	if live_sim!=null:return live_sim
+	var host:=get_parent()
+	if host==null:return null
+	var sim=host.get("sim")
+	if not (sim is Object) or not sim.has_method("alive"):return null
+	var nodes=host.get("nodes")
+	if nodes is Dictionary:live_nodes=nodes
+	return sim
+
+# 1 inside the view, falling to 0 just beyond its edge, times the zoom LOD.
+func view_fade(pos:Vector3) -> float:
+	if view_radius==INF:return view_zoom
+	var d:=Vector2(pos.x-view_focus.x,pos.z-view_focus.z).length()
+	return (1.0-smoothstep(view_radius*0.85,view_radius*1.3,d))*view_zoom
+
+func _live_mode(sim, u:Dictionary) -> int:
+	if not sim.alive(u):
+		if u.kind!="helo" or not u.get("wrecked",false):return -1
+		if not _live_wreck_seen.has(u.id):_live_wreck_seen[u.id]=time
+		return LIVE_WRECK if time-float(_live_wreck_seen[u.id])<LIVE_WRECK_SECONDS else -1
+	if not u.visible:return -1
+	if float(u.get("fire_until",-1.0))>float(sim.time):return LIVE_FIRE
+	if u.has("crash"):return LIVE_CRASH
+	if float(u.get("flood",0.0))>0.0:return LIVE_FLOOD
+	if not (u.kind in LIVE_KINDS or u.has("crew")):return -1
+	if float(u.hp)<float(u.max_hp)*0.4 or u.get("mobility_kill",false) or u.get("firepower_kill",false) or int(u.get("crew",0))<int(u.get("crew_full",0)):return LIVE_DAMAGED
+	return -1
+
+func _live_scan(sim) -> void:
+	var ranked:Array=[]
+	_live_tilt_units.clear()
+	for u in sim.units:
+		if not u.members.is_empty() or u.get("structure",false):continue
+		if sim.alive(u) and (u.has("crash") or float(u.get("flood",0.0))>0.0):_live_tilt_units.append(u)
+		var mode:=_live_mode(sim,u)
+		if mode<0:continue
+		var fade:=view_fade(Vector3(u.pos.x,0,u.pos.y))
+		if fade<=0.01:continue
+		var d:=Vector2(u.pos.x-view_focus.x,u.pos.y-view_focus.z).length() if view_radius!=INF else 0.0
+		ranked.append([d-float(LIVE_RANK[mode]),u,mode,fade])
+	if ranked.size()>LIVE_CAPACITY:
+		ranked.sort_custom(func(a,b):return a[0]<b[0])
+		ranked.resize(LIVE_CAPACITY)
+	var previous:={}
+	for e in live_emitters:previous[e.u.id]=e
+	live_emitters.clear()
+	for entry in ranked:
+		var u:Dictionary=entry[1]
+		var e:Dictionary=previous.get(u.id,{"u":u,"puff":rng.randf_range(0.0,0.3),"flame":0.0,"spray":0.0})
+		e.u=u
+		e.mode=entry[2]
+		e.fade=entry[3]
+		live_emitters.append(e)
+
+func _update_live(dt:float) -> void:
+	var sim=_live_host()
+	live_bound=sim!=null
+	if sim==null:
+		live_emitters.clear()
+		return
+	_live_clock-=dt
+	if _live_clock<=0.0:
+		_live_clock=LIVE_SCAN
+		_live_scan(sim)
+	_update_live_tilts()
+	for e in live_emitters:_live_emit(sim,e,dt)
+
+# Damage pose on flooding and falling hulls; roots that no longer qualify are levelled once.
+func _update_live_tilts() -> void:
+	if _live_tilt_units.is_empty() and _live_tilts.is_empty():return
+	var posed:={}
+	for u in _live_tilt_units:
+		var root=live_nodes.get(u.id)
+		if not is_instance_valid(root) or not (root is Node3D):continue
+		if _visuals_script==null:_visuals_script=load("res://scripts/visuals.gd")
+		_visuals_script.apply_damage_pose(root,u)
+		posed[u.id]=root
+	_reset_live_tilts(posed)
+	_live_tilts=posed
+
+func _reset_live_tilts(keep:Dictionary) -> void:
+	for id in _live_tilts:
+		if keep.has(id):continue
+		var root=_live_tilts[id]
+		if is_instance_valid(root) and root.basis!=Basis.IDENTITY:root.basis=Basis.IDENTITY
+	if keep.is_empty():_live_tilts={}
+
+func _live_emit(sim, e:Dictionary, dt:float) -> void:
+	var u:Dictionary=e.u
+	var definition:Dictionary=sim.definitions.get(u.kind,{})
+	var radius:=float(definition.get("radius",1.5))
+	var facing:Vector2=u.facing if u.facing.length_squared()>0.0001 else Vector2.UP
+	var back:=-Vector3(facing.x,0,facing.y).normalized()
+	var mode:int=e.mode
+	var fade:float=e.fade
+	var alpha:=0.45+0.55*fade
+	var slow:=1.0/maxf(fade,0.25)
+	var height:=0.0 if mode==LIVE_WRECK else float(u.get("altitude",definition.get("altitude",0.0)))
+	# Engine deck: the rear third of the hull, just above the deck.
+	var deck:=Vector3(u.pos.x,height+0.45*radius+0.4,u.pos.y)+back*0.35*radius
+	e.puff-=dt
+	match mode:
+		LIVE_FIRE:
+			if float(u.get("fire_until",-1.0))<=float(sim.time):return # out since the last scan
+			e.flame-=dt
+			if e.flame<=0.0:
+				e.flame=rng.randf_range(0.16,0.26)*slow
+				if rng.randf()<0.6:fireball(deck+_jitter(0.25*radius,0.05),Vector3(0,1.1,0),0.3*radius,0.85*radius,0.42,0.0,OPTIONAL,2.0,0.9)
+				else:ember(deck+_jitter(0.25*radius,0.05),Vector3(0,0.9,0),0.55*radius,0.28,Color(1.0,0.6,0.25,0.8*alpha),OPTIONAL)
+				if rng.randf()<0.25:bloom(deck,2.4*radius,0.22,Color(1.0,0.5,0.2,0.2*alpha),OPTIONAL)
+			if e.puff<=0.0:
+				e.puff=rng.randf_range(0.28,0.38)*slow
+				smoke(deck+Vector3(0,0.35,0)+_jitter(0.2*radius,0.05),Vector3(0,rng.randf_range(1.3,1.9),0),0.4*radius,rng.randf_range(1.7,2.1)*radius,rng.randf_range(2.8,3.6),Color(Explosions.BLACK_SMOKE,0.78*alpha),0.9,0.9,0.0,OPTIONAL)
+		LIVE_CRASH:
+			if e.puff<=0.0:
+				var spin:bool=u.get("crash","")=="spin"
+				e.puff=(0.08 if spin else 0.14)*slow
+				smoke(deck+_jitter(0.15,0.1),Vector3(0,0.3,0),0.35,1.6 if spin else 1.2,1.8,Color(SOOT if spin else GREY_SMOKE,(0.72 if spin else 0.5)*alpha),1.2,0.3,0.0,OPTIONAL)
+				if spin and rng.randf()<0.3:ember(deck,Vector3(0,0.4,0),0.5,0.2,Color(1.0,0.6,0.25,0.7*alpha),OPTIONAL)
+		LIVE_FLOOD:
+			if float(u.get("flood_rate",0.0))>0.0:
+				e.spray-=dt
+				if e.spray<=0.0:
+					e.spray=rng.randf_range(0.24,0.34)*slow
+					var side:=Vector3(-back.z,0,back.x)*(1.0 if rng.randf()<0.5 else -1.0)
+					var waterline:=Vector3(u.pos.x,FLOOR+0.05,u.pos.y)+back*rng.randf_range(-0.3,0.4)*radius+side*0.45*radius
+					spray(waterline,side*rng.randf_range(0.6,1.1)+Vector3(0,rng.randf_range(0.9,1.4),0),0.1,0.32,0.5,0.0,OPTIONAL)
+					if rng.randf()<0.2:decal(waterline,FOAM_RING,0.6,1.6*radius,1.4,Color(FOAM,0.45*alpha),OPTIONAL)
+			if e.puff<=0.0:
+				e.puff=rng.randf_range(0.55,0.7)*slow
+				smoke(deck,Vector3(0.1,0.8,0.05),0.3,1.1,1.3,Color(GREY_SMOKE,0.3*alpha),1.0,0.45,0.0,OPTIONAL)
+		LIVE_WRECK:
+			if e.puff<=0.0:
+				var calm:=clampf((time-float(_live_wreck_seen.get(u.id,time)))/LIVE_WRECK_SECONDS,0.0,1.0)
+				var quiet:bool=u.get("lost_quiet",false) # forced landing: no fire, lighter smoke
+				e.puff=rng.randf_range(0.45,0.6)*slow*(1.0+calm)
+				smoke(Vector3(u.pos.x,0.6,u.pos.y)+_jitter(0.3*radius,0.05),Vector3(0,rng.randf_range(0.9,1.3),0),0.4,rng.randf_range(1.6,2.2),rng.randf_range(2.2,3.0),Color(GREY_SMOKE if quiet else SOOT,(0.42 if quiet else 0.62)*alpha*(1.0-0.6*calm)),0.9,0.7,0.0,OPTIONAL)
+		_:
+			if e.puff<=0.0:
+				var severe:=float(u.hp)<float(u.max_hp)*0.2
+				e.puff=(0.26 if severe else 0.42)*slow
+				smoke(deck,Vector3(0.1,0.85,0.05),0.3,1.4 if severe else 1.0,1.6 if severe else 1.2,Color(SOOT if severe else GREY_SMOKE,(0.48 if severe else 0.32)*alpha),1.0,0.45,0.0,OPTIONAL)
+				if severe and rng.randf()<0.4:ember(deck,Vector3(0,0.5,0),0.5,0.2,Color(1.0,0.6,0.25,0.6*alpha),OPTIONAL)
 
 # ---------------------------------------------------------------- legacy entry points
 # Kept so current callers keep working until integration moves to fire()/destroyed()/damage_smoke().
@@ -1083,15 +1278,19 @@ func _process(dt:float) -> void:
 	remains.step(dt)
 	var drift:=wind+BREEZE
 	_sync_view()
+	_update_live(dt)
 	volume.step(dt,drift,self)
 	glow.step(dt,drift,self)
 	ground.step(dt,drift,self)
 
 func stats() -> Dictionary:
-	return {"volume":volume.live,"glow":glow.live,"ground":ground.live,"shakes":shake_age.size(),"remains":remains.stats(),"visible":volume.visible_count+glow.visible_count+ground.visible_count,"projectiles":projectiles.size(),"cues":cues.size(),"emitters":emitters.size(),"dropped":volume.dropped+glow.dropped+ground.dropped,"recycled":volume.recycled+glow.recycled+ground.recycled,"capacity":{"volume":VOLUME_CAPACITY,"glow":GLOW_CAPACITY,"ground":GROUND_CAPACITY,"projectiles":PROJECTILE_CAPACITY,"cues":CUE_CAPACITY,"emitters":EMITTER_CAPACITY}}
+	return {"volume":volume.live,"glow":glow.live,"ground":ground.live,"shakes":shake_age.size(),"remains":remains.stats(),"visible":volume.visible_count+glow.visible_count+ground.visible_count,"projectiles":projectiles.size(),"cues":cues.size(),"emitters":emitters.size(),"live_emitters":live_emitters.size(),"dropped":volume.dropped+glow.dropped+ground.dropped,"recycled":volume.recycled+glow.recycled+ground.recycled,"capacity":{"volume":VOLUME_CAPACITY,"glow":GLOW_CAPACITY,"ground":GROUND_CAPACITY,"projectiles":PROJECTILE_CAPACITY,"cues":CUE_CAPACITY,"emitters":EMITTER_CAPACITY,"live_emitters":LIVE_CAPACITY}}
 
 func clear() -> void:
 	volume.clear();glow.clear();ground.clear()
 	projectiles.clear();cues.clear();emitters.clear();pending_muzzles.clear()
 	shake_pos.clear();shake_strength.clear();shake_age.clear()
 	remains.clear()
+	live_emitters.clear()
+	_live_wreck_seen.clear()
+	_reset_live_tilts({})
