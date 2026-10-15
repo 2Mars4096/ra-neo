@@ -2,7 +2,7 @@
 
 ## Known limitations
 
-- Combat values are fictional abstractions, not ballistic measurements. No component damage, ammo selection, blast radius, physical projectile interception, or validated probabilities. UAV one-hit disable applies only to the small recon class.
+- Combat values are fictional abstractions, not ballistic measurements. Vehicle component damage (`vehicle_damage.gd`: facing/range penetration, mobility/firepower/crew/catastrophic), infantry wound states with HE fragment radius (`infantry.gd`), HE structure damage (`structure_damage.gd`) and FPV/crash blast radii now exist, but their armour, penetration and outcome numbers are not ballistic data. No ammo selection, physical projectile interception, or validated probabilities. UAV one-hit disable applies only to the small recon class.
 - Interference uses a scenario-defined radius, not radio propagation. No player-deployed jammers, relay network, frequency/equipment modeling, or UAV return/land failsafe. Friendly tracking remains visible.
 
 - The original tactical missions remain short under scripted policies. Canal Watch adds a counterattack and autonomy; classic skirmish adds production/economy, but supply networks and a broader strategic planner are still absent. Enemy tactical repairs currently have no resource budget.
@@ -25,7 +25,7 @@
 
 ## Showcase limitations and resolved defects
 
-- Firing postures are procedural: crouch/aim, reload, pinned prone and rise. Prone requires open footprint clearance; crowded actors stay crouched. No crawling, vaulting, occupied interiors, destructible barricades or directional cover penetration yet.
+- Firing postures are procedural: crouch/aim, reload, pinned prone and rise. Prone requires open footprint clearance; crowded actors stay crouched. Garrisoned buildings (`garrison.gd`), HE-worn sandbags and destructible field works (`structure_damage.gd`) and SEVERE-casualty crawling now exist. No tactical crawling, vaulting or directional cover penetration yet.
 - Visual review of the articulated leg solve exposed swapped left/right foot offsets. Corrected the orthogonal-vector sign and added a settled-foot-side regression.
 
 
@@ -113,7 +113,7 @@ Full linear conversion of the batched palette made units and trim too dark in th
 - Interrupted recovery triggered at 7.5-unit spread during legitimate shelter seeking, cancelling it before arrival. Seeking already holds the anchor; exempt it from that immediate trigger while retaining the eight-second stalled-progress recovery. Tactical shelter-then-advance fixture now passes.
 - Single-order village run reunites sections and captures the village by 60s, but sections 2/3 remain mutually congested (~20s blocked). Individual wall recovery does not solve all group traffic.
 - Withdrawal health thresholds used original squad capacity despite permanent casualties. Corrected to living-member capacity; completion fixture passes. Rally conflicts, silent long withdrawal stall, SUPPORT cover clearing, hidden shelter reservation and nearest-only exposure still need dedicated fixes.
-- Sandbox default user-log creation crashed Godot before tests. Use explicit `/tmp` log files. Passing headless runs still emit the platform certificate-store diagnostic.
+- Sandbox default user-log creation crashed Godot before tests. Use explicit log files in a writable temp dir (`$TMPDIR`; `tools/check.py` creates its own). Passing headless runs still emit the platform certificate-store diagnostic.
 
 ## Riverside integration — 2026-10-14
 
@@ -129,3 +129,8 @@ Full linear conversion of the batched palette made units and trim too dark in th
 - Fixed native-review defects: tent cloth gaps, periodic star-shaped ground marks, uniform headwall stones, opaque shelter glazing, and neutral colors leaking from the last drawn faction. Asset geometry tests alone did not identify those visual problems.
 - Fixed a warehouse sample wrapper that requested an unsupported narrow parcel, and a soot face extending0.1 below the shed datum. Gallery now measures render bounds separately from collision envelopes.
 - Three-person squad recovery remains a timing regression: all members reunite, command/collision rules pass and all sections finish by90s, but section1 misses the pre-existing60s checkpoint and arrives67.10s. Broader tactical changes were rejected/reverted because they worsened combat. See artifacts/three-person-recovery.md. Preserve the failing assertion for the next navigation pass.
+
+## Test infrastructure — 2026-10-15
+
+- Tests wrote evidence to hardcoded `/private/tmp` paths. In a sandbox the open returned null, the chained `store_string` raised a SCRIPT ERROR, and `--script` runs hang instead of exiting (test_large_terrain hung until the alarm). Evidence now goes to `res://artifacts/` (gitignored) and every `FileAccess.open` result is null-checked before writing.
+- probe_engage, probe_resume, probe_resume_harbor and probe_lethality printed FAIL but exited 0, so wrappers could not see failures. They now `quit(1)` on failure. `tools/check.py` runs them (`--group probes`) along with the 2026-10-14/15 combat suites (`--group combat`), and a timeout counts as a failure instead of aborting the batch.

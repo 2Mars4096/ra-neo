@@ -37,4 +37,4 @@ func _init()->void:
 		print("   left %.2f -> %.2f  engineer state=%s pos=%s orders=%d building_id=%d" % [before,s.build_left,engineer.state,engineer.pos.round(),engineer.orders.size(),engineer.get("building_id",-1)])
 		if not resumed or s.build_left>=before:ok=false
 	print("RESUME HARBOR: ","PASS" if ok else "FAIL")
-	quit()
+	quit(0 if ok else 1)

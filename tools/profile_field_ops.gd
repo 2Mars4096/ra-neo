@@ -63,11 +63,11 @@ func run()->void:
   battle._process(1.0/60.0)
   await process_frame
  results.append({"presentation_headless_frames":120,"phases_inclusive":phases(),"draw_calls_dummy_renderer":Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)})
- var output:="/private/tmp/field-ops-profile.json"
+ var output:="res://artifacts/field-ops-profile.json"
  for arg in OS.get_cmdline_user_args():
   if arg.begins_with("--output="):output=arg.trim_prefix("--output=")
  var file:=FileAccess.open(output,FileAccess.WRITE)
- file.store_string(JSON.stringify({"engine":Engine.get_version_info().string,"display":DisplayServer.get_name(),"results":results},"  "))
+ if file!=null:file.store_string(JSON.stringify({"engine":Engine.get_version_info().string,"display":DisplayServer.get_name(),"results":results},"  "))
  battle.queue_free()
  await process_frame
  print("FIELD OPS CPU DIAGNOSTIC: completed; ",output)

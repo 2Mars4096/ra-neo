@@ -46,8 +46,9 @@ func _init()->void:
 		g.tick(1.0/30);g.events.clear()
 	var fired:bool=not rifle.is_empty() and rifle.members.any(func(m):return m.last_shot>0)
 	var near:=INF
-	for m in rifle.members:near=minf(near,m.pos.distance_to(target.pos))
-	print("garrison fired=",fired," nearest window to enemy=%.1f m enemy hp=%.0f" % [near,target.hp])
+	if not target.is_empty():
+		for m in rifle.members:near=minf(near,m.pos.distance_to(target.pos))
+	print("garrison fired=",fired," nearest window to enemy=%.1f m enemy hp=%.0f" % [near,target.get("hp",0.0)])
 	if not fired:ok=false
 	print("LETHALITY: ","PASS" if ok else "FAIL")
-	quit()
+	quit(0 if ok else 1)

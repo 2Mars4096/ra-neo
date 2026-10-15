@@ -47,9 +47,10 @@ func _init()->void:
 			costs.append((Time.get_ticks_usec()-start)/1000.0)
 			if plan.reason=="":accepted+=1
 	var report:={"engine":Engine.get_version_info().string,"weather_first_query":stats(first),"weather_remaining_queries":stats(remainder),"weather_weights_sha256":var_to_str(weights).sha256_text(),"weather_routes_sha256":var_to_str(routes).sha256_text(),"weather_nonempty_routes":routes.filter(func(r):return not r.is_empty()).size(),"weather_grid_creations":terrain.grid_misses,"placement":stats(costs),"placement_accepted":accepted,"placement_grid_creations":sim.terrain.grid_misses-initial_misses,"placement_state_unchanged":before==var_to_str([sim.units,sim.credits,sim.terrain.dynamic_blocks]).sha256_text()}
-	var path:="/private/tmp/performance-repair-cost.json"
+	var path:="res://artifacts/performance-repair-cost.json"
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--output="):path=arg.trim_prefix("--output=")
-	FileAccess.open(path,FileAccess.WRITE).store_string(JSON.stringify(report,"  "))
+	var file:=FileAccess.open(path,FileAccess.WRITE)
+	if file!=null:file.store_string(JSON.stringify(report,"  "))
 	print("PERFORMANCE REPAIR COST: ",JSON.stringify(report))
 	quit()

@@ -109,6 +109,7 @@ func _init()->void:
 	check(precise_grid.get_meta("navigation_radius")==1.23456,"grid retains exact construction radius")
 	precise.update_field_geometry([],[])
 	check(not precise_grid.is_point_solid(Vector2i(58,86)),"exact-radius boundary cell restored after removal")
-	FileAccess.open("/private/tmp/field-geometry-proof.json",FileAccess.WRITE).store_string(JSON.stringify({"engine":Engine.get_version_info().string,"checks":checks,"failures":failures,"operations":proof},"  "))
+	var evidence:=FileAccess.open("res://artifacts/field-geometry-proof.json",FileAccess.WRITE)
+	if evidence!=null:evidence.store_string(JSON.stringify({"engine":Engine.get_version_info().string,"checks":checks,"failures":failures,"operations":proof},"  "))
 	print("FIELD GEOMETRY: ",checks," checks, ",failures," failures")
 	quit(1 if failures else 0)

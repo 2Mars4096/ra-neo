@@ -17,5 +17,6 @@ func _init()->void:
 	var fa:bool=a.members.any(func(m):return m.last_shot>0)
 	var fb:bool=b.members.any(func(m):return m.last_shot>0)
 	print("ours fired=",fa," theirs fired=",fb," ours moved=%.1f hp a=%.0f b=%.0f" % [a.pos.distance_to(a0),a.hp,b.hp])
-	print("ENGAGE: ","PASS" if fa and fb and a.pos.distance_to(a0)<=15.0 else "FAIL")
-	quit()
+	var ok:bool=fa and fb and a.pos.distance_to(a0)<=15.0
+	print("ENGAGE: ","PASS" if ok else "FAIL")
+	quit(0 if ok else 1)

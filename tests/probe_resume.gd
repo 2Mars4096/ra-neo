@@ -23,5 +23,6 @@ func _init()->void:
 	var left:float=work.build_left
 	for i in 600:sim.tick(1.0/30)
 	print("after 20s: paused=",work.get("build_paused")," build_left=%.2f (was %.2f)" % [work.build_left,left]," eng pos=",engineer.pos.round()," state=",engineer.state," orders=",engineer.orders)
-	print("RESUME: ","PASS" if ok and work.build_left<left else "FAIL")
-	quit()
+	ok=ok and work.build_left<left
+	print("RESUME: ","PASS" if ok else "FAIL")
+	quit(0 if ok else 1)

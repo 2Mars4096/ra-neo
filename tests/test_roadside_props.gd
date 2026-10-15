@@ -103,7 +103,7 @@ func render_review()->void:
 			await process_frame
 			await process_frame
 			await RenderingServer.frame_post_draw
-			var path:="/private/tmp/ra-roadside-%s-%s.png"%[scenario,shot]
+			var path:="res://artifacts/roadside-%s-%s.png"%[scenario,shot]
 			check(root.get_texture().get_image().save_png(path)==OK,"render capture saved")
 			print("ROADSIDE CAPTURE ",path)
 		stage.free()

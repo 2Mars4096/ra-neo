@@ -54,7 +54,7 @@ func _init()->void:
 	print("VILLAGE owner=",sim.objectives[0].owner," progress=",sim.objectives[0].progress)
 	run_wall_recovery()
 	run_standoff_cover()
-	var evidence:=FileAccess.open("/private/tmp/ra-regroup-owner-evidence.json",FileAccess.WRITE)
+	var evidence:=FileAccess.open("res://artifacts/regroup-owner-evidence.json",FileAccess.WRITE)
 	if evidence!=null:evidence.store_string(JSON.stringify({"checks":checks,"failures":failures,"seconds":90,"snapshots_at_60":snapshots,"first_order_completions":first_completion,"orders_at_90":[sim.get_unit(1).orders,sim.get_unit(2).orders,sim.get_unit(3).orders],"village_owner":sim.objectives[0].owner,"native_render_review":false},"  "))
 	print("REGROUP RECOVERY: ",checks," checks, ",failures," failures")
 	quit(0 if failures==0 else 1)

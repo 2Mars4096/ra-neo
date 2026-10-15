@@ -146,6 +146,7 @@ func _init()->void:
 	metrics.checks=checks;metrics.failures=failures
 	metrics.source_sha256={"terrain":FileAccess.get_sha256("res://scripts/terrain.gd"),"roads":FileAccess.get_sha256("res://scripts/road_network.gd"),"scenario":FileAccess.get_sha256("res://resources/scenarios.json")}
 	metrics.scenario_unchanged_during_run=scenario_hash_before==metrics.source_sha256.scenario
-	FileAccess.open("/private/tmp/large-terrain-proof.json",FileAccess.WRITE).store_string(JSON.stringify(metrics,"  "))
+	var evidence:=FileAccess.open("res://artifacts/large-terrain-proof.json",FileAccess.WRITE)
+	if evidence!=null:evidence.store_string(JSON.stringify(metrics,"  "))
 	print("LARGE TERRAIN: ",checks," checks, ",failures," failures; ",JSON.stringify(metrics))
 	quit(1 if failures else 0)
