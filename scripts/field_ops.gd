@@ -1,5 +1,8 @@
 extends RefCounted
 
+const Garrison=preload("res://scripts/garrison.gd")
+const StructureDamage=preload("res://scripts/structure_damage.gd")
+
 const KINDS=["tactical_cover","observation_post","repair_point","aid_post","concertina_wire","tank_obstacles","fighting_trench","vehicle_berm","camouflage_net","forward_supply_point","bunker","at_gun","command_post","ammo_depot"]
 # Linear works may be turned 90 degrees during placement.
 const ROTATABLE=["tactical_cover","concertina_wire","tank_obstacles","fighting_trench"]
@@ -180,7 +183,7 @@ static func local_counterattacks(sim,state:Dictionary)->void:
 	var wave:Array=state.get("active",[])
 	for defender in sim.units:
 		if not sim.alive(defender) or defender.team!=1 or defender.get("structure",false) or defender.id in wave:continue
-		if sim.definitions[defender.kind].domain!="land":continue
+		if sim.definitions[defender.kind].domain!="land" or defender.get("garrison_role",false):continue
 		if not defender.has("post"):defender["post"]=defender.pos
 		var threat:Dictionary={}
 		var best:=30.0*30.0
@@ -192,6 +195,164 @@ static func local_counterattacks(sim,state:Dictionary)->void:
 			sim.issue([defender.id],threat.pos,"attack_move")
 		elif threat.is_empty() and defender.orders.is_empty() and defender.pos.distance_to(defender.post)>8.0:
 			sim.issue([defender.id],defender.post,"move")
+
+# Enemy defenders hold buildings. Up to half of the idle rifle/ATGM sections
+# posted at an objective take a garrison role and walk into intact buildings
+# within GARRISON_RADIUS of it that look toward the player's landing side (the
+# rest stay out for local counterattacks). A role section thrown out by a
+# collapse, or whose entry failed, takes the next intact building near it, or
+# drops the role when none is. Wave attackers and the counterattack reserve
+# never garrison. Decided every GARRISON_INTERVAL seconds; sites are scored once.
+const GARRISON_RADIUS:=40.0
+const GARRISON_INTERVAL:=4.0
+const GARRISON_POST_RADIUS:=45.0  # sections spawned this close to an objective defend it
+const GARRISON_REACH:=50.0        # a section walks at most this far to a building
+const GARRISON_PER_BUILDING:=2
+const GARRISON_SHARE:=0.5
+const GARRISON_SIGHT:=25.0        # field-of-fire rays from the approach-facing windows
+
+static func enemy_garrisons(sim)->void:
+	if sim.objectives.is_empty() or sim.time<float(sim.field_ops.get("garrison_next",0.0)):return
+	sim.field_ops["garrison_next"]=sim.time+GARRISON_INTERVAL
+	var sites:Array=garrison_sites(sim)
+	var excluded:Array=sim.field_ops.get("waves",{}).get("active",[])+sim.counterattack_ids
+	# Sections per building: enemy claims (inside, entering, bound for) and player presence.
+	var claims:Dictionary={}
+	var player:Dictionary={}
+	for u in sim.units:
+		if not sim.alive(u) or u.members.is_empty():continue
+		for key in ["garrison","garrison_target"]:
+			var b:int=int(u.get(key,-1))
+			if b<0:continue
+			if u.team==1:claims[b]=int(claims.get(b,0))+1
+			else:player[b]=true
+	var buildings:Array=Garrison.index(sim).buildings
+	var open:=func(b:int)->bool:
+		return int(buildings[b].state)==0 and not player.has(b) and int(claims.get(b,0))<mini(GARRISON_PER_BUILDING,int(buildings[b].capacity))
+	for i in sim.objectives.size():
+		var objective:Vector2=sim.objectives[i].pos
+		var role:Array=[];var idle:Array=[];var infantry:=0
+		for u in sim.units:
+			if not sim.alive(u) or u.team!=1 or u.kind not in ["rifle","atgm"] or u.members.is_empty() or u.id in excluded:continue
+			if u.home.distance_to(objective)>GARRISON_POST_RADIUS:continue
+			infantry+=1
+			if u.get("garrison_role",false):role.append(u)
+			elif u.orders.is_empty() and u.maneuver.is_empty() and sim.time-float(u.get("garrison_fail",-100.0))>20.0:idle.append(u)
+		var held:=role.size()
+		# Role sections outside and idle (evicted by a collapse, or entry failed) re-garrison or rejoin the QRF.
+		for u in role:
+			if Garrison.inside(u) or Garrison.transit(u)!="" or u.has("garrison_target") or not u.orders.is_empty():continue
+			var b:=nearest_site(sim,u,sites[i],open)
+			if b<0 or Garrison.order(sim,[u.id],b)==0:
+				u.erase("garrison_role");held-=1
+			else:claims[b]=int(claims.get(b,0))+1
+		var quota:=ceili(infantry*GARRISON_SHARE)
+		while held<quota and not idle.is_empty():
+			# Best (section, site) pair: field of fire first, then a short walk.
+			var best_u:Dictionary={};var best_b:=-1;var best_score:=-INF
+			for u in idle:
+				for site in sites[i]:
+					if not open.call(site.id):continue
+					var walk:float=u.pos.distance_to(site.center)
+					if walk>GARRISON_REACH:continue
+					var score:float=float(site.score)-walk/GARRISON_REACH
+					if score>best_score:best_score=score;best_u=u;best_b=site.id
+			if best_b<0:break
+			idle.erase(best_u)
+			if Garrison.order(sim,[best_u.id],best_b)==0:
+				best_u["garrison_fail"]=sim.time
+				continue
+			best_u["garrison_role"]=true
+			claims[best_b]=int(claims.get(best_b,0))+1
+			held+=1
+
+static func nearest_site(sim,u:Dictionary,sites:Array,open:Callable)->int:
+	var best:=-1;var best_score:=-INF
+	for site in sites:
+		var walk:float=u.pos.distance_to(site.center)
+		if walk>GARRISON_REACH or not open.call(site.id):continue
+		var score:float=float(site.score)-walk/GARRISON_REACH*2.0
+		if score>best_score:best_score=score;best=site.id
+	return best
+
+# Enemy mortar team at a command post or ammunition depot: every
+# MORTAR_INTERVAL s it drops a short HE salvo on the largest cluster of player
+# infantry it can see within range, after a warning. Rounds scatter (own seeded
+# RNG, so the combat stream never shifts) and burst through
+# StructureDamage.explosion. Losing the posts and depots silences it.
+const MORTAR_FIRST:=60.0
+const MORTAR_INTERVAL:=45.0
+const MORTAR_RANGE:=260.0
+const MORTAR_MIN_SECTIONS:=2      # sections within MORTAR_CLUSTER of each other
+const MORTAR_CLUSTER:=15.0
+const MORTAR_ROUNDS:=3
+const MORTAR_FLIGHT:=4.0          # warning to first impact
+const MORTAR_SPACING:=1.2
+const MORTAR_SCATTER:=9.0
+const MORTAR_RADIUS:=3.0
+const MORTAR_DAMAGE:=30.0
+const MORTAR_STRUCTURE:=6.0
+
+static func enemy_mortar(sim)->void:
+	var state:Dictionary=sim.field_ops.get("mortar",{})
+	if state.is_empty():
+		var rng:=RandomNumberGenerator.new();rng.seed=7177
+		state={"next":MORTAR_FIRST,"rounds":[],"rng":rng}
+		sim.field_ops["mortar"]=state
+	while not state.rounds.is_empty() and sim.time>=float(state.rounds[0].at):
+		var shell:Dictionary=state.rounds.pop_front()
+		StructureDamage.explosion(sim,shell.pos,MORTAR_RADIUS,MORTAR_DAMAGE,MORTAR_STRUCTURE,"crash")
+	if sim.time<float(state.next):return
+	state.next=sim.time+MORTAR_INTERVAL*0.25
+	var tubes:Array=sim.units.filter(func(u):return sim.alive(u) and u.team==1 and u.kind in ["command_post","ammo_depot"] and u.get("build_left",0.0)<=0)
+	if tubes.is_empty():return
+	var best:=Vector2(-1,-1);var most:=MORTAR_MIN_SECTIONS-1
+	var seen:Array=sim.units.filter(func(u):return sim.alive(u) and u.team==0 and not u.members.is_empty() and u.seen_by[1] and tubes.any(func(t):return t.pos.distance_to(u.pos)<=MORTAR_RANGE))
+	for u in seen:
+		var count:=0;var centre:=Vector2.ZERO
+		for other in seen:
+			if u.pos.distance_squared_to(other.pos)<MORTAR_CLUSTER*MORTAR_CLUSTER:count+=1;centre+=other.pos
+		if count<=most:continue
+		# Danger close: never on a cluster tangled with own troops.
+		centre/=count
+		if sim.units.any(func(o):return sim.alive(o) and o.team==1 and not o.get("structure",false) and sim.definitions[o.kind].domain=="land" and o.pos.distance_squared_to(centre)<(MORTAR_SCATTER+MORTAR_RADIUS+4.0)**2):continue
+		most=count;best=centre
+	if best.x<0:return
+	state.next=sim.time+MORTAR_INTERVAL
+	var rng:RandomNumberGenerator=state.rng
+	for k in MORTAR_ROUNDS:
+		var p:Vector2=best+Vector2.RIGHT.rotated(rng.randf()*TAU)*MORTAR_SCATTER*sqrt(rng.randf())
+		state.rounds.append({"at":sim.time+MORTAR_FLIGHT+k*MORTAR_SPACING,"pos":p})
+	sim.events.append({"type":"warning","text":"Incoming mortar fire"})
+
+# Per objective, the buildings within GARRISON_RADIUS that have a doorway,
+# best first. Score: share of clear sight lines from the windows facing the
+# player's landing zone, plus a bonus for standing forward on that side.
+static func garrison_sites(sim)->Array:
+	if sim.has_meta("enemy_garrison_sites"):return sim.get_meta("enemy_garrison_sites")
+	var result:Array=[]
+	var buildings:Array=Garrison.index(sim).buildings
+	for objective in sim.objectives:
+		var sites:Array=[]
+		var approach:Vector2=(sim.field_ops.insertion-objective.pos).normalized()
+		for building in buildings:
+			var bounds:Rect2=building.bounds
+			var nearest:=Vector2(clampf(objective.pos.x,bounds.position.x,bounds.end.x),clampf(objective.pos.y,bounds.position.y,bounds.end.y))
+			if nearest.distance_to(objective.pos)>GARRISON_RADIUS:continue
+			var center:Vector2=bounds.get_center()
+			if Garrison.entry_point(sim,building.id,center+approach*bounds.size.length()).x<0:continue
+			# The window post on the approach face, and five rays fanned toward the approach.
+			var outline:Rect2=bounds.grow(0.9)
+			var post:=Vector2(clampf(center.x+approach.x*1000.0,outline.position.x,outline.end.x),clampf(center.y+approach.y*1000.0,outline.position.y,outline.end.y))
+			var clear:=0
+			for angle in [-0.6,-0.3,0.0,0.3,0.6]:
+				if sim.terrain.line_clear(post,post+approach.rotated(angle)*GARRISON_SIGHT):clear+=1
+			var forward:float=clampf((center-objective.pos).dot(approach)/GARRISON_RADIUS,-1.0,1.0)
+			sites.append({"id":building.id,"center":center,"score":clear/5.0*2.0+forward*0.5+minf(float(building.floors),4.0)*0.1})
+		sites.sort_custom(func(a,b):return a.score>b.score)
+		result.append(sites)
+	sim.set_meta("enemy_garrison_sites",result)
+	return result
 
 static func enemy_offensive(sim)->void:
 	var plan:Dictionary=sim.scenario.get("enemy_waves",{})
@@ -839,6 +1000,8 @@ static func tick(sim,dt:float)->void:
 	sim.credits+=dt*float(sim.field_ops.income_rate)
 	process_queue(sim)
 	enemy_offensive(sim)
+	enemy_garrisons(sim)
+	enemy_mortar(sim)
 	# Enemy infantry re-crew their abandoned hulls and capture the player's.
 	sim.VehicleDamage.enemy_recrew(sim)
 	idle_engineers_continue(sim)
