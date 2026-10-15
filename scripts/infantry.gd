@@ -217,6 +217,32 @@ static func hit(u:Dictionary,amount:float,source:Vector2,now:float) -> void:
 	chosen.state="DOWN" if chosen.hp<=0 else "BRACING"
 	publish(u)
 
+# High explosive (shells, rockets, missiles, autocannon): the soldier nearest
+# the shooter takes the full hit and others within the blast radius take
+# fragment damage, so HE fire breaks up a section instead of chipping one man.
+static func blast(u:Dictionary,amount:float,source:Vector2,now:float,radius:float=3.2) -> void:
+	reconcile(u)
+	if u.members.is_empty():
+		u.hp-=amount
+		return
+	var primary:Dictionary={}
+	var nearest:=INF
+	for member in u.members:
+		if member.hp<=0:continue
+		var d:float=source.distance_squared_to(member.pos)
+		if d<nearest:primary=member;nearest=d
+	if primary.is_empty():return
+	for member in u.members:
+		if member.hp<=0:continue
+		var gap:float=member.pos.distance_to(primary.pos)
+		if member!=primary and gap>radius:continue
+		var share:float=1.0 if member==primary else 0.6*(1.0-0.5*gap/radius)
+		member.hp=maxf(0,member.hp-amount*share)
+		member.last_hit=now
+		member.suppression=minf(1,member.suppression+0.45)
+		member.state="DOWN" if member.hp<=0 else "BRACING"
+	publish(u)
+
 static func capacity(u:Dictionary) -> float:
 	if u.members.is_empty():return u.max_hp
 	var total:=0.0

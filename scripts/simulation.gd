@@ -518,11 +518,15 @@ func hit_chance(u:Dictionary,other:Dictionary) -> float:
 	if u.suppression>0.6:chance*=0.55
 	return clampf(chance,0.01,0.98)
 
+const HE_WEAPONS:=["tank","helo","boat","aa","at_gun","atgm"]
 func resolve_shot(u:Dictionary,target:Dictionary,scale:float) -> bool:
 	if not alive(target) or not effective_weapon(u.kind,target.kind):return false
 	var hit:bool=combat_rng.randf()<hit_chance(u,target)
 	if hit:
-		Infantry.hit(target,damage_amount(u,target)*scale,u.pos,time)
+		var amount:float=damage_amount(u,target)*scale
+		# Explosive rounds also wound soldiers standing near the one hit.
+		if not target.members.is_empty() and definitions[u.kind].get("combat_alias",u.kind) in HE_WEAPONS:Infantry.blast(target,amount,u.pos,time)
+		else:Infantry.hit(target,amount,u.pos,time)
 		target.last_hit=time
 	# Near misses can suppress exposed people; armor never receives rifle chip damage.
 	if definitions[target.kind].domain=="land" and definitions[target.kind].armor==0:
@@ -806,7 +810,9 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		var weapon:String="atgm" if u.kind=="atgm" and member.index==0 else "rifle"
 		var d:Dictionary=definitions[weapon]
 		var target:Dictionary={}
-		var nearest:=float(d.range)*float(d.range)
+		# Upper-floor windows: garrisoned soldiers out-range troops in the street.
+		var range_scale:float=Garrison.RANGE_SCALE if Garrison.inside(u) else 1.0
+		var nearest:=pow(float(d.range)*range_scale,2)
 		# Knowledge, faction and weapon suitability are shared by this squad.
 		# Position/range/line of fire remain individual and deaths are rechecked
 		# after each shot, preserving sequential combat outcomes.
@@ -820,7 +826,7 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			var od:Dictionary=definitions[other.kind]
 			var air:bool=od.domain=="air"
 			var distance:float=member.pos.distance_squared_to(other.pos)
-			var reach:float=float(d.range)
+			var reach:float=float(d.range)*range_scale
 			if air:
 				distance+=pow(unit_altitude(other),2)
 				reach=weapon_range(weapon,od)
@@ -1294,7 +1300,7 @@ func target_candidates(u:Dictionary) -> Array:
 	if not ticking or not use_spatial_targeting or units.size()<spatial_targeting_threshold:return units
 	var d:Dictionary=definitions[u.kind]
 	if float(d.damage)<=0 and u.members.is_empty():return []
-	var reach:float=float(d.range)
+	var reach:float=float(d.range)*(Garrison.RANGE_SCALE if Garrison.inside(u) else 1.0)
 	var offset:=0.0
 	for member in u.members:
 		if member.hp>0:offset=maxf(offset,member.pos.distance_to(u.pos))

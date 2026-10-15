@@ -9,6 +9,7 @@ extends RefCounted
 const DAMAGE_SCALE:=0.35
 const SUPPRESSION_SCALE:=0.3
 const SIGHT_BONUS:=6.0
+const RANGE_SCALE:=1.4  # upper-floor firing positions out-range the street
 const ENTER_DISTANCE:=4.5
 
 static func index(sim)->Dictionary:

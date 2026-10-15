@@ -40,8 +40,8 @@
     "fpv_drone": 0
   },
   "helo": {
-    "rifle": 1,
-    "atgm": 1,
+    "rifle": 1.3,
+    "atgm": 1.3,
     "tank": 1.5,
     "drone": 0.7,
     "helo": 0.8,
