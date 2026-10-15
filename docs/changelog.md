@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-15 — Hull steering, crushable street furniture, obstacle clearing, garrison fire
+
+- Tanks, AA and boats move only along their hull axis. They turn (pivot when blocked) and back out of jams instead of sliding sideways (`Simulation.hull_step`).
+- Tracked vehicles flatten lamps, trolley poles, benches, fences, small trees, bus stops, dumpsters, kiosks, cars and similar props in their way. Each crush refreshes only the local nav cells. Tracked route planning treats these props as passable, so tanks no longer detour around them (`Terrain.crush_props`, `crush_pass`). Tall props topple in the drive direction and low ones flatten, by editing the batched MultiMesh instance in `HarborProps.crush`.
+- Engineers clear wire, hedgehogs, sandbags, trenches, berms and nets: right-click the work with engineers selected. Own works give a 50% refund (`FieldOps.clear_site`, `progress_clearing`).
+- Garrisons fire: a stale walking value from the walked entry kept soldiers "settling", so they never aimed. Defenders now shift each second to the windows facing the nearest spotted enemy (`Garrison.man_windows`). Capacity scales with building size (2-8 sections). The 35% damage reduction applies to small arms only; tank/ATGM fire does 85%.
+- `tests/probe_tank_crush_clear.gd` covers all of the above.
+- Proactive engagement: the tactical director only reacted for units on attack orders, so idle units and units that had finished a move ignored enemies seen between rifle range (13) and sight (19). Idle units now close to firing range on a spotted, effective target, leashed 14 m from their post (`TacticalDirector.engage_idle`, phase ENGAGE). This applies to both sides. HOLD, garrisons, soldiers manning works and busy engineers stay put (`tests/probe_engage.gd`).
+- Enemy units jammed against player obstacles breach them by fire, then resume their wave (`FieldOps.enemy_breach`).
+- Testing economy: harbor starting supply 3200 and income 6/s (doubled).
+
 ## 2026-10-14 — Walked garrison entry, tighter sandbag cover, build resume
 
 - Garrison entry and exit are walked. Soldiers queue at the doorway and pass through the wall one at a time, hidden once inside. Leaving reverses it, with soldiers stepping out to formation spots before the order continues. States show ENTERING/EXITING. A garrisoned section's ring encircles its building and its label sits above the roof.

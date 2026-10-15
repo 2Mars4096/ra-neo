@@ -74328,8 +74328,8 @@
         ]
       }
     ],
-    "field_supply": 1600,
-    "field_income": 3.0,
+    "field_supply": 3200,
+    "field_income": 6.0,
     "enemy_waves": {
       "first": 90,
       "interval": 95,

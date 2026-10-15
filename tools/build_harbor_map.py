@@ -1210,8 +1210,8 @@ def enemy_defences(city, sc):
     sc["reserve_force"] = [{"kind": k, "position": list(sc["field_enemy_insertion"])} for k in ("tank", "tank", "rifle", "rifle", "rifle", "atgm", "aa")]
     # Test-tuned pressure: the player digs in first (more starting supply), then
     # escalating enemy waves arrive from the NE staging area until its logistics fall.
-    sc["field_supply"] = 1600
-    sc["field_income"] = 3.0
+    sc["field_supply"] = 3200  # doubled for testing
+    sc["field_income"] = 6.0  # doubled for testing
     sc["enemy_waves"] = {"first": 90, "interval": 95, "max_wave": 10}
     # Extra defenders: a second rifle team and a tank per objective.
     for o in sc["objectives"]:

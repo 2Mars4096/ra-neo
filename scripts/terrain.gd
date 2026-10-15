@@ -72,6 +72,7 @@ func _init(preset:int=0, config_override:Dictionary={}) -> void:
 	field_mode=config.get("mode","")=="field_ops"
 	map_props=config.get("map_props",[]).duplicate(true)
 	for r in config.get("prop_blocks",[]):prop_blocks.append(Rect2(r[0],r[1],r[2],r[3]))
+	_index_crushables()
 	for r in config.get("water_blocks",[]):water_blocks.append(Rect2(r[0],r[1],r[2],r[3]))
 	for r in config.get("static_cover",[]):static_cover.append(Rect2(r[0],r[1],r[2],r[3]))
 	for polygon in config.get("water_polygons",[]):
@@ -216,7 +217,11 @@ func profile_barrier(p:Vector2,reach:float,profile:String) -> bool:
 # barrier blocks every cell its rectangle touches (thin wire would otherwise
 # slip between 4 u cell centres).
 func _land_cell_solid(point:Vector2,radius:float,profile:String) -> bool:
-	if not traversable(point,"land",radius):return true
+	var saved:=crush_pass
+	crush_pass=profile=="tracked"
+	var solid:=not traversable(point,"land",radius)
+	crush_pass=saved
+	if solid:return true
 	return profile_barrier(point,radius+nav_cell_size*0.5,profile)
 
 # Field zones that protect infantry standing inside them (trench, hedgehog belt).
@@ -341,7 +346,7 @@ func traversable(p: Vector2, domain: String, radius: float = -1) -> bool:
 		for dock in DOCKS:
 			if circle_rect(p,radius,dock):return false
 	for rect in _static_candidates("solid",p,radius+0.12):
-		if circle_rect(p,radius+0.12,rect):return false
+		if circle_rect(p,radius+0.12,rect) and not (crush_pass and crushables.has(rect)):return false
 	for rect in dynamic_blocks:
 		if circle_rect(p,radius+0.12,rect):return false
 	var tree_distance_squared:=pow(radius+1.2,2)
@@ -504,6 +509,13 @@ func reachable_destination(from:Vector2, desired:Vector2, domain:String, radius:
 	return Vector2(-1,-1)
 
 func path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid:Array = [], profile:String="default") -> Array[Vector2]:
+	# Tracked vehicles plan straight through crushable street furniture.
+	crush_pass=domain=="land" and profile=="tracked"
+	var planned:=_path(from,to,domain,radius,avoid,profile)
+	crush_pass=false
+	return planned
+
+func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid:Array = [], profile:String="default") -> Array[Vector2]:
 	var result: Array[Vector2] = []
 	if radius<0: radius=default_radius(domain)
 	if not traversable(from,domain,radius) or not traversable(to,domain,radius): return result
@@ -608,6 +620,64 @@ func avoids_bodies(a:Vector2,b:Vector2,bodies:Array) -> bool:
 # API. Length changes are detected automatically; field edits use their API.
 # Solid props big enough to hide behind (yard walls, fences, cars, kiosks,
 # containers); thin posts such as lamps and bollards do not count.
+# Street furniture a tracked vehicle flattens by driving into it (RA2-style).
+# Walls, sheds, containers and buildings stay solid.
+const CRUSHABLE:=["lamp","trolley_pole","bench","fence","tree","broken_tree","laundry_line","bus_stop","dumpster","kiosk","playground","pergola","haystack","car","pickup"]
+var crushables:Dictionary={}  # prop_blocks rect -> {"block":int,"prop":int,"id":String}
+var crush_pass:=false  # set while planning for tracked vehicles
+
+func _index_crushables()->void:
+	crushables.clear()
+	var by_bounds:Dictionary={}
+	for i in map_props.size():
+		var prop:Dictionary=map_props[i]
+		if prop.get("collision","")!="solid" or prop.get("domain","land")=="sea":continue
+		var id:String=str(prop.get("id",prop.get("asset_id","")))
+		if id.get_slice(".",0) not in CRUSHABLE or not prop.has("bounds"):continue
+		var b:Array=prop.bounds
+		by_bounds["%.2f,%.2f,%.2f,%.2f" % [b[0],b[1],b[2],b[3]]]={"prop":i,"id":id}
+	for k in prop_blocks.size():
+		var r:Rect2=prop_blocks[k]
+		var key:="%.2f,%.2f,%.2f,%.2f" % [r.position.x,r.position.y,r.size.x,r.size.y]
+		if by_bounds.has(key):crushables[r]={"block":k,"prop":by_bounds[key].prop,"id":by_bounds[key].id}
+
+# Flattens crushable props touching a circle; returns their records. Only the
+# affected navigation cells are refreshed (no global rebuild stall).
+func crush_props(center:Vector2,radius:float)->Array:
+	if crushables.is_empty():return []
+	var hit:Array=[]
+	for rect in _static_candidates("solid",center,radius+0.3):
+		if crushables.has(rect) and circle_rect(center,radius+0.12,rect):hit.append(rect)
+	if hit.is_empty():return []
+	var records:Array=[]
+	for rect in hit:
+		var info:Dictionary=crushables[rect]
+		crushables.erase(rect)
+		# Keep array sizes stable so the static index is not rebuilt wholesale.
+		prop_blocks[info.block]=Rect2(-9999,-9999,0,0)
+		for kind in ["solid","building"]:
+			var buckets:Dictionary=_static_index.get(kind,{})
+			for x in range(floori(rect.position.x/SPATIAL_CELL),floori(rect.end.x/SPATIAL_CELL)+1):
+				for y in range(floori(rect.position.y/SPATIAL_CELL),floori(rect.end.y/SPATIAL_CELL)+1):
+					var bucket:Array=buckets.get(Vector2i(x,y),[])
+					bucket.erase(rect)
+		info["rect"]=rect
+		records.append(info)
+	_refresh_land_cells(hit)
+	return records
+
+func _refresh_land_cells(rects:Array)->void:
+	for key in navigation:
+		if str(key).get_slice(":",0)!="land":continue
+		var grid:AStarGrid2D=navigation[key]
+		var radius:float=grid.get_meta("navigation_radius")
+		var profile:=str(key).get_slice(":",2)
+		for rect in rects:
+			var bounds:Rect2=rect.grow(radius+0.27)
+			for x in range(maxi(0,floori(bounds.position.x/nav_cell_size)),mini(nav_size.x,ceili(bounds.end.x/nav_cell_size))):
+				for y in range(maxi(0,floori(bounds.position.y/nav_cell_size)),mini(nav_size.y,ceili(bounds.end.y/nav_cell_size))):
+					grid.set_point_solid(Vector2i(x,y),_land_cell_solid(nav_center(Vector2i(x,y)),radius+0.15,profile))
+
 func hard_cover_props()->Array:
 	return prop_blocks.filter(func(r):return maxf(r.size.x,r.size.y)>=1.5)
 

@@ -33,6 +33,7 @@ static func build(art,parent:Node3D,config:Dictionary)->Node3D:
 		entry["gameplay_collision_installed"]=false
 		entry["transform"]=Transform3D(Basis(Vector3.UP,entry.yaw),Vector3(entry.pos.x,entry.elevation,entry.pos.y))
 		if not by_id.has(entry.asset_id):by_id[entry.asset_id]=[]
+		entry["batch_index"]=by_id[entry.asset_id].size()
 		by_id[entry.asset_id].append(entry)
 	group.set_meta("placements",entries)
 	var staging:=Node3D.new()
@@ -49,6 +50,30 @@ static func build(art,parent:Node3D,config:Dictionary)->Node3D:
 	art.models.olive=saved[0];art.models.edge=saved[1]
 	art.models.canvas=saved[2];art.models.marking=saved[3]
 	return group
+
+# A prop crushed by a tank: tall ones topple away from the hull, low ones are
+# flattened. Only that placement's batched instances change (no new nodes).
+const TOPPLE:=["lamp","trolley_pole","tree","broken_tree","bus_stop","laundry_line","pergola"]
+static func crush(group:Node3D,prop_index:int,heading:Vector2)->void:
+	var placements:Array=group.get_meta("placements",[])
+	if prop_index<0 or prop_index>=placements.size():return
+	var entry:Dictionary=placements[prop_index]
+	if entry.get("crushed",false):return
+	entry["crushed"]=true
+	var base:Transform3D=entry.transform
+	var ground:=Vector3(entry.pos.x,entry.elevation,entry.pos.y)
+	var change:Transform3D
+	if str(entry.asset_id).get_slice(".",0) in TOPPLE:
+		var forward:=Vector3(heading.x,0,heading.y).normalized()
+		if forward==Vector3.ZERO:forward=Vector3.FORWARD
+		var axis:=forward.cross(Vector3.UP).normalized()
+		change=Transform3D(Basis(axis,-PI*0.47),Vector3.ZERO)
+	else:
+		change=Transform3D(Basis.from_scale(Vector3(1.08,0.22,1.08)),Vector3.ZERO)
+	var pivot:=Transform3D(Basis.IDENTITY,ground)*change*Transform3D(Basis.IDENTITY,-ground)
+	for child in group.get_children():
+		if child is MultiMeshInstance3D and child.get_meta("asset_id","")==entry.asset_id:
+			child.multimesh.set_instance_transform(int(entry.batch_index),pivot*base*(child.get_meta("template_transform") as Transform3D))
 
 static func _instance_surfaces(group:Node3D,node:Node3D,ancestor:Transform3D,entries:Array,id:String)->void:
 	var transform:Transform3D=ancestor*node.transform

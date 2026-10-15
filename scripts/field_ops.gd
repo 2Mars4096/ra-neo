@@ -525,7 +525,12 @@ static func build(sim,kind:String,pos:Vector2,engineer_id:int,rotated:bool=false
 static func pause_builder(sim,engineer_id:int)->void:
 	if sim.field_ops.is_empty():return
 	var engineer:Dictionary=sim.get_unit(engineer_id)
-	if not engineer.is_empty():engineer.erase("building_id")
+	if not engineer.is_empty():
+		engineer.erase("building_id")
+		# A new order also abandons any obstacle clearing in progress.
+		var clearing:Dictionary=sim.get_unit(engineer.get("clearing_id",-1))
+		if not clearing.is_empty():clearing.erase("cleared_by")
+		engineer.erase("clearing_id")
 	# A segment of a dragged line rejoins that line's queue; a single site waits for RESUME.
 	var in_line:bool=sim.units.any(func(s):return sim.alive(s) and s.get("queued_for",-1)==engineer_id and s.get("build_left",0.0)>0)
 	for unit in sim.units:
@@ -535,6 +540,76 @@ static func pause_builder(sim,engineer_id:int)->void:
 			unit.engineer_id=-1
 			unit.state="CONSTRUCTION PAUSED"
 			if in_line:unit["queued_for"]=engineer_id
+
+# Engineers clear (breach) a field work: enemy wire, hedgehogs, sandbags or a
+# trench, or take down their own work for a partial refund. Armed emplacements
+# must be destroyed in combat instead.
+const CLEARABLE:=["concertina_wire","tank_obstacles","tactical_cover","fighting_trench","vehicle_berm","camouflage_net"]
+const CLEAR_SECONDS:={"concertina_wire":6.0,"tank_obstacles":9.0,"tactical_cover":6.0,"fighting_trench":8.0,"vehicle_berm":10.0,"camouflage_net":4.0}
+
+static func can_clear(sim,site:Dictionary)->bool:
+	return sim.alive(site) and str(site.kind) in CLEARABLE
+
+static func clear_site(sim,site_id:int,engineer_id:int)->bool:
+	var site:Dictionary=sim.get_unit(site_id)
+	var engineer:Dictionary=sim.get_unit(engineer_id)
+	if not can_clear(sim,site):return fail(sim,"Only wire, obstacles, sandbags, berms, nets and trenches can be cleared")
+	if not sim.alive(engineer) or engineer.kind!="engineer" or engineer.team!=0 or sim.comms_blocked(engineer):return fail(sim,"Select a living engineer section")
+	if site.team!=0 and not sim.contact_known(engineer,site):return fail(sim,"Obstacle not currently spotted")
+	var plan:=work_plan(sim,site.kind,site.pos,engineer,true,site.id,site.get("rotated",false))
+	if plan.reason!="":return fail(sim,"No route to the obstacle")
+	pause_builder(sim,engineer.id)
+	sim.Director.cancel(engineer)
+	for member in engineer.members:sim.Infantry.Cover.clear(member)
+	engineer.orders=[{"mode":"move","pos":plan.work_point,"target":-1}]
+	engineer.intent=engineer.orders[0].duplicate()
+	engineer.path=plan.route
+	engineer.hold_command=false
+	engineer["clearing_id"]=site.id
+	site["cleared_by"]=engineer.id
+	site["clear_point"]=plan.work_point
+	sim.field_ops.last_build_error=""
+	return true
+
+# Enemy assault units jammed against the player's obstacles breach them by
+# fire, then resume their wave order (pushed back behind the breach).
+static func enemy_breach(sim)->void:
+	if int(sim.time*2.0)%2!=0:return
+	for u in sim.units:
+		if not sim.alive(u) or u.team!=1 or u.orders.is_empty() or float(u.get("blocked_time",0.0))<2.5:continue
+		if u.orders[0].mode=="attack":continue
+		var best:Dictionary={};var distance:=8.0
+		for site in sim.units:
+			if not sim.alive(site) or site.team!=0 or not can_clear(sim,site):continue
+			var d:float=site.pos.distance_to(u.pos)
+			if d<distance and sim.effective_unit(u,site.kind):distance=d;best=site
+		if best.is_empty():continue
+		u.orders.push_front({"mode":"attack","pos":best.pos,"target":best.id})
+		u.path=sim.terrain.path(u.pos,best.pos,sim.definitions[u.kind].domain,float(sim.definitions[u.kind].radius),[],sim.terrain.mobility_profile(u.kind))
+		if u.path.is_empty():u.path=[best.pos]
+		u.blocked_time=0.0
+
+# Per tick: engineers on site wear the work down; it is removed when cleared.
+static func progress_clearing(sim,dt:float)->void:
+	for site in sim.units:
+		if not sim.alive(site) or not site.has("cleared_by"):continue
+		var engineer:Dictionary=sim.get_unit(site.cleared_by)
+		if not sim.alive(engineer) or engineer.get("clearing_id",-1)!=site.id:
+			site.erase("cleared_by");continue
+		var point:Vector2=site.get("clear_point",site.pos)
+		var working:bool=engineer.orders.is_empty() and engineer.pos.distance_to(point)<1.5 and engineer.suppression<=0.6
+		working=working and engineer.members.any(func(m):return m.hp>0 and m.pos.distance_to(point)<3.5)
+		if not working:continue
+		engineer.state="CLEARING"
+		site.state="BEING CLEARED"
+		site.hp-=float(site.max_hp)*dt/float(CLEAR_SECONDS.get(site.kind,8.0))
+		if site.hp<=0:
+			site.hp=0.0
+			site.state="CLEARED"
+			engineer.erase("clearing_id")
+			if site.team==0:sim.credits+=float(sim.definitions[site.kind].cost)*0.5
+			sim.events.append({"type":"warning","text":"%s cleared by engineers" % str(sim.definitions[site.kind].get("name",site.kind)).capitalize()})
+			sim.events.append({"type":"destroyed","kind":site.kind,"pos":site.pos,"visible":true})
 
 static func resume(sim,structure_id:int,engineer_id:int=-1)->bool:
 	if not valid_site(sim,structure_id):return fail(sim,"Site unavailable")
@@ -564,7 +639,7 @@ static func switch_builder(sim,site:Dictionary)->int:
 # Engineers left idle (no orders, not building) pick up their queued segments.
 static func idle_engineers_continue(sim)->void:
 	for engineer in sim.units:
-		if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or engineer.has("building_id") or not engineer.orders.is_empty():continue
+		if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or engineer.has("building_id") or engineer.has("clearing_id") or not engineer.orders.is_empty():continue
 		if sim.units.any(func(s):return sim.alive(s) and s.get("queued_for",-1)==engineer.id and s.get("build_left",0.0)>0):
 			continue_queue(sim,engineer)
 
@@ -620,6 +695,8 @@ static func tick(sim,dt:float)->void:
 	process_queue(sim)
 	enemy_offensive(sim)
 	idle_engineers_continue(sim)
+	progress_clearing(sim,dt)
+	enemy_breach(sim)
 	for unit in sim.units:
 		if not sim.alive(unit) or not unit.get("structure",false):continue
 		if unit.build_left>0:

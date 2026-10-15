@@ -506,7 +506,8 @@ func damage_amount(u: Dictionary, other: Dictionary) -> float:
 			nearest_member=member.pos.distance_squared_to(u.pos)
 			cover_pos=member.pos
 	if Garrison.inside(other):
-		damage *= Garrison.DAMAGE_SCALE
+		# Walls stop small arms; HE shells and missiles punch through windows.
+		damage *= Garrison.DAMAGE_SCALE if u.kind in ["rifle","engineer","drone","helo","aa","boat"] else 0.85
 	elif td.armor == 0 and td.domain == "land" and terrain.cover(cover_pos):
 		damage *= 0.55
 	elif td.armor > 0 and td.domain == "land" and d.domain == "land" and terrain.hull_down(other.pos,u.pos):
@@ -795,6 +796,8 @@ func move_unit(u: Dictionary, dt: float) -> void:
 		var heading:Vector2=(u.path[0]-u.pos).normalized()
 		u.reversing=order.mode=="retreat" and u.facing.dot(heading)<-0.35
 		var desired_heading:Vector2=-heading if u.reversing else heading
+		# A blocked hull steers toward its chosen clear heading for a moment.
+		if time<float(u.get("avoid_until",0.0)):desired_heading=u.avoid_heading
 		u.facing=Vector2.from_angle(rotate_toward(u.facing.angle(),desired_heading.angle(),dt*1.5))
 		var alignment:=maxf(0.0,u.facing.dot(desired_heading))
 		speed*=alignment*alignment*(0.55 if u.reversing else 1.0)
@@ -820,6 +823,13 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			continue
 		var desired: Vector2=(next-u.pos).normalized()
 		var step:=minf(remaining,distance)
+		if scenario.get("autonomy",false) and u.kind in ["tank","aa","boat"]:
+			# Hulls never slide sideways: they move only along their axis and turn
+			# (or pivot in place) to change course; when jammed they back out.
+			if not hull_step(u,next,distance,step,dt,neighbors):break
+			remaining-=step
+			if u.pos.distance_to(next)<0.1:u.path.pop_front()
+			continue
 		var best: Vector2=u.pos
 		var best_score:=-INF
 		for angle in [0.0,0.55,-0.55,1.05,-1.05,1.5,-1.5]:
@@ -865,6 +875,44 @@ func move_unit(u: Dictionary, dt: float) -> void:
 		u.state = "RETREATING" if order.mode=="retreat" else ("ADVANCING" if order.mode == "attack_move" else "MOVING")
 	if u.path.is_empty():
 		finish_order(u)
+
+# One movement step for a tracked/wheeled hull or boat. Returns false when the
+# hull could not advance this tick (it may still pivot or reverse).
+func hull_step(u:Dictionary,next:Vector2,distance:float,step:float,dt:float,neighbors:Array)->bool:
+	var axis:Vector2=-u.facing if u.reversing else u.facing
+	var candidate:Vector2=u.pos+axis*step
+	# Tracks flatten street furniture in the hull's way (lamps, benches, cars...).
+	if definitions[u.kind].domain=="land" and terrain.mobility_profile(u.kind)=="tracked":
+		for record in terrain.crush_props(candidate,float(definitions[u.kind].radius)+0.1):
+			events.append({"type":"crushed","prop":record.prop,"id":record.id,"heading":axis,"pos":record.rect.get_center(),"visible":true})
+	# Never drive away from the waypoint while turning toward it.
+	if movement_clear(u,candidate,neighbors) and distance-candidate.distance_to(next)>-step*0.3:
+		var previous:Vector2=u.pos
+		u.pos=candidate
+		relocate_actor(u,u,previous)
+		u.blocked_time=0.0
+		return true
+	u.blocked_time+=dt
+	u.state="YIELDING"
+	u.speed_now=0.0
+	# Pick a clear heading near the route and turn toward it (pivot steer).
+	if time>=float(u.get("avoid_until",0.0)):
+		var desired:Vector2=(next-u.pos).normalized()
+		var reach:float=maxf(step,float(definitions[u.kind].radius)*0.6)
+		for angle in [0.55,-0.55,1.05,-1.05,1.5,-1.5,2.2,-2.2]:
+			var direction:Vector2=desired.rotated(angle)
+			if movement_clear(u,u.pos+direction*reach,neighbors):
+				u["avoid_heading"]=direction
+				u["avoid_until"]=time+0.9
+				break
+	# Jammed nose-first for a while: back out along the hull axis.
+	if u.blocked_time>1.0:
+		var back:Vector2=u.pos-u.facing*minf(step,0.08)
+		if movement_clear(u,back,neighbors):
+			var previous:Vector2=u.pos
+			u.pos=back
+			relocate_actor(u,u,previous)
+	return false
 
 func finish_order(u: Dictionary) -> void:
 	if not u.maneuver.is_empty():

@@ -27,7 +27,7 @@ static func index(sim)->Dictionary:
 			bounds=rect if bounds.size==Vector2.ZERO else bounds.merge(rect)
 		if rects.is_empty():continue
 		var area:=float(spec.source_size[0])*float(spec.source_size[1]) if spec.has("source_size") else bounds.get_area()
-		var building:={"id":result.buildings.size(),"design":str(spec.design),"rects":rects,"bounds":bounds,"capacity":2 if area>320.0 else 1,"height":float(spec.get("floors",2))*3.2+1.5}
+		var building:={"id":result.buildings.size(),"design":str(spec.design),"rects":rects,"bounds":bounds,"capacity":clampi(int(area/70.0),2,8),"height":float(spec.get("floors",2))*3.2+1.5}
 		for k in range(first,first+count):result.owner[k]=building.id
 		result.buildings.append(building)
 	sim.set_meta("garrison_index",result)
@@ -186,11 +186,16 @@ static func enter(sim,u:Dictionary,building_id:int)->void:
 	u.state="GARRISONED"
 	for m in u.members:sim.Infantry.Cover.clear(m)
 	# Window posts on every face, just outside the walls, spread around the outline.
-	var outline:Rect2=building.bounds.grow(0.35)
+	# Window posts clear of the wall so shots along a face are not self-blocked;
+	# each extra section takes posts offset around the outline.
+	var outline:Rect2=building.bounds.grow(0.7)
 	var living:Array=u.members.filter(func(m):return m.hp>0)
+	var slot:int=occupants(sim,building_id,u.team).filter(func(o):return o.id!=u.id).size()
 	for i in living.size():
 		var m:Dictionary=living[i]
-		m.pos=perimeter_point(outline,(i+0.5)/living.size()+0.08)
+		m.pos=perimeter_point(outline,(i+0.5)/living.size()+0.08+slot*0.137)
+		# Inside, nobody is walking: clear motion so combat can aim and fire.
+		m.travel=0.0;m.speed=0.0;m.state="HOLDING"
 		m["cover_phase"]="";m.cover_goal=Vector2.ZERO
 		m.posture="CROUCHED"
 		m["indoors"]=true
@@ -234,6 +239,9 @@ static func tick(sim,dt:float=1.0/30.0)->void:
 			continue
 		if u.get("garrison",-1)>=0:
 			if not u.orders.is_empty():leave(sim,u)
+			elif sim.time>=float(u.get("window_check",0.0)):
+				u["window_check"]=sim.time+1.0+float(u.id%5)*0.1
+				man_windows(sim,u)
 			continue
 		if not u.has("garrison_target"):continue
 		var door:Vector2=u.get("garrison_door",u.pos)
@@ -242,6 +250,40 @@ static func tick(sim,dt:float=1.0/30.0)->void:
 			else:u.erase("garrison_target")
 		elif u.pos.distance_to(door)<=ENTER_DISTANCE:
 			begin_entry(sim,u,u.garrison_target)
+
+# Defenders move room to room to the windows facing the nearest spotted enemy.
+static func man_windows(sim,u:Dictionary)->void:
+	var building:Dictionary=index(sim).buildings[int(u.garrison)]
+	var center:Vector2=building.bounds.get_center()
+	var reach:float=maxf(building.bounds.size.x,building.bounds.size.y)*0.5+30.0
+	var threat:Dictionary={}
+	var best:=INF
+	for other in sim.units:
+		if not sim.alive(other) or other.team==u.team or sim.definitions[other.kind].get("structure",false):continue
+		var d:float=other.pos.distance_to(center)
+		if d<reach and d<best and sim.contact_known(u,other):best=d;threat=other
+	if threat.is_empty() or u.get("window_threat",-1)==threat.id and threat.pos.distance_to(u.get("window_threat_pos",Vector2.ZERO))<4.0:return
+	u["window_threat"]=threat.id
+	u["window_threat_pos"]=threat.pos
+	var outline:Rect2=building.bounds.grow(0.7)
+	var posts:Array=[]
+	var steps:=maxi(8,int((outline.size.x+outline.size.y)*2.0/1.6))
+	for i in steps:posts.append(perimeter_point(outline,float(i)/steps))
+	# Keep clear of windows other sections already hold.
+	var held:Array=[]
+	for other in occupants(sim,int(u.garrison),u.team):
+		if other.id==u.id:continue
+		for m in other.members:if m.hp>0:held.append(m.pos)
+	posts=posts.filter(func(p):return held.all(func(h):return p.distance_to(h)>1.4))
+	posts.sort_custom(func(a,b):return a.distance_squared_to(threat.pos)<b.distance_squared_to(threat.pos))
+	var k:=0
+	for m in u.members:
+		if m.hp<=0 or k>=posts.size():continue
+		var old:Vector2=m.pos
+		m.pos=posts[k];k+=1
+		m.travel=0.0
+		m.facing=(threat.pos-m.pos).normalized()
+		sim.relocate_actor(u,m,old)
 
 static func inside(u:Dictionary)->bool:
 	return u.get("garrison",-1)>=0

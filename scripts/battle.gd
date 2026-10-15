@@ -7,6 +7,7 @@ const HUD = preload("res://scripts/hud.gd")
 var sim := Sim.new()
 var art := Visuals.new()
 var effects := Effects.new()
+var harbor_props:Node3D=null
 var weather_fx:=preload("res://scripts/weather_visuals.gd").new()
 var atmosphere:Environment
 var trail_clock := 0.0
@@ -472,6 +473,9 @@ func consume_events() -> void:
 	for event in sim.events:
 		if event.type=="warning":
 			notify(event.text)
+		elif event.type=="crushed":
+			if harbor_props==null:harbor_props=find_child("HarborProps",true,false)
+			if harbor_props!=null:preload("res://scripts/harbor_props.gd").crush(harbor_props,int(event.prop),event.heading)
 		elif event.type=="shot" and event.visible:
 			# Presentation only: effects apply each weapon's barrel offset, tracer cadence and impact surface.
 			var a:=Vector3(event.from.x,float(event.from_y),event.from.y)
@@ -574,6 +578,20 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		notify("Field structures are fixed • select a section to move")
 		attack_mode=false
 		return
+	# Right-click an obstacle (enemy wire/hedgehogs/sandbags/trench, or a
+	# finished own work) with engineers selected: clear it.
+	if not attack and not sim.field_ops.is_empty():
+		var obstacle_id:=enemy if enemy>=0 else pick(p)
+		var obstacle:Dictionary=sim.get_unit(obstacle_id) if obstacle_id>=0 else {}
+		var own_unfinished:bool=not obstacle.is_empty() and obstacle.team==0 and float(obstacle.get("build_left",0.0))>0
+		if not obstacle.is_empty() and not own_unfinished and sim.FieldOps.can_clear(sim,obstacle):
+			var sappers:Array=ids.filter(func(id):return sim.get_unit(id).kind=="engineer")
+			if not sappers.is_empty():
+				if sim.FieldOps.clear_site(sim,obstacle_id,int(sappers[0])):
+					notify("Engineers clearing %s" % HUD.FIELD_LABELS.get(obstacle.kind,"obstacle"))
+					ping()
+				else:notify(str(sim.field_ops.get("last_build_error","Cannot clear this")))
+				return
 	# Right-click an unfinished friendly work with engineers selected: build it.
 	if enemy<0 and not attack and not sim.field_ops.is_empty():
 		var site_id:=pick(p)

@@ -56,7 +56,7 @@ func _init()->void:
 	for i in 300:sim.tick(1.0/30)
 	var covered:int=squad.members.filter(func(m):return m.hp>0 and sim.terrain.cover(m.pos)).size()
 	if covered<2:
-		print("DEBUG halt orders=",squad.orders.size()," hold=",squad.hold_command," resume_after=",squad.get("cover_resume_after",0.0)," t=",sim.time," pos=",squad.pos," bdist=",building.bounds.distance_to(squad.pos) if building.bounds.has_method("distance_to") else 0)
+		print("DEBUG halt orders=",squad.orders.size()," hold=",squad.hold_command," resume_after=",squad.get("cover_resume_after",0.0)," t=",sim.time," pos=",squad.pos," bdist=",building.bounds.get_center().distance_to(squad.pos))
 		for m in squad.members:print("  m ",m.pos," phase=",m.get("cover_phase","")," occ=",m.get("occupying",false)," cover=",sim.terrain.cover(m.pos))
 		var phantom_dir:Vector2=(sim.field_ops.get("enemy_insertion",Vector2.ZERO)-squad.pos).normalized()
 		var phantom:={"pos":squad.pos+phantom_dir*35.0,"members":[]}

@@ -41,6 +41,9 @@ static func update(sim) -> void:
 	for u in sim.units:
 		if not sim.alive(u) or sim.definitions[u.kind].get("structure",false) or u.has("building_id") or u.kind=="harvester" or sim.definitions[u.kind].domain!="land" or u.hold_command:continue
 		var intent:Dictionary=u.intent if u.orders.is_empty() else u.orders[0]
+		if u.orders.is_empty() and (intent.is_empty() or intent.mode in ["move","retreat"] or u.maneuver.get("phase","")=="ENGAGE"):
+			engage_idle(sim,u)
+			continue
 		if intent.is_empty() or intent.mode in ["move","retreat"]:continue
 		# Active maneuvers still reassess observed danger/support at a bounded cadence.
 		if u.maneuver.is_empty() and sim.time<u.next_decision:continue
@@ -126,6 +129,40 @@ static func update(sim) -> void:
 			var choice:=flank_choice(sim,u,intent.pos,contacts)
 			if not choice.is_empty() and plan(sim,u,choice.pos,"FLANK","Repositioning around obstruction" if support_ids.is_empty() else "Flanking with supporting fire",6,choice.path):
 				u.maneuver["support_ids"]=support_ids
+
+# Idle units (no orders, not holding) that see an enemy they can hurt but cannot
+# reach close to firing range, leashed to where they were left. Units manning
+# works, garrisons (hold) and busy engineers stay put.
+const ENGAGE_LEASH:=14.0
+static func engage_idle(sim,u:Dictionary)->void:
+	if u.maneuver.get("phase","")=="ENGAGE":
+		if u.maneuver.arrived or sim.time>float(u.maneuver.deadline) or u.target>=0:
+			u.maneuver={};u.reason="Engaging"
+		return
+	if not u.maneuver.is_empty() or u.target>=0 or sim.time<float(u.get("engage_check",0.0)):return
+	u["engage_check"]=sim.time+0.7+float(u.id%5)*0.06
+	if u.get("post_group",-1)!=u.command_group or not u.has("post"):
+		u["post"]=u.pos;u["post_group"]=u.command_group
+	if u.has("clearing_id") or sim.Garrison.transit(u)!="":return
+	if u.members.any(func(m):return m.hp>0 and (m.get("occupying",false) or m.get("in_trench",false))):return
+	if u.kind=="engineer" and sim.units.any(func(s):return s.get("queued_for",-1)==u.id and float(s.get("build_left",0.0))>0):return
+	var d:Dictionary=sim.definitions[u.kind]
+	var sight:float=float(d.sight)+4.0
+	var enemy:Dictionary={};var best:=INF
+	# Weapon-range candidate lists are too short here: scan everything (throttled).
+	for other in sim.units:
+		if not sim.alive(other) or other.team==u.team or sim.passive_work(other) or not sim.effective_unit(u,other.kind):continue
+		var dist:float=u.pos.distance_to(other.pos)
+		if dist<sight and dist<best and sim.contact_known(u,other):best=dist;enemy=other
+	if enemy.is_empty():return
+	var weapon:String=u.kind if u.members.is_empty() else ("atgm" if u.kind=="atgm" and sim.effective_weapon("atgm",enemy.kind) else "rifle")
+	var reach:float=float(sim.definitions[weapon].range)
+	if best<=reach*0.95 and sim.terrain.line_clear(u.pos,enemy.pos):return
+	var desired:Vector2=enemy.pos+(u.pos-enemy.pos).normalized()*reach*0.8
+	var post:Vector2=u.post
+	if desired.distance_to(post)>ENGAGE_LEASH:desired=post+(desired-post).limit_length(ENGAGE_LEASH)
+	if desired.distance_to(u.pos)<1.5:return
+	plan(sim,u,desired,"ENGAGE","Closing to engage spotted enemy",4.0)
 
 static func flank_choice(sim,u:Dictionary,goal:Vector2,contacts:Array) -> Dictionary:
 	var d:Dictionary=sim.definitions[u.kind]

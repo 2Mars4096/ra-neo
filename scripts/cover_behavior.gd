@@ -33,7 +33,7 @@ static func update(u:Dictionary,sim) -> void:
 	if not alert:
 		# A section halted beside its own works occupies them (no enemy needed).
 		# Engineers with a site to build stay on the job instead of manning works.
-		var building:bool=u.has("building_id") or (u.kind=="engineer" and sim.units.any(func(s):return s.get("queued_for",-1)==u.id and float(s.get("build_left",0.0))>0))
+		var building:bool=u.has("building_id") or u.has("clearing_id") or (u.kind=="engineer" and sim.units.any(func(s):return s.get("queued_for",-1)==u.id and float(s.get("build_left",0.0))>0))
 		if u.orders.is_empty() and not building and occupy_works(u,sim,threat):return
 		for member in u.members:
 			if member.get("occupying",false):continue
