@@ -735,6 +735,12 @@ static func sync_obstacles(sim)->void:
 			var zone:Dictionary=definition.get("zone",{})
 			zones.append({"rect":rect,"speed":zone.get("speed",{}),"cover":zone.get("cover",[]),"conceal":float(zone.get("conceal",1.0)),"dug":unit.kind=="fighting_trench","front":Vector2.LEFT if unit.get("rotated",false) else Vector2.UP})
 		if unit.kind=="tactical_cover" and unit.build_left<=0:covers.append(rect)
+	# Burnt-out and abandoned vehicles block the road for everyone (local nav
+	# refresh only) and give hard cover to infantry beside them.
+	for wreck in sim.VehicleDamage.wrecks(sim):
+		var half:float=float(wreck.radius)*0.7
+		var rect:=Rect2(wreck.pos-Vector2(half,half),Vector2(half,half)*2.0)
+		blocks.append(rect);covers.append(rect)
 	var changed:bool=sim.terrain.update_field_geometry(blocks,covers)
 	if sim.terrain.update_field_zones(zones) or changed:sim.visibility_cache.clear()
 

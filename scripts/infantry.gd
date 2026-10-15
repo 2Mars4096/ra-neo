@@ -12,7 +12,7 @@ static func create(u:Dictionary,d:Dictionary) -> void:
 	if u.kind not in ["rifle","atgm","engineer"]:return
 	for i in int(d.members):
 		var offset:=formation_offset(i,int(d.members))
-		u.members.append({"index":i,"offset":offset,"pos":u.pos+offset,"hp":float(d.hp)/int(d.members),"max_hp":float(d.hp)/int(d.members),"cooldown":i*0.19,"target":-1,"aim":0.0,"suppression":0.0,"last_hit":-100.0,"last_shot":-100.0,"facing":u.facing,"state":"HOLDING","travel":0.0,"phase":i*1.7,"cover_goal":Vector2.ZERO,"cover_until":0.0,"rounds":6 if not (u.kind=="atgm" and i==0) else 1,"reload_until":0.0,"speed":0.0,"posture":"STANDING","body_radius":0.8,"posture_until":0.0})
+		u.members.append({"index":i,"offset":offset,"pos":u.pos+offset,"hp":float(d.hp)/int(d.members),"max_hp":float(d.hp)/int(d.members),"cooldown":i*0.19,"target":-1,"aim":0.0,"suppression":0.0,"last_hit":-100.0,"last_shot":-100.0,"facing":u.facing,"state":"HOLDING","travel":0.0,"phase":i*1.7,"cover_goal":Vector2.ZERO,"cover_until":0.0,"rounds":6 if not (u.kind=="atgm" and i==0) else 1,"reload_until":0.0,"speed":0.0,"posture":"STANDING","body_radius":0.8,"posture_until":0.0,"wound":HEALTHY,"bleed_at":INF,"aid":0.0,"stable":false,"treat":0.0,"medic":-1,"aiding":-1})
 	u["member_hp_snapshot"]=u.hp
 
 static func reconcile(u:Dictionary) -> void:
@@ -26,10 +26,204 @@ static func reconcile(u:Dictionary) -> void:
 			for member in u.members:member.hp=minf(member.max_hp,member.hp*u.hp/total)
 	publish(u)
 
+# Section HP bar = sum of combat-effective soldiers: HEALTHY counts max_hp (or a
+# legacy partial value), LIGHT at most LIGHT_SHARE*max_hp, SEVERE and KIA zero.
+# The section is destroyed once no soldier can fight (every one SEVERE or KIA).
 static func publish(u:Dictionary) -> void:
 	u.hp=0.0
-	for member in u.members:u.hp+=member.hp
+	for member in u.members:
+		# Legacy/external damage (tests, FPV blast) that zeroes a soldier still
+		# produces a wound state, never a vanished record.
+		if member.hp<=0 and member.get("wound",HEALTHY) in [HEALTHY,LIGHT]:external_down(member)
+		u.hp+=member.hp
+	# A section whose survivors are all badly wounded still exists: it stays
+	# selectable and visible but cannot fight (it ends when the last man dies).
+	u["combat_ineffective"]=false
+	if u.hp<=0.0 and u.members.any(func(m):return m.get("wound",HEALTHY)==SEVERE):
+		u.hp=INEFFECTIVE_HP
+		u["combat_ineffective"]=true
 	u.member_hp_snapshot=u.hp
+
+# --- Wounds ------------------------------------------------------------------
+# Per-soldier states. hp is the soldier's combat-effective share of the bar.
+const HEALTHY:="HEALTHY"
+const LIGHT:="LIGHT"      # walks slower, aims slower and less accurately
+const SEVERE:="SEVERE"    # down: no fire, crawls; bleeds out unless aided
+const KIA:="KIA"          # body stays where it fell; never targeted or selected
+const LIGHT_SHARE:=0.5
+const INEFFECTIVE_HP:=0.01  # bar value of a section with only SEVERE survivors
+const LIGHT_SPEED:=0.75
+const LIGHT_AIM:=1.5
+const LIGHT_ACCURACY:=0.75
+const BLEED_MIN:=45.0
+const BLEED_SPAN:=45.0
+const AID_SECONDS:=8.0
+const AID_REACH:=1.2
+const AID_QUIET:=2.5      # seconds since the section was last hit
+const AID_SUPPRESSION:=0.5
+const TREAT_SHARE:=1.35   # aid-post HP (x max_hp) to treat SEVERE back to LIGHT
+const CRAWL_SPEED:=0.3
+const CARRY_SCALE:=0.6    # section speed while carrying a SEVERE casualty
+const FRAGMENT_RADIUS:=3.2
+# [KIA, SEVERE] probabilities for an unprotected hit; the remainder is LIGHT.
+# Lethality < 1 (cover, garrison, trench, weak rounds) shifts outcomes milder.
+const OUTCOMES:={"BULLET":[0.25,0.40],"HE":[0.55,0.35],"FRAGMENT":[0.10,0.35]}
+
+static func casualties(u:Dictionary) -> int:
+	var count:=0
+	for member in u.members:
+		if member.get("wound",HEALTHY) in [SEVERE,KIA]:count+=1
+	return count
+
+# Bodies and downed soldiers remain on the ground after their section is gone.
+static func has_remains(u:Dictionary) -> bool:
+	for member in u.members:
+		if member.get("wound",HEALTHY) in [SEVERE,KIA]:return true
+	return false
+
+# A SEVERE casualty slows its section while an able soldier is left to carry it.
+static func carrying(u:Dictionary) -> bool:
+	var wounded:=false
+	var bearer:=false
+	for member in u.members:
+		if member.get("wound",HEALTHY)==SEVERE:wounded=true
+		elif member.hp>0:bearer=true
+	return wounded and bearer
+
+static func roll(kind:String,lethality:float,rng:RandomNumberGenerator) -> String:
+	var table:Array=OUTCOMES[kind]
+	var l:=clampf(lethality,0.1,1.3)
+	var kia:float=float(table[0])*l
+	var severe:float=float(table[1])*sqrt(l)
+	var r:=rng.randf()
+	if r<kia:return KIA
+	if r<kia+severe:return SEVERE
+	return LIGHT
+
+# Applies one outcome; a second LIGHT wound becomes SEVERE.
+static func wound(u:Dictionary,member:Dictionary,outcome:String,now:float,rng:RandomNumberGenerator) -> void:
+	var state:String=member.get("wound",HEALTHY)
+	if state in [SEVERE,KIA] and outcome!=KIA:return
+	if outcome==LIGHT and state==LIGHT:outcome=SEVERE
+	member.last_hit=now
+	if outcome==LIGHT:
+		member.wound=LIGHT
+		member.hp=minf(member.hp,member.max_hp*LIGHT_SHARE)
+		member.state="BRACING"
+		return
+	member.wound=outcome
+	member.hp=0.0
+	member.aid=0.0
+	member.treat=0.0
+	member.stable=false
+	member.bleed_at=now+BLEED_MIN+BLEED_SPAN*rng.randf() if outcome==SEVERE else INF
+	member.state="DOWN" if outcome==SEVERE else "KIA"
+	member.target=-1
+	member.aim=0.0
+	release(u,member)
+	Cover.clear(member)
+
+# Ends any buddy-aid pairing that involves this soldier.
+static func release(u:Dictionary,member:Dictionary) -> void:
+	if member.get("aiding",-1)>=0:
+		var casualty:Dictionary=u.members[member.aiding]
+		if casualty.get("medic",-1)==member.index:casualty.medic=-1
+	if member.get("medic",-1)>=0:
+		var medic:Dictionary=u.members[member.medic]
+		if medic.get("aiding",-1)==member.index:medic.aiding=-1
+	member.aiding=-1
+	member.medic=-1
+
+static func external_down(member:Dictionary) -> void:
+	member.hp=0.0
+	var hit_at:float=float(member.get("last_hit",-100.0))
+	# Scripted removals (never hit) leave a body; combat damage is 55% KIA.
+	var h:=fposmod(hit_at*37.0+float(member.index)*0.618,1.0)
+	if hit_at<0.0 or h<0.55:
+		member.wound=KIA
+		member.state="KIA"
+		member.bleed_at=INF
+	else:
+		member.wound=SEVERE
+		member.state="DOWN"
+		member.bleed_at=hit_at+BLEED_MIN+BLEED_SPAN*fposmod(h*7.3,1.0)
+	member["aid"]=0.0
+	member["stable"]=false
+	member["treat"]=0.0
+	if not member.has("medic"):member["medic"]=-1
+	if not member.has("aiding"):member["aiding"]=-1
+	member.target=-1
+
+# The soldier a shot from `source` most likely strikes: nearest able one.
+static func exposed_member(u:Dictionary,source:Vector2) -> Dictionary:
+	var chosen:Dictionary={}
+	var nearest:=INF
+	for member in u.members:
+		if member.hp<=0:continue
+		var distance:float=source.distance_squared_to(member.pos)
+		if distance<nearest:chosen=member;nearest=distance
+	return chosen
+
+# One hit on a section. Bullets wound the struck soldier; HE also throws
+# fragments that may wound others within FRAGMENT_RADIUS, by distance.
+static func strike(u:Dictionary,kind:String,lethality:float,source:Vector2,now:float,rng:RandomNumberGenerator) -> void:
+	reconcile(u)
+	var victim:=exposed_member(u,source)
+	if victim.is_empty():return
+	var sheltered:=lethality
+	if victim.get("in_trench",false):sheltered*=0.55
+	wound(u,victim,roll(kind,sheltered,rng),now,rng)
+	victim.suppression=minf(1,victim.suppression+0.45)
+	if kind=="HE":
+		for member in u.members:
+			if member==victim or member.hp<=0:continue
+			var gap:float=member.pos.distance_to(victim.pos)
+			if gap>FRAGMENT_RADIUS:continue
+			var falloff:=1.0-gap/FRAGMENT_RADIUS
+			member.suppression=minf(1,member.suppression+0.45)
+			member.last_hit=now
+			var shelter:=0.55 if member.get("in_trench",false) else 1.0
+			if rng.randf()<0.75*falloff*shelter:wound(u,member,roll("FRAGMENT",lethality*shelter*(0.5+0.5*falloff),rng),now,rng)
+			elif member.state!="DOWN":member.state="BRACING"
+	publish(u)
+
+# Bleed-out and buddy aid (called once per tick for a living section).
+static func tick_wounds(u:Dictionary,now:float,dt:float) -> void:
+	var quiet:bool=now-float(u.last_hit)>=AID_QUIET and u.suppression<=AID_SUPPRESSION and (u.orders.is_empty() or u.orders[0].mode!="retreat")
+	var garrisoned:bool=u.get("garrison",-1)>=0
+	for casualty in u.members:
+		if casualty.get("wound",HEALTHY)!=SEVERE:continue
+		if not casualty.stable and now>=float(casualty.bleed_at):
+			# Died of wounds.
+			casualty.wound=KIA
+			casualty.state="KIA"
+			casualty.bleed_at=INF
+			release(u,casualty)
+			continue
+		if casualty.stable:continue
+		var medic:Dictionary=u.members[casualty.medic] if casualty.medic>=0 else {}
+		if not medic.is_empty() and (medic.hp<=0 or not quiet or medic.suppression>AID_SUPPRESSION):
+			release(u,casualty)
+			medic={}
+		if not quiet:continue
+		if medic.is_empty():
+			var best:=INF
+			for member in u.members:
+				if member.hp<=0 or member.get("aiding",-1)>=0 or member.suppression>AID_SUPPRESSION:continue
+				if member.get("cover_phase","") in ["SEEKING","SETTLING"]:continue
+				var distance:float=member.pos.distance_squared_to(casualty.pos)
+				if distance<best:best=distance;medic=member
+			if medic.is_empty():continue
+			casualty.medic=medic.index
+			medic.aiding=casualty.index
+		if garrisoned or medic.pos.distance_to(casualty.pos)<=AID_REACH:
+			casualty.aid+=dt
+			medic.state="AIDING"
+			if casualty.aid>=AID_SECONDS:
+				# Bleeding stopped: still SEVERE and out of the fight, but no longer dying.
+				casualty.stable=true
+				casualty.bleed_at=INF
+				release(u,casualty)
 
 static func move(u:Dictionary,sim,dt:float) -> void:
 	if not u.members.is_empty() and sim.scenario.get("autonomy",false):update_regroup(u,sim)
@@ -41,13 +235,24 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 		u["cover_command"]=u.command_group
 		u["cover_next"]=sim.time+0.3+float(u.id%5)*0.02
 		Cover.update(u,sim)
+	u["carry_from"]=u.pos
 	for member in u.members:
-		if member.hp<=0:continue
+		if member.hp<=0:
+			if member.get("wound","")==SEVERE:move_casualty(u,member,sim,dt)
+			continue
 		member.cooldown-=dt
 		member.suppression=maxf(0,member.suppression-dt*0.12)
 		var offset:Vector2=member.offset
 		var desired:Vector2=u.pos+offset
-		if sim.scenario.get("autonomy",false):
+		if member.get("aiding",-1)>=0:
+			# Buddy aid: kneel beside the casualty; no shelter moves meanwhile.
+			var casualty:Dictionary=u.members[member.aiding]
+			if member.get("cover_phase","")!="":Cover.clear(member)
+			member.cover_until=maxf(member.cover_until,sim.time+1.0)
+			var away:Vector2=member.pos-casualty.pos
+			desired=casualty.pos+(away.normalized() if away.length()>0.01 else Vector2.RIGHT)*0.8
+			if member.pos.distance_to(casualty.pos)<=AID_REACH:desired=member.pos
+		elif sim.scenario.get("autonomy",false):
 			var phase:String=member.get("cover_phase","")
 			if u.hold_command:desired=member.pos
 			elif u.get("regroup_active",false):desired=regroup_destination(u,member,sim,desired)
@@ -60,6 +265,7 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 		var old:Vector2=member.pos
 		var speed:float=float(sim.definitions[u.kind].speed)*(1.04+member.index*0.035)*sim.terrain.ground_speed(old,"infantry")
 		if member.suppression>0.6:speed*=0.75
+		if member.get("wound","")==LIGHT:speed*=LIGHT_SPEED
 		if member.get("cover_phase","")=="SEEKING":speed*=1.2
 		if not u.orders.is_empty() and u.orders[0].mode=="retreat":speed*=1.2
 		if sim.scenario.get("autonomy",false):
@@ -116,6 +322,30 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 		else:member.state="HOLDING"
 		# Preserve the squad's conservative navigation envelope. The leader
 		# waits for stragglers instead of dragging soldiers through obstacles.
+
+# A SEVERE casualty: carried with a moving section (at the carry pace), or
+# crawling slowly back toward its slot; otherwise it lies still. KIA never move.
+static func move_casualty(u:Dictionary,member:Dictionary,sim,dt:float) -> void:
+	var old:Vector2=member.pos
+	var desired:Vector2=u.pos+member.offset
+	var gap:float=old.distance_to(desired)
+	member.travel=0.0
+	var moving:bool=not u.orders.is_empty() or not u.maneuver.is_empty()
+	var speed:=0.0
+	if moving and carrying(u) and gap>1.0:
+		speed=float(sim.definitions[u.kind].speed)*CARRY_SCALE*sim.terrain.ground_speed(old,"infantry")
+		member.state="CARRIED"
+	elif gap>2.5 and member.get("medic",-1)<0:
+		speed=CRAWL_SPEED
+		member.state="CRAWLING"
+	else:
+		member.state="DOWN"
+		return
+	var next:Vector2=old.move_toward(desired,speed*dt)
+	if not sim.terrain.segment_clear(old,next,"land",0.42):return
+	member.pos=next
+	member.travel=old.distance_to(next)
+	if member.travel>0.001:member.facing=(next-old).normalized()
 
 # Return paths are local, footprint-checked, throttled and tied to the current
 # command. A squad pauses before the leash goes taut so actors can round walls.
@@ -215,6 +445,10 @@ static func hit(u:Dictionary,amount:float,source:Vector2,now:float) -> void:
 	chosen.last_hit=now
 	chosen.suppression=minf(1,chosen.suppression+0.35)
 	chosen.state="DOWN" if chosen.hp<=0 else "BRACING"
+	# Legacy HP damage: a hit worth a whole soldier kills outright.
+	if chosen.hp<=0 and amount>=chosen.max_hp*0.9:
+		external_down(chosen)
+		chosen.wound=KIA;chosen.state="KIA";chosen.bleed_at=INF
 	publish(u)
 
 # High explosive (shells, rockets, missiles, autocannon): the soldier nearest
@@ -250,14 +484,32 @@ static func capacity(u:Dictionary) -> float:
 		if member.hp>0:total+=member.max_hp
 	return total
 
+# Medical recovery (aid post / rally point). Treatment goes to SEVERE
+# casualties first: TREAT_SHARE*max_hp of care returns one to LIGHT. Living
+# soldiers then heal; a LIGHT soldier healed to full is HEALTHY again. The dead
+# are never resurrected. Returns the HP-equivalent of care given.
 static func recover(u:Dictionary,amount:float) -> float:
 	var restored:=0.0
 	for member in u.members:
-		if member.hp<=0:continue
+		if member.get("wound",HEALTHY)!=SEVERE or restored>=amount:continue
+		var care:=minf(amount-restored,member.max_hp*TREAT_SHARE-float(member.get("treat",0.0)))
+		member.treat=float(member.get("treat",0.0))+care
+		member.stable=true
+		member.bleed_at=INF
+		restored+=care
+		if member.treat>=member.max_hp*TREAT_SHARE-0.001:
+			release(u,member)
+			member.wound=LIGHT
+			member.treat=0.0
+			member.hp=member.max_hp*LIGHT_SHARE
+			member.state="HOLDING"
+			member.posture="STANDING"
+	for member in u.members:
+		if member.hp<=0 or restored>=amount:continue
 		var heal:=minf(amount-restored,member.max_hp-member.hp)
 		member.hp+=heal
 		restored+=heal
-		if restored>=amount:break
+		if member.get("wound",HEALTHY)==LIGHT and member.hp>=member.max_hp-0.001:member.wound=HEALTHY
 	publish(u)
 	return restored
 

@@ -393,6 +393,8 @@ func ordered_target(u:Dictionary)->int:
 # A tank's coax never locks onto a scout drone by itself (it would ignore armour);
 # it engages scouts on order and inbound strike drones automatically.
 func auto_target_ok(u:Dictionary,other:Dictionary)->bool:
+	# Nobody keeps shooting a section that is only wounded men on the ground.
+	if other.get("combat_ineffective",false) and other.get("id",-2)!=ordered_target(u):return false
 	if passive_work(other):return other.get("id",-2)==ordered_target(u)
 	if AIR_REACH.has(u.kind) and definitions[other.kind].domain=="air" and not definitions[other.kind].get("strike",false):return other.id==ordered_target(u)
 	return true
@@ -512,13 +514,46 @@ func hit_chance(u:Dictionary,other:Dictionary) -> float:
 	var chance:=0.95
 	if UAV_HIT.has(other.kind):chance=UAV_HIT[other.kind].get(u.kind,0.35)
 	elif other.kind=="helo":chance=0.85 if u.kind=="aa" else 0.45
+	elif not other.get("members",[]).is_empty():chance=infantry_exposure(u,other)
 	var fraction:=clampf(shot_distance(u,other)/maxf(1,weapon_range(u.kind,definitions[other.kind])),0,1)
 	chance*=lerpf(1.0,0.65,fraction*fraction)
 	# A diving strike drone flies straight at its victim: little crossing motion.
 	if other.state in ["MOVING","ADVANCING","RETREATING"]:chance*=0.65
 	if u.state in ["MOVING","ADVANCING","RETREATING"]:chance*=0.7
 	if u.suppression>0.6:chance*=0.55
+	chance*=float(u.get("accuracy",1.0))
 	return clampf(chance,0.01,0.98)
+
+# Base chance for a shot at a soldier. Aimed small-arms fire must strike a
+# man-sized target (RIFLE_HIT point blank, under half that at full range); HE
+# needs only a near miss. Posture, cover, trench and garrison shrink the
+# exposed soldier (the one nearest the shooter).
+const RIFLE_HIT:=0.45
+func infantry_exposure(u:Dictionary,other:Dictionary) -> float:
+	var exposure:=1.0
+	var victim:Dictionary=Infantry.exposed_member(other,u.pos)
+	if not victim.is_empty():
+		var posture:String=victim.get("posture","STANDING")
+		if posture=="PRONE":exposure*=0.5
+		elif posture=="CROUCHED":exposure*=0.75
+		if victim.get("in_trench",false):exposure*=0.5
+		elif terrain.cover(victim.pos):exposure*=0.7
+	if Garrison.inside(other):exposure*=0.6
+	if definitions[u.kind].get("combat_alias",u.kind) in HE_WEAPONS:return 0.95*(0.55+0.45*exposure)
+	var fraction:=clampf(shot_distance(u,other)/maxf(1,weapon_range(u.kind,definitions[other.kind])),0,1)
+	return RIFLE_HIT*exposure*lerpf(1.0,0.45,fraction)
+
+# One rifle round from a squad soldier (15 x 0.25) is the reference bullet.
+const BULLET_REF:=3.75
+# A hit on a section wounds soldiers instead of removing HP. damage_amount's
+# cover/garrison reduction becomes lethality < 1 (milder outcomes); weak rounds
+# (engineer carbines) are milder too. See Infantry.OUTCOMES.
+func infantry_hit(u:Dictionary,target:Dictionary,amount:float,scale:float) -> void:
+	var raw:float=float(definitions[u.kind].damage)*float(effectiveness[u.kind][target.kind])*scale
+	if amount<=0.0 or raw<=0.0:return
+	var he:bool=definitions[u.kind].get("combat_alias",u.kind) in HE_WEAPONS
+	var lethality:float=amount/raw if he else amount/BULLET_REF
+	Infantry.strike(target,"HE" if he else "BULLET",lethality,u.pos,time,combat_rng)
 
 const HE_WEAPONS:=["tank","helo","boat","aa","at_gun","atgm"]
 func resolve_shot(u:Dictionary,target:Dictionary,scale:float) -> bool:
@@ -526,17 +561,19 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float) -> bool:
 	var hit:bool=combat_rng.randf()<hit_chance(u,target)
 	if hit:
 		var amount:float=damage_amount(u,target)*scale
-		# Vehicles: penetration and component damage decide the integrity loss.
-		if target.members.is_empty():amount=VehicleDamage.strike(self,u,target,amount)
-		# Explosive rounds also wound soldiers standing near the one hit.
-		if not target.members.is_empty() and definitions[u.kind].get("combat_alias",u.kind) in HE_WEAPONS:Infantry.blast(target,amount,u.pos,time)
-		else:Infantry.hit(target,amount,u.pos,time)
+		if target.members.is_empty():
+			# Vehicles: penetration and component damage decide the integrity loss.
+			Infantry.hit(target,VehicleDamage.strike(self,u,target,amount),u.pos,time)
+		# Soldiers are wounded or killed (HE also wounds those nearby).
+		else:infantry_hit(u,target,amount,scale)
 		target.last_hit=time
 	# Near misses can suppress exposed people; armor never receives rifle chip damage.
 	if definitions[target.kind].domain=="land" and definitions[target.kind].armor==0:
 		# Sustained machine-gun fire from a bunker pins infantry harder than rifles.
 		var pin:float=0.18 if u.kind=="bunker" else (0.09 if definitions[u.kind].get("combat_alias",u.kind)=="rifle" else 0.23)
 		if Garrison.inside(target):pin*=Garrison.SUPPRESSION_SCALE
+		# Fallen comrades shake a section: casualties raise suppression.
+		if not target.members.is_empty():pin*=1.0+0.25*Infantry.casualties(target)
 		target.suppression=minf(1,target.suppression+pin)
 	var endpoint:Vector2=target.pos
 	if not hit:endpoint+=Vector2.from_angle(combat_rng.randf()*TAU)*combat_rng.randf_range(2.5,4.5)
@@ -569,6 +606,28 @@ func damage_amount(u: Dictionary, other: Dictionary) -> float:
 	elif td.armor > 0 and td.domain == "land" and d.domain == "land" and terrain.hull_down(other.pos,u.pos):
 		damage *= 0.6
 	return damage
+
+# HE blast at a point (FPV strike, demolition) against one section: soldiers
+# within `radius` are wounded by distance; trench or cover halves the effect.
+# Returns true if any soldier was caught. fpv_detonate's member loop can call
+# this instead of subtracting member hp (see Infantry.publish fallback).
+func infantry_blast(target:Dictionary,origin:Vector2,radius:float,lethality:float=1.0) -> bool:
+	Infantry.reconcile(target)
+	var struck:=false
+	for member in target.members:
+		if member.hp<=0:continue
+		var gap:float=origin.distance_to(member.pos)
+		if gap>radius:continue
+		struck=true
+		var falloff:=1.0-gap/radius
+		var shelter:float=0.5 if member.get("in_trench",false) or terrain.cover(member.pos) else 1.0
+		member.suppression=minf(1.0,member.suppression+0.6)
+		member.last_hit=time
+		if combat_rng.randf()<(0.35+0.65*falloff)*shelter:
+			Infantry.wound(target,member,Infantry.roll("HE" if falloff>0.6 else "FRAGMENT",lethality*shelter*(0.4+0.6*falloff),combat_rng),time,combat_rng)
+		elif member.state!="DOWN":member.state="BRACING"
+	Infantry.publish(target)
+	return struck
 
 # FPV strike drones (loitering munitions): straight-line homing on an assigned
 # enemy at cruise altitude, a brief staggered hover at dive_range while the
@@ -641,19 +700,8 @@ func fpv_detonate(u:Dictionary,d:Dictionary) -> void:
 			if gap>radius:continue
 			other.hp-=blast*scale*(1.0-0.7*gap/radius)
 			struck=true
-		else:
-			Infantry.reconcile(other)
-			for member in other.members:
-				if member.hp<=0:continue
-				var gap:float=origin.distance_to(member.pos)
-				if gap>radius:continue
-				var shelter:float=0.5 if member.get("in_trench",false) or terrain.cover(member.pos) else 1.0
-				member.hp=maxf(0.0,member.hp-blast*scale*shelter*(1.0-0.7*gap/radius))
-				member.last_hit=time
-				member.suppression=minf(1.0,member.suppression+0.6)
-				member.state="DOWN" if member.hp<=0 else "BRACING"
-				struck=true
-			Infantry.publish(other)
+		# Soldiers go through the wound model (KIA / severe / light by distance).
+		else:struck=infantry_blast(other,origin,radius,scale)
 		if not struck:continue
 		other.last_hit=time
 		if od.domain=="land" and float(od.armor)==0:other.suppression=minf(1.0,other.suppression+0.5)
@@ -795,6 +843,12 @@ func tick(dt: float) -> void:
 
 func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 	if candidates==null:candidates=target_candidates(u)
+	Infantry.tick_wounds(u,time,dt)
+	# Carrying a SEVERE casualty slows the section's advance (Infantry.move
+	# records the anchor before move_unit; shortening a cleared step is safe).
+	if u.has("carry_from"):
+		if Infantry.carrying(u):u.pos=(u.carry_from as Vector2).lerp(u.pos,Infantry.CARRY_SCALE)
+		u.erase("carry_from")
 	var eligible_by_weapon:Dictionary={}
 	for member in u.members:
 		if member.hp<=0:continue
@@ -803,6 +857,13 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			member.state="WITHDRAWING"
 			member.target=-1
 			member.aim=0.0
+			continue
+		if member.get("aiding",-1)>=0:
+			# Buddy aid: the soldier stops fighting while treating a casualty.
+			member.state="AIDING" if Garrison.inside(u) or member.pos.distance_to(u.members[member.aiding].pos)<=Infantry.AID_REACH else "TO CASUALTY"
+			member.target=-1
+			member.aim=0.0
+			if member.state=="AIDING":member.posture="CROUCHED"
 			continue
 		if member.get("cover_phase","") in ["SEEKING","SETTLING"]:
 			member.state="RUNNING TO COVER" if member.cover_phase=="SEEKING" else "SETTLING IN COVER"
@@ -885,6 +946,8 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		member.aim+=dt
 		member.facing=(target.pos-member.pos).normalized()
 		var preparation:float=0.75 if weapon=="atgm" else (0.45 if scenario.get("autonomy",false) else 0.2)+member.index*0.05
+		var hurt:bool=member.get("wound","")==Infantry.LIGHT
+		if hurt:preparation*=Infantry.LIGHT_AIM
 		member.state="ACQUIRING" if member.aim<preparation else "CYCLING"
 		if member.cooldown>0 or member.aim<preparation:continue
 		var proxy:Dictionary=u.duplicate()
@@ -892,6 +955,7 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		proxy.pos=member.pos
 		proxy["fire_height"]=0.75 if member.posture=="CROUCHED" else 0.95
 		proxy.suppression=maxf(u.suppression,member.suppression)
+		if hurt:proxy["accuracy"]=Infantry.LIGHT_ACCURACY
 		resolve_shot(proxy,target,(1.0 if weapon=="atgm" else 0.25)*(0.4 if u.kind=="engineer" else 1.0))
 		member.cooldown=float(d.interval)*(1.8 if proxy.suppression>0.6 else 1.0)
 		member.rounds-=1
@@ -1156,7 +1220,7 @@ func update_objectives(dt: float) -> void:
 		var friendly := false
 		var enemy := false
 		for u in units:
-			if not alive(u) or definitions[u.kind].get("structure",false) or definitions[u.kind].domain != "land" or u.maneuver.get("phase","")=="WITHDRAW":
+			if not alive(u) or u.get("combat_ineffective",false) or definitions[u.kind].get("structure",false) or definitions[u.kind].domain != "land" or u.maneuver.get("phase","")=="WITHDRAW":
 				continue
 			if u.pos.distance_to(obj.pos) < float(scenario.get("capture_radius",7.0)):
 				if u.team == 0 and u.suppression<=0.6 and (u.orders.is_empty() or u.orders[0].mode!="retreat"):

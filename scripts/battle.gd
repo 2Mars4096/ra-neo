@@ -491,7 +491,8 @@ func sync_units(dt: float) -> void:
 			node.visible=true
 			if not node.has_meta("wreck_shown"):show_wreck(node,u)
 			continue
-		node.visible=sim.alive(u) and u.visible
+		# Fallen soldiers of a destroyed section stay where they fell.
+		node.visible=(sim.alive(u) or sim.Infantry.has_remains(u)) and u.visible
 		if not node.visible:
 			continue
 		var distant_shadows:=camera_size>45.0

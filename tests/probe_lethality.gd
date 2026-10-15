@@ -15,7 +15,7 @@ func kill_time(kind:String)->float:
 	rifle["hold_command"]=true
 	for i in 1800:
 		sim.tick(1.0/30);sim.events.clear()
-		if not sim.alive(rifle):return sim.time
+		if not sim.alive(rifle) or rifle.get("combat_ineffective",false):return sim.time
 	return INF
 func _init()->void:
 	var ok:=true

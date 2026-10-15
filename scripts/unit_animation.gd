@@ -96,8 +96,12 @@ static func pose(model:Node3D,u:Dictionary,sim,dt:float) -> void:
 				continue
 			var member:Dictionary=u.members[index]
 			var member_pos:Vector2=positions[index] if index<positions.size() else member.pos
+			var wound:String=member.get("wound","HEALTHY")
+			var down:bool=wound=="SEVERE" or wound=="KIA"
 			# Garrisoned soldiers are inside the building: hidden, marked by the HUD.
-			part.visible=member.hp>0 and u.get("garrison",-1)<0 and not member.get("indoors",false)
+			# The fallen stay on the ground (SEVERE wounded and KIA bodies).
+			part.visible=(member.hp>0 or down) and u.get("garrison",-1)<0 and not member.get("indoors",false)
+			if part.has_meta("corpse")!=(wound=="KIA") and part.visible:mark_corpse(part,wound=="KIA")
 			if not part.visible:continue
 			var member_moving:bool=member.travel>0.001
 			var reload:bool=member.get("reload_until",0.0)>sim.time
@@ -118,12 +122,17 @@ static func pose(model:Node3D,u:Dictionary,sim,dt:float) -> void:
 				entry[3]=[part.get_node("Upper"),part.get_node("Upper/Weapon"),legs[0],legs[1]]
 			var rig:Array=entry[3]
 			var body:Node3D=rig[0]
+			if down:
+				pose_fallen(rig,member,wound=="KIA",sim.time,dt)
+				continue
 			var prone:bool=member.get("posture","")=="PRONE"
-			var crouched:bool=member.get("posture","")=="CROUCHED"
-			set_rotation_axis(body,2,sin(index*1.7)*0.07*reaction)
-			set_position_axis(body,1,lerpf(body.position.y,0.24 if prone else (-0.18 if crouched or maxf(member.suppression,u.suppression)>0.6 else 0.0),minf(1,dt*10)))
+			# A lightly wounded soldier hunches over the wound and walks low.
+			var hurt:bool=wound=="LIGHT"
+			var crouched:bool=member.get("posture","")=="CROUCHED" or (hurt and member_moving)
+			set_rotation_axis(body,2,sin(index*1.7)*0.07*reaction+(0.12 if hurt and not prone else 0.0))
+			set_position_axis(body,1,lerpf(body.position.y,0.24 if prone else (-0.18 if crouched or maxf(member.suppression,u.suppression)>0.6 else (-0.07 if hurt else 0.0)),minf(1,dt*10)))
 			set_position_axis(body,2,lerpf(body.position.z,0.75 if prone else 0.0,minf(1,dt*10)))
-			set_rotation_axis(body,0,lerpf(body.rotation.x,-PI/2 if prone else ((-0.12 if member_moving else 0.0)-member_recoil*0.09),minf(1,dt*10)))
+			set_rotation_axis(body,0,lerpf(body.rotation.x,-PI/2 if prone else ((-0.12 if member_moving else 0.0)-(0.22 if hurt else 0.0)-member_recoil*0.09),minf(1,dt*10)))
 			var weapon:Node3D=rig[1]
 			set_rotation_axis(weapon,0,lerpf(weapon.rotation.x,PI/2 if prone else (-0.65 if reload else (0.0 if member_aiming else (-0.24 if member_moving else -0.12))),minf(1,dt*6)))
 			set_position_axis(weapon,2,member_recoil*0.035)
@@ -140,7 +149,15 @@ static func pose(model:Node3D,u:Dictionary,sim,dt:float) -> void:
 					else:
 						if leg.scale!=Vector3.ONE:leg.scale=Vector3.ONE
 						plant_foot(leg,member,side,model.rotation.y+part.rotation.y,member_moving,crouched,member_pos,joints[1],joints[2])
-				else:set_rotation_axis(leg,0,sin(member.phase)*0.42*side if member_moving else (0.22*side if member_aiming else 0.0))
+				else:
+					# Restore the standing hip after a lying pose (treated casualty).
+					if leg.has_meta("rest"):
+						set_position(leg,leg.get_meta("rest"))
+						set_rotation_axis(leg,1,0.0)
+						set_rotation_axis(leg,2,0.0)
+					# A limp: the wounded side barely swings.
+					var stride:float=0.42*(0.45 if hurt and side>0 else 1.0)
+					set_rotation_axis(leg,0,sin(member.phase)*stride*side if member_moving else (0.22*side if member_aiming else 0.0))
 
 		elif kind==ROTOR:set_rotation_axis(part,1,sim.time*45)
 		elif kind==PROP:set_rotation_axis(part,1,sim.time*75)
@@ -152,6 +169,52 @@ static func pose(model:Node3D,u:Dictionary,sim,dt:float) -> void:
 		set_rotation_axis(model,2,sin(sim.time*1.4+u.id)*0.012)
 	else:
 		set_position_axis(model,1,0.0) # Flat ground: no synthetic chassis vibration.
+
+# SEVERE: lying, breathing, weapon dropped, legs working when crawling or
+# dragged. KIA: lying still, rolled further, no breathing (darkened separately).
+static func pose_fallen(rig:Array,member:Dictionary,dead:bool,now:float,dt:float) -> void:
+	var body:Node3D=rig[0]
+	var weapon:Node3D=rig[1]
+	var blend:=minf(1,dt*6)
+	var breath:float=0.0 if dead else sin(now*2.6+member.index)*0.012
+	set_position_axis(body,1,lerpf(body.position.y,0.2,blend)+breath*blend)
+	set_position_axis(body,2,lerpf(body.position.z,0.75,blend))
+	set_rotation_axis(body,0,lerpf(body.rotation.x,-PI/2,blend))
+	set_rotation_axis(body,2,lerpf(body.rotation.z,0.55 if dead else 0.22,blend))
+	set_rotation_axis(weapon,0,lerpf(weapon.rotation.x,PI/2,blend))
+	set_position_axis(weapon,2,0.0)
+	var crawl:bool=not dead and member.get("travel",0.0)>0.0005
+	for side in SIDES:
+		var joints:Array=rig[2 if side<0 else 3]
+		var leg:Node3D=joints[0]
+		if not leg.has_meta("rest"):leg.set_meta("rest",leg.position)
+		if leg.scale!=Vector3.ONE:leg.scale=Vector3.ONE
+		var kick:float=sin(now*5.0+(PI if side>0 else 0.0))*0.3 if crawl else (0.08*side if dead else 0.0)
+		var lying:=Vector3(-PI/2+kick,0.0,0.18*side if dead else 0.0)
+		if leg.rotation!=lying:leg.rotation=lying
+		if joints[1]!=null:set_basis(joints[1],Basis.IDENTITY)
+		if joints[2]!=null:set_basis(joints[2],Basis.IDENTITY)
+		set_position(leg,Vector3(side*0.095,0.3,0.1))
+
+# Bodies are slightly darker: one shared vertex-colour material replaces the
+# miniature paint on a corpse's meshes (no extra draw pass), restored if needed.
+static var corpse_material:StandardMaterial3D
+static func mark_corpse(part:Node3D,dead:bool) -> void:
+	if dead and corpse_material==null:
+		corpse_material=StandardMaterial3D.new()
+		corpse_material.vertex_color_use_as_albedo=true
+		corpse_material.albedo_color=Color(0.58,0.56,0.54)
+		corpse_material.roughness=1.0
+		corpse_material.cull_mode=BaseMaterial3D.CULL_DISABLED
+	for mesh in part.find_children("*","MeshInstance3D",true,false):
+		if dead:
+			mesh.set_meta("live_material",mesh.material_override)
+			mesh.material_override=corpse_material
+		elif mesh.has_meta("live_material"):
+			mesh.material_override=mesh.get_meta("live_material")
+			mesh.remove_meta("live_material")
+	if dead:part.set_meta("corpse",true)
+	else:part.remove_meta("corpse")
 
 static func plant_foot(leg:Node3D,member:Dictionary,side:int,yaw:float,moving:bool,crouched:bool=false,display_pos:Vector2=Vector2(INF,INF),knee:Node3D=null,foot_node:Node3D=null) -> void:
 	var member_pos:Vector2=member.pos if not display_pos.is_finite() else display_pos
