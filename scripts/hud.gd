@@ -16,7 +16,7 @@ const FIELD_EFFECTS := {"tactical_cover":"Cover for infantry behind it","observa
 # Site conditions mirror the FieldOps.tick gates; none tells a pinned builder to move.
 const SITE_STATUS := {"queued":"QUEUED · Built next · RESUME = now","paused":"PAUSED · Press RESUME to continue","lost":"BUILDER LOST · RESUME with engineer","en_route":"EN ROUTE · Engineers heading to site","off_site":"OFF SITE · Engineers short of site","pinned":"PINNED · Work resumes as fire eases","regrouping":"REGROUPING · Engineers gathering","building":"BUILDING · Engineers at work"}
 const SITE_LABELS := {"queued":"QUEUED","paused":"PAUSED","lost":"NO BUILDER","en_route":"EN ROUTE","off_site":"OFF SITE","pinned":"PINNED","regrouping":"REGROUPING"}
-const UNIT_NAMES := {"rifle":"RIFLE SECTION","atgm":"AT TEAM","engineer":"ENGINEERS","tank":"MAIN BATTLE TANK","drone":"SCOUT UAV","helo":"GUNSHIP","boat":"CORVETTE","aa":"AIR DEFENSE","harvester":"HARVESTER"}
+const UNIT_NAMES := {"rifle":"RIFLE SECTION","atgm":"AT TEAM","engineer":"ENGINEERS","tank":"MAIN BATTLE TANK","drone":"SCOUT UAV","helo":"GUNSHIP","boat":"CORVETTE","aa":"AIR DEFENSE","harvester":"HARVESTER","fpv_drone":"FPV DRONE"}
 var battle: Node3D
 var scenario_entries: Array[Dictionary] = []
 var preview_key := ""
@@ -57,6 +57,11 @@ var layer_blocked:Array=[[],[],[]]
 var modal:=false
 var sidebar_msec:=-100000
 var sidebar_key:Array=[]
+# Tests freeze or step the sidebar's refresh clock (msec); -1 follows real time.
+var sidebar_clock_msec:=-1
+
+func sidebar_clock() -> int:
+	return Time.get_ticks_msec() if sidebar_clock_msec<0 else sidebar_clock_msec
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -169,7 +174,7 @@ func frame() -> void:
 	if layers.is_empty():return
 	layers[0].queue_redraw()
 	layers[2].queue_redraw()
-	if sidebar_state()!=sidebar_key or Time.get_ticks_msec()-sidebar_msec>=SIDEBAR_INTERVAL_MSEC:layers[1].queue_redraw()
+	if sidebar_state()!=sidebar_key or sidebar_clock()-sidebar_msec>=SIDEBAR_INTERVAL_MSEC:layers[1].queue_redraw()
 
 # Inputs that change the sidebar at once (hover, selection, modes, supply).
 func sidebar_state() -> Array:
@@ -188,7 +193,7 @@ func draw_layer(canvas:CanvasItem,part:int) -> void:
 	if part==0:draw_world(battle.sim)
 	elif part==1:
 		hint_text=""
-		sidebar_msec=Time.get_ticks_msec()
+		sidebar_msec=sidebar_clock()
 		sidebar_key=sidebar_state()
 		draw_sidebar(battle.sim)
 	else:
@@ -260,8 +265,10 @@ func draw_world(sim) -> void:
 		if selected or u.hp<u.max_hp or u.team==1:
 			cv.draw_rect(Rect2(p+Vector2(-15,0),Vector2(30,4)),INK)
 			cv.draw_rect(Rect2(p+Vector2(-15,0),Vector2(30*maxf(0,u.hp/u.max_hp),4)),TEAL if u.team==0 else RED)
+		# Inbound strike drones are tagged so the threat reads before it dives.
+		if u.kind=="fpv_drone" and u.team!=0 and not selected:text_at("FPV",p+Vector2(-9,-7),9,RED,true)
 		if selected:
-			text_at(str(u.kind).to_upper(),p+Vector2(-15,-7),9,TEAL,true)
+			text_at("FPV" if u.kind=="fpv_drone" else str(u.kind).to_upper(),p+Vector2(-15,-7),9,TEAL,true)
 			if u.suppression>0.6:
 				text_at("PINNED",p+Vector2(-21,-20),10,ORANGE,true)
 			elif u.recovering:
@@ -588,6 +595,7 @@ func draw_sidebar(sim) -> void:
 			if member.get("cover_phase","")=="SHELTERED":sheltered+=1
 		if seekers>0:status="%d seeking cover · Partners holding" % seekers
 		elif sheltered>0:status="%d sheltered · Watching approach" % sheltered
+		if sim.definitions[unit.kind].get("strike",false):status="Autonomous strike munition · no orders"
 		if unit.get("structure",false) and not sim.field_ops.is_empty():
 			detail="%d / %d HP · %s" % [maxi(0,int(unit.hp)),int(unit.max_hp),"UNFINISHED" if float(unit.get("build_left",0.0))>0 else "COMPLETE"]
 			status=builder_status(sim,unit)
@@ -600,7 +608,8 @@ func draw_sidebar(sim) -> void:
 	text_at(fit_text(detail,234,12),Vector2(x+18,y+31),12,MUTED)
 	var alert:bool=units.size()==1 and units[0].get("structure",false) and site_condition(sim,units[0]) in ["paused","lost","off_site","pinned"]
 	text_at(fit_text(status,234,11),Vector2(x+18,y+50),11,ORANGE if alert else TEAL)
-	var mobile:bool=units.any(func(unit):return not battle.is_structure(unit))
+	# Strike drones fly their own attack and ignore orders, like fixed works.
+	var mobile:bool=units.any(func(unit):return not battle.is_structure(unit) and not sim.definitions[unit.kind].get("strike",false))
 	button("attack","A  ATTACK-MOVE",Rect2(x+18,y+62,232,31),mobile,battle.attack_mode)
 	button("stop","S  HOLD",Rect2(x+18,y+99,113,29),mobile)
 	button("retreat","R  RETREAT",Rect2(x+137,y+99,113,29),mobile)

@@ -3,6 +3,7 @@ extends RefCounted
 
 static func state(u:Dictionary,sim,moving:bool=false) -> String:
 	if u.hp<=0:return "DESTROYED"
+	if u.kind=="fpv_drone":return FPV_STATES.get(u.state,"HOMING") # Autonomous munition: no orders.
 	if u.recovering:return "RECOVERING"
 	if not u.orders.is_empty() and u.orders[0].mode=="retreat":return "WITHDRAWING"
 	if u.suppression>0.6:return "PINNED"
@@ -22,6 +23,7 @@ const PROP:=3
 const WHEEL:=4
 const OTHER:=5
 const SIDES:Array[int]=[-1,1]
+const FPV_STATES:={"DIVING":"DIVING","ACQUIRING":"LINING UP"}
 
 # Writing an unchanged transform still re-notifies the whole joint subtree (and
 # re-sends every mesh instance transform), so settled joints skip the write.
@@ -49,7 +51,11 @@ static func set_basis(node:Node3D,value:Basis) -> void:
 static func parts(model:Node3D) -> Array:
 	if model.has_meta("animated_parts"):return model.get_meta("animated_parts")
 	var entries:Array=[]
-	for part in model.get_children():
+	var children:Array=model.get_children()
+	# The FPV strike drone nests the scout airframe in a scaled child.
+	var airframe:=model.get_node_or_null("Airframe")
+	if airframe!=null:children.append_array(airframe.get_children())
+	for part in children:
 		var part_name:=str(part.name)
 		if part_name=="Turret":entries.append([TURRET,part,part.get_node_or_null("Gun"),null])
 		elif part_name.begins_with("Soldier"):entries.append([SOLDIER,part,int(part_name.trim_prefix("Soldier")),null])
@@ -160,15 +166,38 @@ static func pose(model:Node3D,u:Dictionary,sim,dt:float) -> void:
 					set_rotation_axis(leg,0,sin(member.phase)*stride*side if member_moving else (0.22*side if member_aiming else 0.0))
 
 		elif kind==ROTOR:set_rotation_axis(part,1,sim.time*45)
-		elif kind==PROP:set_rotation_axis(part,1,sim.time*75)
+		elif kind==PROP:set_rotation_axis(part,1,sim.time*(110.0 if u.kind=="fpv_drone" else 75.0))
 		elif kind==WHEEL:set_rotation_axis(part,0,phase)
-	if u.kind=="helo" or u.kind=="drone":
+	if u.kind=="fpv_drone":pose_fpv(model,u,sim,dt,displacement,moving)
+	elif u.kind=="helo" or u.kind=="drone":
 		set_rotation_axis(model,0,lerpf(model.rotation.x,-0.07 if moving else 0.0,minf(1,dt*4)))
 		set_position_axis(model,1,sin(sim.time*2+u.id)*0.08)
 	elif u.kind=="boat":
 		set_rotation_axis(model,2,sin(sim.time*1.4+u.id)*0.012)
 	else:
 		set_position_axis(model,1,0.0) # Flat ground: no synthetic chassis vibration.
+
+# FPV strike drone: a twitchy racing-quad buzz (fast small roll/pitch/bob),
+# nose-forward while homing, level while lining up, and nose-down along the
+# flight path while diving (pitch follows the measured descent of u.altitude).
+static func pose_fpv(model:Node3D,u:Dictionary,sim,dt:float,displacement:float,moving:bool) -> void:
+	var altitude:float=float(u.get("altitude",sim.definitions[u.kind].altitude))
+	var descent:float=maxf(0.0,float(model.get_meta("fpv_altitude",altitude))-altitude)
+	model.set_meta("fpv_altitude",altitude)
+	var diving:bool=u.state=="DIVING"
+	var pitch:float=model.get_meta("fpv_target",0.0)
+	# The sim moves at 30 Hz: hold the dive angle on render frames between ticks.
+	if diving:
+		if displacement>0.0 or descent>0.0:pitch=-clampf(0.35+atan2(descent,maxf(displacement,0.001)),0.35,1.25)
+	else:pitch=-0.28 if moving and u.state!="ACQUIRING" else 0.0
+	model.set_meta("fpv_target",pitch)
+	var t:float=sim.time+u.id*0.37
+	var jitter:=0.4 if diving else 1.0 # Committed to the dive: steadier.
+	var attitude:=lerpf(float(model.get_meta("fpv_pitch",0.0)),pitch,minf(1,dt*8))
+	model.set_meta("fpv_pitch",attitude)
+	set_rotation_axis(model,0,attitude+(sin(t*17.0)*0.03+sin(t*41.0)*0.012)*jitter)
+	set_rotation_axis(model,2,(sin(t*11.0)*0.06+sin(t*29.0)*0.025)*jitter)
+	set_position_axis(model,1,(sin(t*7.0)*0.05+sin(t*23.0)*0.015)*jitter)
 
 # SEVERE: lying, breathing, weapon dropped, legs working when crawling or
 # dragged. KIA: lying still, rolled further, no breathing (darkened separately).

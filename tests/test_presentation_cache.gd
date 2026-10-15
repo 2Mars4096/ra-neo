@@ -13,6 +13,7 @@ var checks:=0
 func check(ok:bool,label:String)->void:
 	checks+=1
 	if not ok:failures+=1;printerr("FAIL: ",label)
+const REFRESH_ROUNDS:=12
 func harbor_index()->int:
 	var configs:Array=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
 	for i in configs.size():
@@ -57,16 +58,21 @@ func run()->void:
 	battle.camera_focus=Vector3(330,0,630);battle.camera_size=56.0;battle.camera_zoom_target=56.0;battle.update_camera()
 	await process_frame;await process_frame
 	var fog_ok:=true;var map_ok:=true;var explored_start:int=sim.explored.size()
+	# Rounds are bounded by count, each spanning >=7 frames and >=0.2 s of sim
+	# time, so a loaded machine (slow frames) runs the same comparisons.
 	var rounds:=0
-	var started:=Time.get_ticks_msec()
-	while Time.get_ticks_msec()-started<8000:
-		for i in 7:await process_frame
+	var sim_started:float=sim.time
+	for _round in REFRESH_ROUNDS:
+		var round_start:float=sim.time
+		for i in 120:
+			await process_frame
+			if i>=6 and sim.time-round_start>=0.2:break
 		battle.refresh_fog_pixels()
 		if battle.fog_image.get_data()!=full_fog(battle):fog_ok=false
 		hud.update_map_image(sim)
 		if hud.map_image.get_data()!=full_map(hud,sim):map_ok=false
 		rounds+=1
-	check(rounds>10,"several incremental refreshes ran (%d)" % rounds)
+	check(rounds>10,"several incremental refreshes ran (%d over %.1f s of sim time)" % [rounds,sim.time-sim_started])
 	check(sim.explored.size()>explored_start,"exploration grew during the run (%d -> %d)" % [explored_start,sim.explored.size()])
 	check(fog_ok,"incremental fog repaint equals full repaint")
 	check(map_ok,"incremental minimap repaint equals full repaint")
@@ -79,15 +85,29 @@ func run()->void:
 	check("pause" in visible and "restart" in visible,"top console buttons are hit targets")
 	check(visible.any(func(id):return id.begins_with("buy:")),"sidebar purchase tiles are hit targets")
 	check("attack" in visible and "retreat" in visible,"sidebar order buttons are hit targets")
+	# Controlled clock: frozen, so the 20 Hz refresh cannot fire however slow
+	# frames are; paused, so live values (supply income) hold still.
+	battle.paused=true
+	hud.sidebar_clock_msec=Time.get_ticks_msec()
+	await process_frame;await process_frame
 	var sidebar_draws:=[0]
 	var counter:=func():sidebar_draws[0]+=1
 	hud.layers[1].draw.connect(counter)
 	for i in 6:await process_frame
 	check(sidebar_draws[0]<6,"sidebar is not redrawn every frame (%d of 6)" % sidebar_draws[0])
+	check(sidebar_draws[0]==0,"unchanged sidebar with no interval elapsed is not redrawn (%d)" % sidebar_draws[0])
 	check(ids(hud)==visible,"hit targets persist while the sidebar is cached")
+	hud.sidebar_clock_msec+=hud.SIDEBAR_INTERVAL_MSEC
+	sidebar_draws[0]=0
+	for i in 4:await process_frame
+	check(sidebar_draws[0]==1,"live-value refresh fires once per elapsed interval (%d)" % sidebar_draws[0])
+	sidebar_draws[0]=0
 	battle.selected=[]
 	await process_frame;await process_frame
-	check("attack" in ids(hud),"selection change redraws the sidebar at once")
+	check("attack" in ids(hud) and sidebar_draws[0]>=1,"selection change redraws the sidebar at once (%d)" % sidebar_draws[0])
+	hud.layers[1].draw.disconnect(counter)
+	hud.sidebar_clock_msec=-1
+	battle.paused=false
 	battle.show_help=true
 	hud.queue_redraw()
 	await process_frame;await process_frame
