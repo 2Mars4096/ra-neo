@@ -10,6 +10,9 @@
 - Explosions are about 3x larger and layered: flash, fireball, shockwave, debris arcs and a dust column, with camera shake.
 - Player FPV strike: 150 supply, 5 drones, 60 s cooldown, aimed at a visible enemy near the click (`test_player_swarm`).
 - Hitch removal. Nav-grid re-weighting is incremental and path planning has a per-tick budget. Harbor combat profile: max step 222 -> 70 ms, and only the first tick exceeds 33 ms (`test_hitches`).
+- Persistent battlefield remains: craters and scorch stamped into 64 m ground tiles. They are round, irregular and rimmed. Cost stays flat (0.002 ms with 3000 marks), uploads are capped at 2 tiles per frame (13 µs native), and debris is capped at 512 pieces, oldest replaced first. Fireballs have a hot core and dark edges.
+- Vehicle follow-ups: abandoned vehicles do not explode, wrecks give infantry cover, repair points restore tracks, gun and crew, and tanks and HE fell the 80 collision trees.
+- Cover-search fixes: wall sampling uses the building index, and routes blocked by still squadmates are rejected. test_garrison and test_regroup_recovery now pass.
 - Renderer: Metal/Mobile was benchmarked (engine p95 18.6 -> 10.9 ms) but kept off because colours wash out. The project stays on GL Compatibility.
 
 ## 2026-10-15 — Parallel round: vehicle routing, explosions, presentation cost, counter-drone and FPV swarms

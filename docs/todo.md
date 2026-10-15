@@ -52,13 +52,14 @@
 
 ## Open player requests (2026-10-15)
 
-- [ ] Hitch removal: spread nav-grid re-weighting (wetness change, 140-220 ms stalls) over frames; move pathfinding off the main thread.
+- [x] Hitch removal: spread nav-grid re-weighting (wetness change, 140-220 ms stalls) over frames; move pathfinding off the main thread.
 - [ ] Renderer: Metal/Mobile measured 2026-10-15: engine process p95 18.6 -> 10.9 ms, frame p95 unchanged (~26 ms, sim-bound); harbor looks identical but Canal Watch and effect colours wash out (linear vs sRGB colour pipeline). Stayed on GL Compatibility; recalibrate colours before switching.
-- [ ] Explosion VFX: ~3x larger, layered flash/fireball/shockwave/debris/dust column, camera shake; native screenshot review loop.
-- [ ] World damage: buildings (damaged -> breached -> collapsed rubble, garrison casualties), field works degrade under HE, boats (flooding/engine/fire), helicopters (forced landing/crash), drones fragile, HE destroys nearby props/trees.
-- [ ] Vehicle follow-ups: abandoned vehicles should not explode; wreck cover for infantry; field repair of components.
-- [ ] Player-bought drone swarm strike (HUD purchase).
-- [ ] Test failures: garrison "halted section takes cover against buildings (1 of 3)"; regroup recovery (3) - design call: halted cover distance vs 2.8 m regroup limit.
+- [x] Explosion VFX: ~3x larger, layered flash/fireball/shockwave/debris/dust column, camera shake; native screenshot review loop.
+- [x] World damage: buildings (damaged -> breached -> collapsed rubble, garrison casualties), field works degrade under HE, boats (flooding/engine/fire), helicopters (forced landing/crash), drones fragile, HE destroys nearby props/trees.
+- [x] Vehicle follow-ups (re-crewing abandoned vehicles still open): abandoned vehicles should not explode; wreck cover for infantry; field repair of components.
+- [x] Player-bought drone swarm strike (HUD purchase).
+- [x] Test failures fixed (garrison cover search; regroup counts occupying/in-contact cover within leash): garrison "halted section takes cover against buildings (1 of 3)"; regroup recovery (3) - design call: halted cover distance vs 2.8 m regroup limit.
+- [ ] Timing-only checks flaky under heavy machine load: test_audio synthesis <150 ms, test_presentation_cache frame counts (also fail on older commits under load).
 - [ ] Testing economy: restore normal supply (1600, 3/s) when testing ends.
 - [ ] Deferred by player: wounded marker / bleed-out countdown, rescue of stranded wounded.
 
