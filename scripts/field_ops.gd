@@ -840,7 +840,9 @@ static func tick(sim,dt:float)->void:
 			if ally.pos.distance_to(unit.pos)>10 or sim.time-ally.last_hit<6 or ally.suppression>0.6:continue
 			if not sim.terrain.line_clear(unit.pos,ally.pos):continue
 			if unit.kind=="aid_post" and not ally.members.is_empty():sim.Infantry.recover(ally,dt*6)
-			elif unit.kind=="repair_point" and ally.members.is_empty():ally.hp=minf(ally.max_hp,ally.hp+dt*6)
+			elif unit.kind=="repair_point" and ally.members.is_empty():
+				ally.hp=minf(ally.max_hp,ally.hp+dt*6)
+				sim.VehicleDamage.field_repair(sim,ally,dt)
 	sync_obstacles(sim)
 	if sim.field_ops.started:
 		if sim.counterattack_at<0 and sim.objectives.any(func(objective):return objective.owner==0):sim.counterattack_at=sim.time+12

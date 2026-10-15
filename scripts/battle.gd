@@ -573,6 +573,7 @@ void fragment(){float d=length((UV-vec2(0.5))*2.0);ALBEDO=vec3(0.035,0.04,0.035)
 var audio:Node3D=null
 func consume_events() -> void:
 	for event in sim.events:
+		if event.type=="destroyed" and event.get("abandoned",false):continue
 		if audio!=null:audio.event(event)
 		if event.type=="warning":
 			notify(event.text)

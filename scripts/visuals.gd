@@ -242,6 +242,8 @@ void fragment(){
 	var tree_positions: Array[Vector3] = []
 	for point in terrain.trees:
 		tree_positions.append(Vector3(point.x,0,point.y))
+	var fell_lookup:Array=[]
+	fell_lookup.resize(tree_positions.size())
 	for layer in 8:
 		var mesh:Mesh
 		if layer==0:
@@ -263,14 +265,18 @@ void fragment(){
 			if layer>0: offset=Vector3(sin(i*2.1+layer*2.4)*0.42,2.0+(layer%4)*0.35,cos(i*1.9+layer*2.4)*0.42)
 			else: offset.y=1.15
 			var scale:=0.9+float(i%4)*0.04
-			multi.set_instance_transform(i,Transform3D(Basis.from_scale(Vector3.ONE*scale),tree_positions[i]+offset))
+			var placed:=Transform3D(Basis.from_scale(Vector3.ONE*scale),tree_positions[i]+offset)
+			multi.set_instance_transform(i,placed)
 			multi.set_instance_color(i,Color.WHITE.darkened(float(i%5)*0.025))
+			if fell_lookup[i]==null:fell_lookup[i]=[]
+			fell_lookup[i].append([multi,i,tree_positions[i],placed])
 		var instance:=MultiMeshInstance3D.new()
 		instance.multimesh=multi
 		instance.material_override=material(Color("514d38") if layer==0 else [Color("303e2c"),Color("43503a"),Color("555b40")][(layer-1)%3])
 		instance.material_override.vertex_color_use_as_albedo=true
 		if layer>0:instance.material_override.cull_mode=BaseMaterial3D.CULL_DISABLED
 		parent.add_child(instance)
+	if not tree_positions.is_empty():terrain.tree_felled.connect(Callable(get_script(),"topple_tree").bind(fell_lookup))
 	for z in ([41,49] if terrain.port else []):
 		box(parent,Vector3(84,0.2,z),Vector3(9,0.5,2.5),Color("9c9d8e"))
 	for i in (5 if terrain.port else 0):
@@ -538,7 +544,7 @@ func make_harbor_world(parent:Node3D,terrain,config:Dictionary)->void:
 		bake_model(path)
 	var compiled=terrain.get("map_props")
 	preload("res://scripts/harbor_props.gd").build(self,parent,{"map_props":compiled} if compiled is Array else config)
-	make_harbor_trees(parent,terrain.trees)
+	make_harbor_trees(parent,terrain.trees,terrain)
 
 # Buildings are authored once, then flattened into spatial/material batches.
 # Bounds on each mesh come from its vertices, preserving tile frustum culling.
@@ -716,12 +722,17 @@ void fragment(){
 		surface.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		parent.add_child(surface)
 
-func make_harbor_trees(parent:Node3D,points:Array)->void:
+func make_harbor_trees(parent:Node3D,points:Array,terrain:BattleTerrain=null)->void:
 	var chunks:Dictionary={}
-	for point in points:
+	var owners:Dictionary={}  # chunk -> index in `points` per instance
+	for t in points.size():
+		var point:Vector2=points[t]
 		var key:=Vector2i((point/128.0).floor())
-		if not chunks.has(key):chunks[key]=[]
+		if not chunks.has(key):chunks[key]=[];owners[key]=[]
 		chunks[key].append(point)
+		owners[key].append(t)
+	var fell_lookup:Array=[]
+	fell_lookup.resize(points.size())
 	for layer in 8:
 		var mesh:Mesh
 		if layer==0:
@@ -736,6 +747,29 @@ func make_harbor_trees(parent:Node3D,points:Array)->void:
 			for i in chunks[key].size():
 				var point:Vector2=chunks[key][i]
 				var offset:=Vector3(0,1.15,0) if layer==0 else Vector3(sin(i*2.1+layer*2.4)*0.42,2.0+(layer%4)*0.35,cos(i*1.9+layer*2.4)*0.42)
-				multi.set_instance_transform(i,Transform3D(Basis.from_scale(Vector3.ONE*(0.9+float(i%4)*0.04)),Vector3(point.x,0,point.y)+offset-origin))
+				var placed:=Transform3D(Basis.from_scale(Vector3.ONE*(0.9+float(i%4)*0.04)),Vector3(point.x,0,point.y)+offset-origin)
+				multi.set_instance_transform(i,placed)
+				var t:int=owners[key][i]
+				if fell_lookup[t]==null:fell_lookup[t]=[]
+				fell_lookup[t].append([multi,i,Vector3(point.x,0,point.y)-origin,placed])
 			var instance:=MultiMeshInstance3D.new();instance.name="HarborTrees";instance.position=origin
 			instance.multimesh=multi;instance.material_override=paint;parent.add_child(instance)
+	if terrain!=null and not points.is_empty():terrain.tree_felled.connect(Callable(get_script(),"topple_tree").bind(fell_lookup))
+
+# terrain.tree_felled: lay a felled collision tree's instances (trunk and
+# foliage layers) on the ground, pivoting at the trunk base along `heading`.
+# Edits existing MultiMesh transforms only, so draw cost stays flat. `lookup`
+# holds, per terrain.trees index, [multimesh, instance, trunk base, transform]
+# entries; the stored transform is updated (no read-back from the renderer).
+static func topple_tree(index:int,heading:Vector2,lookup:Array)->void:
+	if index<0 or index>=lookup.size() or lookup[index]==null:return
+	var forward:=Vector3(heading.x,0,heading.y).normalized()
+	if forward==Vector3.ZERO:forward=Vector3.FORWARD
+	var change:=Basis(forward.cross(Vector3.UP).normalized(),-PI*0.47)
+	for entry in lookup[index]:
+		var multi:MultiMesh=entry[0]
+		var ground:Vector3=entry[2]
+		var pivot:=Transform3D(Basis.IDENTITY,ground)*Transform3D(change,Vector3.ZERO)*Transform3D(Basis.IDENTITY,-ground)
+		entry[3]=pivot*Transform3D(entry[3])
+		multi.set_instance_transform(int(entry[1]),entry[3])
+	lookup[index]=null

@@ -367,3 +367,34 @@ static func wreck_cover(sim,pos:Vector2,threat:Vector2,reach:float=3.5)->bool:
 		if to_wreck.length()>float(wreck.radius)+reach:continue
 		if to_wreck.dot(threat-pos)>0.0 and Geometry2D.get_closest_point_to_segment(wreck.pos,pos,threat).distance_to(wreck.pos)<float(wreck.radius):return true
 	return false
+
+# Field repair (FieldOps repair-point tick, same safety rules as its hp heal):
+# one knocked-out component at a time, tracks/engine first, then the main gun,
+# then each crew casualty replaced. Progress persists if the work is interrupted.
+const REPAIR_SECONDS:={"mobility":20.0,"firepower":25.0,"crew":40.0}
+static func field_repair(sim,u:Dictionary,dt:float)->void:
+	if not u.has("crew") or u.abandoned:return
+	var job:=""
+	if u.mobility_kill:job="mobility"
+	elif u.firepower_kill:job="firepower"
+	elif int(u.crew)<int(u.crew_full):job="crew"
+	if job.is_empty():
+		u.erase("repair_job");u.erase("repair_done")
+		return
+	if u.get("repair_job","")!=job:
+		u["repair_job"]=job
+		u["repair_done"]=0.0
+	u.repair_done=float(u.repair_done)+dt
+	if float(u.repair_done)<float(REPAIR_SECONDS[job]):return
+	u.erase("repair_job");u.erase("repair_done")
+	match job:
+		"mobility":
+			u.mobility_kill=false
+			if u.state=="IMMOBILISED":u.state="READY";u.reason="Repaired"
+			_report(sim,u,"repaired_mobility","%s tracks repaired · mobile again")
+		"firepower":
+			u.firepower_kill=false
+			_report(sim,u,"repaired_firepower","%s main gun repaired")
+		"crew":
+			u.crew=int(u.crew)+1
+			_report(sim,u,"repaired_crew","%s crew replacement arrived")

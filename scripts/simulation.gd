@@ -630,7 +630,7 @@ func infantry_exposure(u:Dictionary,other:Dictionary) -> float:
 		if posture=="PRONE":exposure*=0.5
 		elif posture=="CROUCHED":exposure*=0.75
 		if victim.get("in_trench",false):exposure*=0.5
-		elif terrain.cover(victim.pos):exposure*=0.7
+		elif terrain.cover(victim.pos) or VehicleDamage.wreck_cover(self,victim.pos,u.pos):exposure*=0.7
 	if Garrison.inside(other):exposure*=0.6
 	if definitions[u.kind].get("combat_alias",u.kind) in HE_WEAPONS:return 0.95*(0.55+0.45*exposure)
 	var fraction:=clampf(shot_distance(u,other)/maxf(1,weapon_range(u.kind,definitions[other.kind])),0,1)
@@ -676,7 +676,8 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float) -> bool:
 	var shot_kind:String="rifle" if AIR_REACH.has(u.kind) and definitions[target.kind].domain=="air" else (u.kind if u.kind in ["at_gun","bunker"] else definitions[u.kind].get("combat_alias",u.kind))
 	events.append({"type":"shot","from":u.pos,"to":endpoint,"kind":shot_kind,"target_kind":target.kind,"hit":hit,"from_y":u.get("fire_height",maxf(0.95,definitions[u.kind].altitude)),"to_y":maxf(0.8,unit_altitude(target)),"visible":u.visible or target.visible})
 	if target.hp<=0:
-		events.append({"type":"destroyed","kind":target.kind,"pos":target.pos,"visible":target.visible})
+		# A crew bail-out leaves an intact hull: presentation shows no blast.
+		events.append({"type":"destroyed","kind":target.kind,"pos":target.pos,"visible":target.visible,"abandoned":target.get("abandoned",false)})
 		if target.team==1:kills+=1;credits+=(35 if field_ops.is_empty() else 0)
 		else:losses+=1
 	return hit
@@ -1278,6 +1279,9 @@ func hull_step(u:Dictionary,next:Vector2,distance:float,step:float,dt:float,neig
 	if definitions[u.kind].domain=="land" and terrain.mobility_profile(u.kind)=="tracked":
 		for record in terrain.crush_props(candidate,float(definitions[u.kind].radius)+0.1):
 			events.append({"type":"crushed","prop":record.prop,"id":record.id,"heading":axis,"pos":record.rect.get_center(),"visible":true})
+		# ...and push over collision trees whose canopy the hull would hit.
+		for record in terrain.fell_trees(candidate,float(definitions[u.kind].radius)+terrain.TREE_CLEARANCE+0.05,axis):
+			events.append({"type":"crushed","prop":-1,"id":"tree","tree":record.index,"heading":axis,"pos":record.pos,"visible":true})
 	# Never drive away from the waypoint while turning toward it.
 	if movement_clear(u,candidate,neighbors) and distance-candidate.distance_to(next)>-step*0.3:
 		var previous:Vector2=u.pos

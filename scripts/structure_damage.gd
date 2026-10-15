@@ -234,7 +234,8 @@ static func blast_props(sim,pos:Vector2,radius:float,from:Vector2)->int:
 		var heading:Vector2=centre-pos
 		if heading.length_squared()<0.0001:heading=pos-from
 		sim.events.append({"type":"crushed","prop":record.prop,"id":record.id,"heading":heading.normalized(),"pos":centre,"visible":true,"cause":"blast"})
-	return records.size()
+	# Collision trees fall outward from the burst (presentation via terrain.tree_felled).
+	return records.size()+sim.terrain.fell_trees(pos,radius).size()
 
 static func cut_wire(sim,pos:Vector2,radius:float)->int:
 	if sim.field_ops.is_empty():return 0

@@ -56,6 +56,7 @@ func run() -> void:
 	scale_checks()
 	layering_checks()
 	remains_checks()
+	crater_shape_checks()
 	remains_cost_checks()
 	chunk_checks()
 	shake_checks()
@@ -939,6 +940,111 @@ func remains_checks() -> void:
 	check(setup.remains.allocated==Remains.PREALLOCATED,"repeated setup does not allocate more tiles")
 	release(setup)
 
+# Stamped colour as the GPU samples it: bilinear between texel centres ((i+0.5)*TEXEL), like the tile quads.
+func filtered_color(remains, x:float, z:float) -> Color:
+	var t:float=Remains.TEXEL
+	var fx:=x/t-0.5
+	var fz:=z/t-0.5
+	var ix:=floori(fx)
+	var iz:=floori(fz)
+	var c:=[]
+	for k in 4:c.append(remains.color_at(Vector3((ix+k%2+0.5)*t,0,(iz+k/2+0.5)*t)))
+	return c[0].lerp(c[1],fx-ix).lerp(c[2].lerp(c[3],fx-ix),fz-iz)
+
+# Distance from a mark's centre along `dir` to its outline (filtered alpha first below 0.1) or, with dark set,
+# to the edge of what reads as dark on screen (the mark composited over a mid-tone ground first above 0.2).
+func mark_extent(remains, centre:Vector2, dir:Vector2, dark:bool=false) -> float:
+	var t:=0.0
+	while t<16.0:
+		var c:=filtered_color(remains,centre.x+dir.x*t,centre.y+dir.y*t)
+		if (lerpf(0.42,c.get_luminance(),c.a)>0.2) if dark else (c.a<0.1):break
+		t+=0.02
+	return t
+
+# Mean diagonal reach over mean axis reach, from 8 directions around a centre.
+func diagonal_ratio(remains, centre:Vector2, dark:bool) -> Array:
+	var reach:=[]
+	for n in 8:reach.append(mark_extent(remains,centre,Vector2.RIGHT.rotated(n*PI/4),dark))
+	var axis:float=(reach[0]+reach[2]+reach[4]+reach[6])/4.0
+	var diagonal:float=(reach[1]+reach[3]+reach[5]+reach[7])/4.0
+	return [diagonal/maxf(axis,0.001),reach]
+
+# Marks must read as round, irregular craters, not square blobs. Measured on the filtered texture, both the outline
+# and the region that reads as dark reach as far along the diagonals as along the texel axes (the old 40 px
+# brushes resized to 3-9 texels gave a 0.45 m crater a 0.72 plus-shaped outline and a 1.75 m HE crater a ~1.15
+# square dark pit); outlines vary by direction and between stamps. A 2-texel crater's dark core is too small to
+# be round under bilinear filtering, so only its outline is checked. HE craters have a dark scorched centre inside
+# a lighter brown rim ring; burn marks have no rim.
+func crater_shape_checks() -> void:
+	var effects=fresh()
+	effects.set_world_bounds(Vector2(1024,768))
+	var remains=effects.remains
+	var t:float=Remains.TEXEL
+	var shapes:={}
+	var darks:={}
+	var dark_ok:=true
+	var worst:=1.0
+	var ratio_sum:=0.0
+	var stamped:=0
+	var irregular:=0
+	var outlines:={}
+	var row:=0
+	for spec in [["crater_0.45",0.45,Remains.CRATER],["crater_1.75",1.75,Remains.CRATER],["scorch_1.3",1.3,Remains.SCORCH],["scorch_3",3.0,Remains.SCORCH],["burn_4.5",4.5,Remains.BURN]]:
+		var ratios:=[]
+		var dark_ratios:=[]
+		for k in 8:
+			var p:=Vector3(40+k*24.3,0,40+row*30.7)
+			remains.stamp(p,spec[1],spec[2])
+			var centre:=Vector2((floori(p.x/t)+0.5)*t,(floori(p.z/t)+0.5)*t)
+			var measured:=diagonal_ratio(remains,centre,false)
+			var ratio:float=measured[0]
+			var reach:Array=measured[1]
+			ratios.append(snappedf(ratio,0.01))
+			if spec[1]>=1.0:
+				var dark:float=diagonal_ratio(remains,centre,true)[0]
+				dark_ratios.append(snappedf(dark,0.01))
+				dark_ok=dark_ok and dark>0.8 and dark<1.25
+			worst=maxf(worst,maxf(ratio,1.0/ratio))
+			ratio_sum+=ratio
+			stamped+=1
+			if spec[1]>=1.75 and reach.max()>reach.min()*1.06:irregular+=1
+			if spec[1]>=1.75:outlines[str(reach)]=true
+		shapes[spec[0]]=ratios
+		if not dark_ratios.is_empty():
+			darks[spec[0]]=dark_ratios
+			var mean:float=dark_ratios.reduce(func(sum,v):return sum+v,0.0)/dark_ratios.size()
+			dark_ok=dark_ok and absf(mean-1.0)<0.1
+		row+=1
+	evidence["remains_diagonal_to_axis_reach"]=shapes
+	evidence["remains_dark_diagonal_to_axis_reach"]=darks
+	check(worst<1.22 and absf(ratio_sum/stamped-1.0)<0.08,"marks are round, not square: diagonal/axis reach mean %.2f, worst %.2f (a square is ~1.4): %s"%[ratio_sum/stamped,worst,shapes])
+	check(dark_ok,"what reads as dark is round too: diagonal/axis reach within 0.8-1.25, mean within 10%%: %s"%darks)
+	check(irregular>=22 and outlines.size()>=12,"outlines are irregular (%d of 24 vary >6%% by direction) and differ between stamps (%d distinct of 24)"%[irregular,outlines.size()])
+	# One isolated HE crater and one burn mark: luminance at the centre against the brightest point of a ring.
+	remains.clear()
+	var at:=Vector3(300.2,0,300.2)
+	remains.stamp(at,1.75,Remains.CRATER)
+	var burn_at:=Vector3(340.2,0,300.2)
+	remains.stamp(burn_at,4.5,Remains.BURN)
+	var ring:=func(c:Vector3, inner:float, outer:float) -> Color:
+		var best:=Color(0,0,0,0)
+		var d:=inner
+		while d<=outer:
+			for n in 16:
+				var q:Color=remains.color_at(c+Vector3(d,0,0).rotated(Vector3.UP,n*TAU/16))
+				if q.a>0.2 and q.get_luminance()>best.get_luminance():best=q
+			d+=t*0.5
+		return best
+	var middle:Color=remains.color_at(at)
+	var rim:Color=ring.call(at,0.7,1.4)
+	var burn_middle:Color=remains.color_at(burn_at)
+	var burn_rim:Color=ring.call(burn_at,0.5,4.0)
+	evidence["remains_crater_luminance"]={"crater_centre":snappedf(middle.get_luminance(),0.01),"crater_rim":snappedf(rim.get_luminance(),0.01),"rim_rgb":[snappedf(rim.r,0.01),snappedf(rim.g,0.01),snappedf(rim.b,0.01)],"burn_centre":snappedf(burn_middle.get_luminance(),0.01),"burn_brightest":snappedf(burn_rim.get_luminance(),0.01)}
+	check(middle.a>0.8 and middle.get_luminance()<0.06 and rim.get_luminance()>3.0*middle.get_luminance() and rim.r>rim.b+0.05,"HE crater: dark scorched centre inside a lighter brown ejecta rim %s"%evidence.remains_crater_luminance)
+	check(burn_middle.a>0.8 and burn_rim.get_luminance()<0.1,"burn mark has no light rim %s"%evidence.remains_crater_luminance)
+	check(remains.tiles.values()[0].node.material_override.texture_filter==BaseMaterial3D.TEXTURE_FILTER_LINEAR and not remains.tiles.values()[0].node.material_override.texture_repeat,"tiles sample linearly with clamped edges")
+	release(effects)
+
 # CPU per frame with 300 impacts, and the same frame cost with thousands of past explosions already stamped.
 func remains_cost_checks() -> void:
 	var effects=fresh()
@@ -946,6 +1052,7 @@ func remains_cost_checks() -> void:
 	var kinds:=["tank","atgm","fpv_drone","helo","at_gun"]
 	var samples:Array[float]=[]
 	var stamp_usec:Array[float]=[]
+	var built:int=Remains.brushes_built
 	for frame in 600:
 		if frame%2==0 and frame<600:
 			var k:String=kinds[(frame/2)%kinds.size()]
@@ -956,6 +1063,7 @@ func remains_cost_checks() -> void:
 		effects._process(1.0/60.0)
 		samples.append((Time.get_ticks_usec()-started)/1000.0)
 	var impacts:int=effects.remains.stamps
+	built=Remains.brushes_built-built
 	var fight:Dictionary=effects.remains.stats()
 	var fight_stamp_usec:float=fight.stamp_usec_mean
 	# Stamping and uploading, averaged over the 600 fight frames (headless uploads exclude the GPU copy).
@@ -972,19 +1080,25 @@ func remains_cost_checks() -> void:
 	advance(effects,1.0)
 	var idle_many:=idle_cost(effects)
 	var stats:Dictionary=effects.remains.stats()
-	# One-time procedural brush generation (shared by all instances; first use of each style/variant).
+	# One-time procedural brush generation (shared by all instances): every brush built at mission setup (bound: the
+	# old 15 ms per base brush x 9 base brushes), and the largest one built on first use (a depot-sized burn, 5.6 m).
 	var t1:=Time.get_ticks_usec()
 	for style in Remains.STYLES:
-		for variant in Remains.VARIANTS:Remains.make_brush(style,variant)
-	var brush_ms:=(Time.get_ticks_usec()-t1)/1000.0/(Remains.STYLES*Remains.VARIANTS)
-	evidence["remains_brush_ms_each"]=snappedf(brush_ms,0.01)
-	check(brush_ms<15.0,"a base brush is generated once in %.1f ms"%brush_ms)
+		for variant in Remains.VARIANTS:
+			for r in range(Remains.PREBUILT[style][0],Remains.PREBUILT[style][1]+1):Remains.make_brush(style,variant,r)
+	var setup_ms:=(Time.get_ticks_usec()-t1)/1000.0
+	t1=Time.get_ticks_usec()
+	Remains.make_brush(Remains.BURN,0,14)
+	var brush_ms:=(Time.get_ticks_usec()-t1)/1000.0
+	evidence["remains_brush_ms"]={"setup_all":snappedf(setup_ms,0.1),"largest_on_first_use":snappedf(brush_ms,0.01)}
+	check(brush_ms<15.0 and setup_ms<135.0,"brushes are generated once: %.0f ms at mission setup, %.1f ms for a depot burn on first use"%[setup_ms,brush_ms])
 	evidence["remains_cost"]={"impacts_marked":impacts,"update_ms_p50_300_impacts":samples[samples.size()/2],"update_ms_p95_300_impacts":samples[int(samples.size()*0.95)],
 		"idle_frame_ms_1_mark":idle_few,"idle_frame_ms_3001_marks":idle_many,"stamp_usec_mean":snappedf(per_stamp,0.1),"stamp_usec_mean_in_fight":snappedf(fight_stamp_usec,0.1),
 		"remains_share_of_fight_ms":snappedf(remains_share_ms,0.001),"tiles":stats.tiles,"evicted":stats.evicted,
 		"texture_bytes":stats.texture_bytes,"image_bytes":stats.image_bytes,"upload_usec_mean_headless":stats.upload_usec_mean,"upload_usec_max_headless":stats.upload_usec_max,
 		"note":"Headless dummy renderer: upload timings exclude the GPU copy; run tests/effects_review.gd natively for real upload cost."}
 	check(impacts>=250,"300-impact run stamped %d marks"%impacts)
+	check(built==0,"the fight builds no brushes mid-fight: every crater, scorch and tank-kill burn size is built at setup (%d built)"%built)
 	check(stats.tiles==Remains.MAX_TILES and stats.evicted>0 and stats.texture_bytes==Remains.MAX_TILES*Remains.TILE_BYTES,"ground damage memory is capped at %d tiles (%.1f MB texture)"%[Remains.MAX_TILES,stats.texture_bytes/1048576.0])
 	check(idle_many<maxf(idle_few*1.5,idle_few+0.05),"frame cost stays flat with 3001 past marks (%.3f vs %.3f ms)"%[idle_many,idle_few])
 	check(per_stamp<400.0,"a stamp costs %.0f us"%per_stamp)

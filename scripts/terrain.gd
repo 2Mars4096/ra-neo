@@ -1150,3 +1150,35 @@ func _rebuild_water_mask()->void:
 						if not _coast_index.has(id):_coast_index[id]=[]
 						_coast_index[id].append(index)
 	water_mask=Image.create_from_data(water_mask_size.x,water_mask_size.y,false,Image.FORMAT_R8,water_mask_data)
+
+# Collision trees (`trees`) felled by a tracked hull driving into one or by a
+# nearby HE burst. As in crush_props the array keeps its size (a felled entry
+# moves off-map) so the static index is edited in place, and only the
+# navigation cells round each trunk are refreshed. tree_felled lets the
+# presentation topple the instanced tree (index into `trees`, fall direction).
+signal tree_felled(index:int,heading:Vector2)
+const FELLED_TREE:=Vector2(-9999,-9999)
+const TREE_CLEARANCE:=1.2  # traversable(): land movers keep radius+1.2 from a trunk
+func fell_trees(center:Vector2,radius:float,heading:Vector2=Vector2.ZERO)->Array:
+	if trees.is_empty():return []
+	var hit:Array[Vector2]=[]
+	for tree in _static_candidates("tree",center,radius):
+		if tree.distance_squared_to(center)<radius*radius:hit.append(tree)
+	if hit.is_empty():return []
+	var records:Array=[]
+	var cleared:Array=[]
+	var buckets:Dictionary=_static_index.get("tree",{})
+	for tree in hit:
+		var index:int=trees.find(tree)
+		if index<0:continue
+		trees[index]=FELLED_TREE
+		var bucket:Array=buckets.get(Vector2i((tree/SPATIAL_CELL).floor()),[])
+		bucket.erase(tree)
+		# Away from the hull's travel, or outward from the burst.
+		var fall:Vector2=heading if heading.length_squared()>0.0001 else tree-center
+		fall=fall.normalized() if fall.length_squared()>0.0001 else Vector2.UP
+		records.append({"index":index,"pos":tree,"heading":fall})
+		cleared.append(Rect2(tree,Vector2.ZERO).grow(TREE_CLEARANCE))
+		tree_felled.emit(index,fall)
+	if not cleared.is_empty():_refresh_land_cells(cleared)
+	return records

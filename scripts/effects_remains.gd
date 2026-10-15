@@ -1,19 +1,22 @@
 extends Node3D
 
 # Permanent battlefield remains for BattleEffects at near-constant cost. Craters, scorch and burn marks are
-# stamped into world-space ground-damage tiles (0.5 m/texel, 64 m square, allocated on demand) with native
+# stamped into world-space ground-damage tiles (0.4 m/texel, 64 m square, allocated on demand) with native
 # Image.blend_rect, and each dirty tile is re-uploaded at most once per UPLOAD_INTERVAL. Each tile is one
 # unshaded transparent quad just above roads and below the fresh effect decals and the fog overlay. Landed
 # debris chunks persist in one static MultiMesh ring of CHUNK_CAPACITY instances (oldest replaced first).
 # Nothing here is per-frame work proportional to past explosions: a frame uploads at most UPLOADS_PER_FRAME
-# dirty tiles (64 KB each), each tile at most once per UPLOAD_INTERVAL, and both tiles and chunks are capped.
+# dirty tiles (100 KB each), each tile at most once per UPLOAD_INTERVAL, and both tiles and chunks are capped.
 # A few tiles are built during mission setup, one of them drawn empty so the tile shader compiles at load
 # rather than at the first crater.
 
-const TEXEL:=0.5
-const TILE_TEXELS:=128
+# 0.4 m/texel: a 1 m crater spans 5 texels, enough for a round outline under bilinear magnification at gameplay
+# zoom (~9 screen px per texel). Tiles are always magnified (>= 1.6 px/texel even at the widest zoom), so they
+# carry no mipmaps.
+const TEXEL:=0.4
+const TILE_TEXELS:=160
 const TILE_SIZE:=TEXEL*TILE_TEXELS
-# 96 tiles of 64 m cover a 640x640 m fight; past that the least recently stamped tile is recycled.
+# 96 tiles of 64 m (9.4 MB) cover a 640x640 m fight; past that the least recently stamped tile is recycled.
 const MAX_TILES:=96
 const UPLOAD_INTERVAL:=0.25
 const UPLOADS_PER_FRAME:=2
@@ -24,16 +27,29 @@ const CHUNK_MIN_SIZE:=0.12
 const TILE_BYTES:=TILE_TEXELS*TILE_TEXELS*4
 
 # Mark styles
-const CRATER:=0 # HE: dark pit, pale ejecta rim, streaky soil spray
+const CRATER:=0 # HE: scorched pit, lighter brown ejecta rim ring, streaky soil spray
 const SCORCH:=1 # warhead burn: sunburst of soot streaks
 const BURN:=2   # vehicle kill / depot: heavy oily black patch with a soot halo
 const STYLES:=3
-const VARIANTS:=3
-const BASE:=40 # base brush resolution; stamps resample it to their size
+const VARIANTS:=4 # seeded outlines per style and size; each stamp also takes one of 8 mirror/rotations
+const PIT_CENTRE:=Color(0.035,0.03,0.026)
+const PIT_EDGE:=Color(0.11,0.09,0.068)
+const RIM:=Color(0.40,0.32,0.22)
+const SPRAY:=Color(0.22,0.17,0.12)
+const SOOT_CENTRE:=Color(0.035,0.032,0.028)
+const SOOT_EDGE:=Color(0.10,0.085,0.065)
+const OIL_CENTRE:=Color(0.025,0.022,0.02)
+const OIL_EDGE:=Color(0.08,0.07,0.06)
+const ANGLES:=128 # samples of a brush's angular outline and streak profiles
+const MIN_R:=2 # brush radius limits in texels (0.8-14 m)
+const MAX_R:=35
+# Brush radii (texels) built at mission setup per style: every crater (0.45-1.75 m) and scorch (1.3-3.6 m) in
+# play, and the tank-kill burn (5 m). Other sizes (harvester and depot burns) are built on first use (< 1 ms).
+const PREBUILT:=[[2,5],[2,9],[13,13]]
 
-# Base brushes are generated once per process and shared by every instance (tests create many).
-static var base_brushes:={}
-var sized:={}
+# Brushes are generated once per process and shared by every instance (tests create many).
+static var brushes:={}
+static var brushes_built:=0
 var tiles:={} # Vector2i -> {"image","texture","node","used","dirty"}
 var dirty:Array[Vector2i]=[]
 var spare:Array[Dictionary]=[]
@@ -79,11 +95,11 @@ static var plane:PlaneMesh
 func set_bounds(box:AABB, world_size:Vector2) -> void:
 	chunk_instance.custom_aabb=box
 	tile_limit=Vector2i(ceili(world_size.x/TILE_SIZE),ceili(world_size.y/TILE_SIZE))
-	# Generate every base brush during mission setup (~3 ms each, once per process) rather than at the first
-	# explosion of each kind mid-fight.
+	# Generate the common brushes during mission setup (once per process) rather than at the first explosion of
+	# each kind mid-fight.
 	for style in STYLES:
 		for variant in VARIANTS:
-			if not base_brushes.has(style*VARIANTS+variant):base_brushes[style*VARIANTS+variant]=make_brush(style,variant)
+			for r in range(PREBUILT[style][0],PREBUILT[style][1]+1):_brush(style,r,variant)
 	while allocated<mini(PREALLOCATED,tile_limit.x*tile_limit.y):spare.append(_new_tile())
 	if not spare.is_empty() and tiles.is_empty():
 		spare.back().node.position=Vector3(0.5*TILE_SIZE,HEIGHT,0.5*TILE_SIZE)
@@ -94,11 +110,12 @@ func set_bounds(box:AABB, world_size:Vector2) -> void:
 # covered tile (1-4); the texture upload happens later, throttled.
 func stamp(pos:Vector3, radius:float, style:int) -> void:
 	var started:=Time.get_ticks_usec()
-	var r:=clampi(roundi(radius/TEXEL),1,28)
+	var r:=clampi(roundi(radius/TEXEL),MIN_R,MAX_R)
 	serial+=1
-	var brush:=_brush(style,r,serial%VARIANTS)
+	var centre:=Vector2i(floori(pos.x/TEXEL),floori(pos.z/TEXEL))
+	var brush:=_brush(style,r,int(_hash(centre.x,centre.y,style)*VARIANTS*8))
 	var size:=brush.get_width()
-	var origin:=Vector2i(floori(pos.x/TEXEL)-size/2,floori(pos.z/TEXEL)-size/2)
+	var origin:=centre-Vector2i(size/2,size/2)
 	var first:=Vector2i(floori(float(origin.x)/TILE_TEXELS),floori(float(origin.y)/TILE_TEXELS))
 	var last:=Vector2i(floori(float(origin.x+size-1)/TILE_TEXELS),floori(float(origin.y+size-1)/TILE_TEXELS))
 	if tile_limit.x>0:
@@ -154,6 +171,8 @@ func _new_tile() -> Dictionary:
 	material.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.depth_draw_mode=BaseMaterial3D.DEPTH_DRAW_DISABLED
 	material.texture_filter=BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	# Clamp, not repeat: a mark at one tile edge must not bleed a filtered line onto the opposite edge.
+	material.texture_repeat=false
 	material.render_priority=-2
 	var texture:=ImageTexture.create_from_image(image)
 	material.albedo_texture=texture
@@ -192,19 +211,29 @@ func step(dt:float) -> void:
 
 # Alpha of the stamped ground at a world point (tests and reviews).
 func darkness_at(pos:Vector3) -> float:
+	return color_at(pos).a
+
+# Stamped colour (straight alpha) of the texel under a world point.
+func color_at(pos:Vector3) -> Color:
 	var t:=Vector2i(floori(pos.x/TEXEL),floori(pos.z/TEXEL))
 	var key:=Vector2i(floori(float(t.x)/TILE_TEXELS),floori(float(t.y)/TILE_TEXELS))
-	if not tiles.has(key):return 0.0
-	return tiles[key].image.get_pixelv(t-key*TILE_TEXELS).a
+	if not tiles.has(key):return Color(0,0,0,0)
+	return tiles[key].image.get_pixelv(t-key*TILE_TEXELS)
 
-func _brush(style:int, r:int, variant:int) -> Image:
-	var key:=(style*VARIANTS+variant)*64+r
-	if sized.has(key):return sized[key]
-	var base_key:=style*VARIANTS+variant
-	if not base_brushes.has(base_key):base_brushes[base_key]=make_brush(style,variant)
-	var image:Image=base_brushes[base_key].duplicate()
-	image.resize(2*r+1,2*r+1,Image.INTERPOLATE_BILINEAR)
-	sized[key]=image
+# Brush for one stamp: generated once per (style, variant, radius in texels) directly at its final size, so even a
+# 1 m crater is a round, antialiased disc rather than a downscaled square. Each stamp then picks one of the
+# VARIANTS outlines and one of 8 mirror/rotations from a hash of its texel position (deterministic, and the
+# same impact point always leaves the same mark); the oriented copy is a native duplicate of a <= 71 px image.
+func _brush(style:int, r:int, pick:int) -> Image:
+	var key:=(style*VARIANTS+pick%VARIANTS)*64+r
+	if not brushes.has(key):brushes[key]=make_brush(style,pick%VARIANTS,r)
+	var image:Image=brushes[key]
+	var turn:=(pick/VARIANTS)%8
+	if turn==0:return image
+	image=image.duplicate()
+	if turn&1:image.flip_x()
+	if turn&2:image.flip_y()
+	if turn&4:image.rotate_90(CLOCKWISE)
 	return image
 
 static func _hash(x:int, y:int, s:int) -> float:
@@ -212,58 +241,85 @@ static func _hash(x:int, y:int, s:int) -> float:
 	h=((h^(h>>13))*1274126177)&0x7fffffff
 	return float(h&0xffff)/65535.0
 
-static func _noise(x:float, y:float, s:int) -> float:
-	var ix:=floori(x)
-	var iy:=floori(y)
-	var fx:=x-ix
-	var fy:=y-iy
-	fx=fx*fx*(3.0-2.0*fx)
-	fy=fy*fy*(3.0-2.0*fy)
-	return lerpf(lerpf(_hash(ix,iy,s),_hash(ix+1,iy,s),fx),lerpf(_hash(ix,iy+1,s),_hash(ix+1,iy+1,s),fx),fy)
+# Periodic angular profile (ANGLES samples around the circle) from a few seeded harmonics, scaled to [lo, 1].
+# Depends only on style and variant, so it is cached across brush sizes.
+static var rings:={}
+static func _ring(seed_value:int, first:int, last:int, lo:float) -> PackedFloat32Array:
+	var key:=seed_value*64+first
+	if rings.has(key):return rings[key]
+	var ring:=PackedFloat32Array()
+	ring.resize(ANGLES)
+	for k in range(first,last+1):
+		var amplitude:=(_hash(k,1,seed_value)*2.0-1.0)/k
+		var phase:=TAU*_hash(k,2,seed_value)
+		for i in ANGLES:ring[i]+=amplitude*cos(k*TAU*i/ANGLES+phase)
+	var low:float=Array(ring).min()
+	var high:float=Array(ring).max()
+	for i in ANGLES:ring[i]=lerpf(lo,1.0,(ring[i]-low)/maxf(high-low,0.0001))
+	rings[key]=ring
+	return ring
 
-# Procedural base brush (BASE x BASE, RGBA). d is distance from centre in brush radii.
-static func make_brush(style:int, variant:int) -> Image:
-	var image:=Image.create(BASE,BASE,false,Image.FORMAT_RGBA8)
+# Procedural brush, (2r+1) texels square for a mark of radius r texels. e is the distance from the centre in mark
+# radii divided by a seeded, noise-perturbed outline radius (0.84-1), so every outline is round but irregular
+# and fades to zero inside the brush (the cleared tile around it supplies the filtered edge). Edges ramp over at
+# least about one texel so bilinear magnification on screen keeps them round. CRATER: near-black scorched pit,
+# a lighter brown ejecta rim ring and a faint streaky soil spray; SCORCH: soot sunburst, darkest at the centre;
+# BURN: heavy oily black core with a soot halo. Only craters get the rim.
+static func make_brush(style:int, variant:int, r:int) -> Image:
+	brushes_built+=1
+	var half:=r
+	var size:=2*half+1
+	var data:=PackedByteArray()
+	data.resize(size*size*4)
 	var seed_value:=style*31+variant*7+5
-	var half:=(BASE-1)*0.5
-	for y in BASE:
-		for x in BASE:
-			var dx:=(x-half)/half
-			var dy:=(y-half)/half
-			var d:=sqrt(dx*dx+dy*dy)
+	var outline:=_ring(seed_value,2,6,0.84)
+	var streaks:=_ring(seed_value+1,5,13,0.0)
+	# Every edge ramps over at least one texel each side: a sharper edge on a feature only 2-4 texels across
+	# reconstructs as a square or a plus under bilinear magnification.
+	var px:=1.0/r # one texel in mark radii
+	var soft:=maxf(0.08,px)
+	for y in size:
+		for x in size:
+			var dx:=float(x-half)
+			var dy:=float(y-half)
+			var d:=sqrt(dx*dx+dy*dy)*px
 			if d>=1.0:continue
-			var n:=_noise(x*0.22,y*0.22,seed_value)*0.65+_noise(x*0.6,y*0.6,seed_value+1)*0.35
-			# Angular streaks: ejecta and soot fingers radiating from the centre.
-			var angle:=atan2(dy,dx)/TAU+0.5
-			var streak:=_noise(angle*14.0,0.5,seed_value+2)
-			var edge:=d+(n-0.5)*0.35
-			var col:=Color(0,0,0,0)
+			var angle:=int((atan2(dy,dx)/TAU+0.5)*ANGLES)%ANGLES
+			var e:=d/outline[angle]
+			if e>=1.0:continue
+			var streak:=streaks[angle]
+			var col:Color
 			match style:
 				CRATER:
-					var pit:=1.0-smoothstep(0.34,0.46,edge)
-					var rim:=smoothstep(0.34,0.46,edge)*(1.0-smoothstep(0.58,0.74,edge))
-					var spray:=(1.0-smoothstep(0.55,1.0,d-(streak-0.5)*0.5))*smoothstep(0.5,0.62,edge)
-					var pit_col:=Color(0.12,0.095,0.07).lerp(Color(0.07,0.06,0.05),1.0-edge)
-					var rim_col:=Color(0.40,0.33,0.24)*(0.85+0.3*n)
-					col=pit_col.lerp(rim_col,rim/(pit+rim+0.0001))
-					var a:=maxf(pit*0.86,rim*0.55)
-					if spray*0.34>a:
-						col=Color(0.20,0.16,0.11)
-						a=spray*0.34
+					# Rim ring and spray first, then the pit composited over them (a max() of the layers would leave
+					# a pale moat between pit and rim that reads as a cross on small craters).
+					var pit:=(1.0-smoothstep(maxf(0.2,0.42-soft),0.46+soft,e))*0.9
+					# A 2-texel crater cannot resolve a ring (it reads as a square frame): only a soft dark blob.
+					var rim:=(1.0-smoothstep(0.04,maxf(0.16,1.1*soft),absf(e-0.57)))*0.6*clampf(r-2,0,1)
+					var spray:=(1.0-smoothstep(0.55+0.2*streak,1.0,e))*0.32
+					var under:=maxf(rim,spray)
+					var ground:=SPRAY.lerp(RIM,rim/maxf(under,0.0001))
+					var burnt:=PIT_CENTRE.lerp(PIT_EDGE,smoothstep(0.2,0.5,e))
+					var a:=pit+under*(1.0-pit)
+					col=burnt.lerp(ground,under*(1.0-pit)/maxf(a,0.0001))
 					col.a=a
 				SCORCH:
-					var reach:=0.55+0.45*streak
-					var a:=(1.0-smoothstep(reach*0.45,reach,edge))*0.72
-					a=maxf(a,(1.0-smoothstep(0.0,0.5,edge))*0.8)
-					col=Color(0.045,0.04,0.035).lerp(Color(0.10,0.085,0.065),smoothstep(0.2,0.8,edge))
-					col.a=a*(0.85+0.15*n)
+					var reach:=0.7+0.3*streak
+					var a:=maxf((1.0-smoothstep(0.3,reach,e))*0.72,(1.0-smoothstep(maxf(0.25,0.55-soft),0.55+soft,e))*0.82)
+					a=maxf(a,(1.0-smoothstep(0.45,1.0,e))*0.24)
+					col=SOOT_CENTRE.lerp(SOOT_EDGE,smoothstep(0.3,0.85,e))
+					col.a=a*(1.0-smoothstep(0.85,1.0,e))
 				_:
-					var core:=1.0-smoothstep(0.45,0.7,edge+(streak-0.5)*0.25)
-					var halo:=(1.0-smoothstep(0.6,1.0,d+(n-0.5)*0.2))*0.38
-					col=Color(0.03,0.028,0.026).lerp(Color(0.08,0.07,0.06),smoothstep(0.3,0.9,edge))
-					col.a=maxf(core*0.88,halo)
-			image.set_pixel(x,y,col)
-	return image
+					var core:=1.0-smoothstep(0.42-soft,0.66+soft,e+(streak-0.5)*0.16)
+					var halo:=(1.0-smoothstep(0.55,1.0,e))*0.4
+					col=OIL_CENTRE.lerp(OIL_EDGE,smoothstep(0.3,0.9,e))
+					col.a=maxf(core*0.9,halo)
+			var i:=(y*size+x)*4
+			data[i]=roundi(col.r*255.0)
+			data[i+1]=roundi(col.g*255.0)
+			data[i+2]=roundi(col.b*255.0)
+			data[i+3]=roundi(col.a*255.0)
+	return Image.create_from_data(size,size,false,Image.FORMAT_RGBA8,data)
 
 # ---------------------------------------------------------------- debris remnants
 # A landed fragment becomes a static chunk on the ground; the oldest chunk is replaced once the ring is full.

@@ -38,11 +38,13 @@ static func _update(u:Dictionary,sim) -> void:
 	if not alert:
 		# A section halted beside its own works occupies them (no enemy needed).
 		# Engineers with a site to build stay on the job instead of manning works.
-		var building:bool=u.has("building_id") or u.has("clearing_id") or (u.kind=="engineer" and sim.units.any(func(s):return s.get("queued_for",-1)==u.id and float(s.get("build_left",0.0))>0))
-		if u.orders.is_empty() and not building and occupy_works(u,sim,threat):return
+		# Expire combat shelters first: once squadmates occupy works, the occupy
+		# call below returns early and would otherwise strand them there.
 		for member in u.members:
 			if member.get("occupying",false):continue
 			if sim.time>=maxf(member.cover_until,member.get("cover_deadline",0.0)):clear(member)
+		var building:bool=u.has("building_id") or u.has("clearing_id") or (u.kind=="engineer" and sim.units.any(func(s):return s.get("queued_for",-1)==u.id and float(s.get("build_left",0.0))>0))
+		if u.orders.is_empty() and not building:occupy_works(u,sim,threat)
 		return
 	var moving:=0
 	for member in u.members:
@@ -88,8 +90,9 @@ static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 	var points:Array[Vector2]=[]
 	for ring in [1.2,2.4,3.6,5.5,7.5,9.0]:
 		for index in 16:points.append(u.pos+Vector2.from_angle(index*TAU/16)*ring)
-	# Sample the actual thin wall bands; coarse circular rings miss them.
-	for wall in sim.terrain.blocks+sim.terrain.dynamic_blocks:
+	# Sample the actual thin wall bands; coarse circular rings miss them. Yard
+	# walls, cars and kiosks (hard cover props) screen as well as buildings.
+	for wall in sim.terrain._static_candidates("building",u.pos,LEASH)+sim.terrain.dynamic_blocks:
 		if not wall.grow(LEASH).has_point(u.pos):continue
 		for x in range(ceili(wall.position.x),floori(wall.end.x)+1,1 if wall.size.x<8 else 2):
 			points.append(Vector2(x,wall.position.y-1.05));points.append(Vector2(x,wall.end.y+1.05))
@@ -126,9 +129,13 @@ static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 			if point.distance_to(threat.pos)<member.pos.distance_to(threat.pos)-2:score+=4.0
 		candidates.append({"pos":point,"score":score})
 	candidates.sort_custom(func(a,b):return a.score<b.score)
+	var radius:float=member.get("body_radius",0.8)
 	for candidate in candidates.slice(0,6):
-		var route:Array=sim.terrain.path(member.pos,candidate.pos,"land",float(member.get("body_radius",0.8)),[],"infantry")
-		if route.is_empty():continue
+		# A clear straight line is the route path() would return: reject it
+		# without planning when a holding squadmate stands across it.
+		if _squadmate_blocks(u,member,[candidate.pos]) and sim.terrain.segment_clear(member.pos,candidate.pos,"land",radius):continue
+		var route:Array=sim.terrain.path(member.pos,candidate.pos,"land",radius,[],"infantry")
+		if route.is_empty() or _squadmate_blocks(u,member,route):continue
 		var bounded:=true
 		var length:=0.0
 		var previous:Vector2=member.pos
@@ -137,6 +144,20 @@ static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 			length+=previous.distance_to(point);previous=point
 		if bounded and length<=18:return {"pos":candidate.pos,"path":route}
 	return {}
+
+# Squadmates holding still (overwatch, sheltered) never yield, and a soldier may
+# not close within a shoulder's width of one, so a route brushing past one
+# stalls the seeker until it gives up. Moving squadmates are not obstacles.
+static func _squadmate_blocks(u:Dictionary,member:Dictionary,route:Array) -> bool:
+	var radius:float=member.get("body_radius",0.8)
+	for peer in u.members:
+		if peer.hp<=0 or peer.index==member.index or peer.get("cover_phase","")=="SEEKING":continue
+		var clearance:float=minf(radius+float(peer.get("body_radius",0.8))-0.05,member.pos.distance_to(peer.pos)-0.05)
+		var previous:Vector2=member.pos
+		for point in route:
+			if Geometry2D.get_closest_point_to_segment(peer.pos,previous,point).distance_to(peer.pos)<clearance:return true
+			previous=point
+	return false
 
 # Slots along nearby own sandbag lines (friendly side, away from the threat)
 # and inside own trenches, one per soldier, nearest first.

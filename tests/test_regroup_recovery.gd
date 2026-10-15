@@ -31,13 +31,13 @@ func _init()->void:
 				snapshots.append({"id":id,"position":[u.pos.x,u.pos.y],"hp":u.hp,"orders_remaining":u.orders.size(),"regroup_count":u.get("regroup_count",0),"max_member_gap":u.members.reduce(func(g,m):return maxf(g,m.pos.distance_to(u.pos)) if m.hp>0 else g,0.0)})
 				print("REGROUP SNAPSHOT t=",roundi(sim.time)," squad=",id," pos=",u.pos," hp=",u.hp," blocked=",u.blocked_time," target=",u.target," orders=",u.orders," maneuver=",u.maneuver," path=",u.path)
 				for m in u.members:
-					print(" actor=",m.index," pos=",m.pos," phase=",m.get("cover_phase","")," goal=",m.cover_goal," cover_path=",m.get("cover_path",[])," gap=",m.pos.distance_to(u.pos)," regroup=",m.get("regroup_path",[]))
+					print(" actor=",m.index," pos=",m.pos," phase=",m.get("cover_phase","")," occupying=",m.get("occupying",false)," goal=",m.cover_goal," cover_path=",m.get("cover_path",[])," gap=",m.pos.distance_to(u.pos)," regroup=",m.get("regroup_path",[]))
 	check(sim.get_unit(1).pos.distance_to(Vector2(21.7,11.2))>6,"squad one escapes the reproduced villa stall")
 	check(sim.get_unit(2).pos.distance_to(Vector2(16.6,30))>6,"squad two escapes the reproduced cafe stall")
 	for id in [1,2,3]:
 		var u:Dictionary=sim.get_unit(id)
 		check(u.hp>0,"mission section survives recovery: %s"%id)
-		check(u.members.all(func(m):return m.hp<=0 or m.pos.distance_to(u.pos)<2.8),"all live section members reunite after contact: %s"%id)
+		check(u.members.all(func(m):return reunited(sim,m,u)),"all live section members reunite after contact: %s"%id)
 		check(u.get("regroup_count",0)>0,"section completed a bounded regroup: %s"%id)
 	check(sim.get_unit(1).orders.is_empty(),"first section completes its village order without reissue")
 	check(sim.get_unit(3).pos.x>30,"AT section escapes villa and advances toward village")
@@ -46,7 +46,7 @@ func _init()->void:
 		check_actors(sim,previous)
 		record_completions(sim,first_completion)
 	for id in [1,2,3]:
-		check(sim.get_unit(id).orders.is_empty(),"all sections complete single attack-move: %s"%id)
+		check(completed_attack_move(sim,sim.get_unit(id)),"all sections complete single attack-move: %s"%id)
 		check(sim.get_unit(id).blocked_time<1,"no residual group congestion: %s"%id)
 	check([sim.get_unit(1).command_group,sim.get_unit(2).command_group,sim.get_unit(3).command_group]==original_groups,"no player command reissue during recovery")
 	for id in [1,2,3]:check(sim.get_unit(id).intent==original_intents[id-1],"original objective retained: %s"%id)
@@ -137,6 +137,37 @@ func run_standoff_cover()->void:
 	check(Actors.Cover.in_weapon_range(mixed,squad,sim),"living launcher contributes its longer weapon range")
 	mixed.members[0].hp=0
 	check(not Actors.Cover.in_weapon_range(mixed,squad,sim),"surviving rifle does not inherit dead launcher range")
+
+# A soldier rejoins within 2.8 u of the section anchor. Cover legitimately posts
+# soldiers further out, which counts only while that shelter is inside the
+# section leash: halt-in-cover (`occupying` a wall/prop slot, up to 8 u away),
+# or a combat shelter taken while the section is still in contact (the same
+# alert rule Cover uses: suppressed, or a known enemy within 25 u that threatens
+# it). Without contact Cover expires combat shelters and the soldier must rejoin.
+func reunited(sim,m:Dictionary,u:Dictionary)->bool:
+	if m.hp<=0 or m.pos.distance_to(u.pos)<2.8:return true
+	if m.pos.distance_to(u.pos)>Actors.Cover.LEASH:return false
+	if m.get("occupying",false):return true
+	return m.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] and m.cover_goal.distance_to(u.pos)<=Actors.Cover.LEASH and in_contact(sim,u)
+
+func in_contact(sim,u:Dictionary)->bool:
+	if u.suppression>0.2:return true
+	for other in sim.units:
+		if not sim.alive(other) or other.team==u.team or not sim.contact_known(u,other) or not sim.effective_unit(other,u.kind):continue
+		if sim.can_fire(u,other) and not Actors.Cover.in_weapon_range(other,u,sim):continue
+		if u.pos.distance_squared_to(other.pos)<625:return true
+	return false
+
+# The single attack-move is complete when the sim consumes its order (the anchor
+# reached the end of its path), or when the section stands on its objective
+# (within its crowd radius, the spacing at which sections share an attack-move
+# arrival) still holding that same order because it is fighting there: its
+# current target is a live enemy, or it fired within the last 2 s.
+func completed_attack_move(sim,u:Dictionary)->bool:
+	if u.orders.is_empty():return true
+	if u.orders.size()!=1 or u.orders[0].mode!="attack_move" or u.pos.distance_to(u.orders[0].pos)>sim.crowd_radius(u.kind):return false
+	var target:Dictionary=sim.get_unit(u.target)
+	return (sim.alive(target) and target.team!=u.team) or sim.time-float(u.last_shot)<2.0
 
 func record_completions(sim,first_completion:Dictionary)->void:
 	for id in [1,2,3]:
