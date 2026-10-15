@@ -435,22 +435,34 @@ func update_visibility() -> void:
 	if indexed and not ticking:rebuild_spatial()
 	var processed_fields:Dictionary={}
 	visible_cells.clear()
+	# Garrison shelter per soldier: during a walked entry/exit a section sees
+	# from the building once anyone is indoors, and is concealed only while
+	# every living soldier is indoors. Ids of units with any / all indoors.
+	var sheltered_any:Dictionary={}
+	var sheltered_all:Dictionary={}
 	for u in units:
 		u.seen_by = [false, false]
 		if alive(u):
 			u.seen_by[u.team] = true
+			if Garrison.inside(u):
+				sheltered_any[u.id]=true;sheltered_all[u.id]=true
+			elif Garrison.transit(u)!="":
+				var shelter:=indoors_share(u)
+				if shelter>0:sheltered_any[u.id]=true
+				if shelter>1:sheltered_all[u.id]=true
 	for observer in units:
 		if not alive(observer) or observer.get("build_left",0.0)>0 or comms_blocked(observer):
 			continue
 		var d: Dictionary = definitions[observer.kind]
-		var candidates:Array=range_candidates(observer.pos,float(d.sight)*float(weather.sight_scale)+(Garrison.SIGHT_BONUS if Garrison.inside(observer) else 0.0)) if indexed else units
+		var sight_radius:float=float(d.sight)*float(weather.sight_scale)+(Garrison.SIGHT_BONUS if sheltered_any.has(observer.id) else 0.0)
+		var candidates:Array=range_candidates(observer.pos,sight_radius) if indexed else units
 		for target in candidates:
 			if not alive(target) or target.team == observer.team:
 				continue
-			var radius := float(d.sight)*float(weather.sight_scale)+(Garrison.SIGHT_BONUS if Garrison.inside(observer) else 0.0)
+			var radius := sight_radius
 			if terrain.cover(target.pos) and definitions[target.kind].domain == "land":
 				radius *= 0.7
-			if Garrison.inside(target) and time-float(target.get("last_shot",-100.0))>=3.0:radius*=0.6
+			if sheltered_all.has(target.id) and time-float(target.get("last_shot",-100.0))>=3.0:radius*=0.6
 			if definitions[target.kind].domain == "land" and time-float(target.get("last_shot",-100.0))>=3.0:radius*=terrain.concealment(target.pos)
 			if observer.pos.distance_squared_to(target.pos) <= radius * radius:
 				if d.domain == "air" or definitions[target.kind].domain == "air" or terrain.line_clear(observer.pos, target.pos):
@@ -479,6 +491,17 @@ func update_visibility() -> void:
 				explored[tile]=true
 	for u in units:
 		u.visible = u.team == 0 or u.seen_by[0]
+
+# Living soldiers of a section in garrison transit that are through the wall:
+# 0 none, 1 some, 2 all.
+func indoors_share(u:Dictionary)->int:
+	var n_in:=0
+	var n_out:=0
+	for m in u.members:
+		if m.hp<=0:continue
+		if bool(m.get("indoors",false)):n_in+=1
+		else:n_out+=1
+	return 0 if n_in==0 else (2 if n_out==0 else 1)
 
 # World metres per fog cell; scenarios may author coarser fog than the legacy 2 m.
 func fog_cell_size() -> float:
@@ -787,10 +810,12 @@ func infantry_blast(target:Dictionary,origin:Vector2,radius:float,lethality:floa
 		struck=true
 		var falloff:=1.0-gap/radius
 		var shelter:float=0.5 if member.get("in_trench",false) or terrain.cover(member.pos) else 1.0
+		# Walls take most of the blast for a soldier indoors (garrison or mid-transit).
+		var walls:float=0.4 if Garrison.member_indoors(target,member) else 1.0
 		member.suppression=minf(1.0,member.suppression+0.6)
 		member.last_hit=time
 		if combat_rng.randf()<(0.35+0.65*falloff)*shelter:
-			Infantry.wound(target,member,Infantry.roll("HE" if falloff>0.6 else "FRAGMENT",lethality*shelter*(0.4+0.6*falloff),combat_rng),time,combat_rng)
+			Infantry.wound(target,member,Infantry.roll("HE" if falloff>0.6 else "FRAGMENT",lethality*walls*shelter*(0.4+0.6*falloff),combat_rng),time,combat_rng)
 		elif member.state!="DOWN":member.state="BRACING"
 	Infantry.publish(target)
 	return struck
@@ -859,7 +884,8 @@ func fpv_detonate(u:Dictionary,d:Dictionary) -> void:
 		var od:Dictionary=definitions[other.kind]
 		if od.domain=="air" or origin.distance_squared_to(other.pos)>pow(radius+float(od.radius),2):continue
 		var scale:float=0.6 if float(od.armor)>0 else 1.0
-		if Garrison.inside(other):scale*=0.4
+		# Sections: the building factor is applied per soldier in infantry_blast.
+		if other.members.is_empty() and Garrison.inside(other):scale*=0.4
 		var struck:=false
 		if other.members.is_empty():
 			var gap:float=maxf(0.0,origin.distance_to(other.pos)-float(od.radius)*0.5)

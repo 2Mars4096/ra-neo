@@ -38,6 +38,78 @@ func compare_sides(sim,squad:Dictionary,pair:Array,label:String)->void:
 	check(s_in<s_out*0.5,"%s: fire at the soldier indoors pins less (%.3f vs %.3f)" % [label,s_in,s_out])
 	print("%s walk (indoors vs outside): damage %.2f vs %.2f, exposure %.3f vs %.3f, pin %.3f vs %.3f" % [label,d_in,d_out,e_in,e_out,s_in,s_out])
 	check(not Garrison.inside(squad),"%s: section-level state stays outside" % label)
+	compare_blast(sim,squad,pair,label)
+	compare_spotting(sim,squad,label)
+# Same blast on two soldiers at the same spot, one indoors: walls soften it.
+func compare_blast(sim,squad:Dictionary,pair:Array,label:String)->void:
+	var probe:Dictionary=squad.duplicate(true)
+	var a:Dictionary={};var b:Dictionary={}
+	for i in squad.members.size():
+		if is_same(squad.members[i],pair[0]):a=probe.members[i]
+		elif is_same(squad.members[i],pair[1]):b=probe.members[i]
+	var spot:Vector2=pair[1].pos
+	var saved:int=sim.combat_rng.state
+	sim.combat_rng.seed=11
+	var heavy:=[0,0]
+	var n:=400
+	for k in n:
+		for m in probe.members:
+			m.hp=m.max_hp if (is_same(m,a) or is_same(m,b)) else 0.0
+			m.wound=Sim.Infantry.HEALTHY if (is_same(m,a) or is_same(m,b)) else Sim.Infantry.KIA
+			m.pos=spot
+		Sim.Infantry.publish(probe)
+		probe.member_hp_snapshot=probe.hp
+		sim.infantry_blast(probe,spot+Vector2(1.5,0),4.0)
+		if a.wound in [Sim.Infantry.KIA,Sim.Infantry.SEVERE]:heavy[0]+=1
+		if b.wound in [Sim.Infantry.KIA,Sim.Infantry.SEVERE]:heavy[1]+=1
+	sim.combat_rng.state=saved
+	check(heavy[0]<heavy[1]*0.75,"%s: blast hurts the soldier indoors less (KIA/severe %d vs %d of %d)" % [label,heavy[0],heavy[1],n])
+	print("%s walk blast KIA/severe (indoors vs outside): %d vs %d of %d" % [label,heavy[0],heavy[1],n])
+# Spotting with only the section and one probe enemy in play: a half-indoors
+# section is spotted normally but already sees from the building; once every
+# living soldier is indoors it is concealed.
+func compare_spotting(sim,squad:Dictionary,label:String)->void:
+	if sim.comms_blocked(squad):return
+	var saved_units:Array[Dictionary]=sim.units
+	var saved_shot:float=float(squad.get("last_shot",-100.0))
+	squad.last_shot=-100.0
+	var sight:float=float(sim.definitions.rifle.sight)*float(sim.weather.sight_scale)
+	var spot:=func(pos:Vector2,with_bonus:bool)->float:
+		var f:float=(0.7 if sim.terrain.cover(pos) else 1.0)*sim.terrain.concealment(pos)
+		return (sight+(Garrison.SIGHT_BONUS if with_bonus else 0.0))*f
+	var enemy:={"id":-98,"kind":"rifle","team":1,"pos":squad.pos,"hp":1.0,"members":[],"last_shot":-100.0,"seen_by":[false,false]}
+	var probe_units:Array[Dictionary]=[squad,enemy]
+	sim.units=probe_units
+	# Concealment: the enemy observer sits at 0.8 of the open-section spotting range.
+	var conceal_ok:=false
+	for k in 16:
+		enemy.pos=squad.pos+Vector2.RIGHT.rotated(TAU*k/16.0)*0.8*spot.call(squad.pos,false)
+		if not sim.terrain.line_clear(enemy.pos,squad.pos):continue
+		sim.update_visibility()
+		var mixed_seen:bool=squad.seen_by[1]
+		var flags:Array=[]
+		for m in squad.members:flags.append(m.get("indoors",false));if m.hp>0:m.indoors=true
+		sim.update_visibility()
+		var all_seen:bool=squad.seen_by[1]
+		for i in squad.members.size():squad.members[i].indoors=flags[i]
+		check(mixed_seen and not all_seen,"%s: section half outside is spotted, all indoors is concealed" % label)
+		conceal_ok=true;break
+	check(conceal_ok,"%s: spotting probe found a clear line" % label)
+	# Sight bonus: an enemy beyond plain sight but inside sight+bonus is seen once anyone is indoors.
+	var bonus_ok:=false
+	for k in 16:
+		var dir:=Vector2.RIGHT.rotated(TAU*k/16.0)
+		var reach:float=sight
+		enemy.pos=squad.pos+dir*reach
+		for j in 3:enemy.pos=squad.pos+dir*(spot.call(enemy.pos,false)+spot.call(enemy.pos,true))*0.5
+		if sim.terrain.line_clear(squad.pos,enemy.pos) and squad.pos.distance_to(enemy.pos)>spot.call(enemy.pos,false)+0.5 and squad.pos.distance_to(enemy.pos)<spot.call(enemy.pos,true)-0.5:
+			sim.update_visibility()
+			check(enemy.seen_by[0],"%s: section with a soldier indoors gets the building sight bonus" % label)
+			bonus_ok=true;break
+	check(bonus_ok,"%s: sight-bonus probe found a clear line" % label)
+	sim.units=saved_units
+	squad.last_shot=saved_shot
+	sim.update_visibility()
 func harbor_index()->int:
 	var configs:Array=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
 	for i in configs.size():
