@@ -10,7 +10,8 @@ func harbor_index()->int:
 	return -1
 func kill_time(kind:String)->float:
 	var sim=Sim.new(false,harbor_index())
-	sim.spawn(kind,0,Vector2(285,640))
+	# Helo at harbor altitude 13 reaches ~15.2 m over ground: start 1 m inside it.
+	sim.spawn(kind,0,Vector2(286,640))
 	var rifle:Dictionary=sim.spawn("rifle",1,Vector2(300,640))
 	rifle["hold_command"]=true
 	for i in 1800:

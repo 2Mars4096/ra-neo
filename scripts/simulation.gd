@@ -522,22 +522,67 @@ func can_fire(u: Dictionary, other: Dictionary) -> bool:
 	if not alive(other) or u.team == other.team or not contact_known(u,other):
 		return false
 	if not u.get("members",[]).is_empty():
+		var budget:int=soldier_checks+SECTION_CHECKS
 		for member in u.members:
 			if member.hp<=0:continue
 			var weapon:String="atgm" if u.kind=="atgm" and member.index==0 else "rifle"
-			if weapon_reaches(weapon,member.pos,other):return true
+			if weapon_reaches(weapon,member.pos,other,mini(SOLDIER_CHECKS,budget-soldier_checks)):return true
+			if soldier_checks>=budget:return false
 		return false
 	return weapon_reaches(u.kind,u.pos,other)
 
-func weapon_reaches(weapon:String,source:Vector2,other:Dictionary) -> bool:
+func weapon_reaches(weapon:String,source:Vector2,other:Dictionary,checks:int=SOLDIER_CHECKS) -> bool:
 	if not effective_weapon(weapon,other.kind):return false
 	var d:Dictionary=definitions[weapon]
 	var td:Dictionary=definitions[other.kind]
 	# Inlined unit_altitude/weapon_range: this runs for every candidate and soldier.
 	var height:float=float(d.altitude)-float(other.get("altitude",td.altitude))
 	var reach:float=AIR_REACH[weapon] if td.domain=="air" and AIR_REACH.has(weapon) else float(d.range)
+	# A section is reached through one of its soldiers, not its anchor.
+	if not other.get("members",[]).is_empty():
+		return not aim_soldier(source,other,reach*reach-height*height,d.domain!="air" and td.domain!="air",INF,checks).is_empty()
 	if source.distance_squared_to(other.pos)+height*height>reach*reach:return false
 	return d.domain=="air" or td.domain=="air" or terrain.line_clear(source,other.pos)
+
+# Per-soldier targeting. Fire at a section goes at one of its soldiers: the
+# nearest able one (not down or KIA) within `reach_sq` (squared ground
+# distance) and nearer than `limit` that the source has a clear line of fire
+# to. At most `checks` line checks, nearest first (soldier_checks counts
+# them); air weapons and aircraft need no line. Empty when none qualifies.
+const SOLDIER_CHECKS:=3   # line checks per shooter and target section
+const SECTION_CHECKS:=8   # per squad can_fire call (all its soldiers)
+const SHOOTER_CHECKS:=6   # per soldier and tick across target sections
+var soldier_checks:=0
+func aim_soldier(source:Vector2,other:Dictionary,reach_sq:float,needs_line:bool,limit:float=INF,checks:int=SOLDIER_CHECKS)->Dictionary:
+	var bound:float=minf(reach_sq,limit)
+	var tried:=0
+	for attempt in checks:
+		var best:Dictionary={}
+		var best_distance:=INF
+		var best_bit:=0
+		var bit:=1
+		for member in other.members:
+			if member.hp>0 and not (tried&bit):
+				var distance:float=source.distance_squared_to(member.pos)
+				if distance<best_distance and distance<=bound:best=member;best_distance=distance;best_bit=bit
+			bit<<=1
+		if best.is_empty() or not needs_line:return best
+		soldier_checks+=1
+		if terrain.line_clear(source,best.pos):return best
+		tried|=best_bit
+	return {}
+
+# The soldier a resolved shot strikes when the caller did not choose one
+# (vehicles, emplacements, direct calls): per-soldier line of fire, else the
+# soldier nearest the shooter (legacy fixtures without a line) if `fallback`.
+func shot_victim(u:Dictionary,target:Dictionary,fallback:bool=true) -> Dictionary:
+	if target.members.is_empty():return {}
+	var d:Dictionary=definitions[u.kind]
+	var td:Dictionary=definitions[target.kind]
+	var height:float=unit_altitude(u)-unit_altitude(target)
+	var reach:float=weapon_range(u.kind,td)
+	var victim:=aim_soldier(u.pos,target,reach*reach-height*height,d.domain!="air" and td.domain!="air")
+	return victim if not victim.is_empty() or not fallback else Infantry.exposed_member(target,u.pos)
 
 # Counter-UAV model. Slant range applies against air targets (altitude counts),
 # so rifles only reach a high scout nearly overhead while AA covers a wide
@@ -598,17 +643,18 @@ func effective_unit(u:Dictionary,target_kind:String) -> bool:
 func effective_weapon(weapon:String, target_kind:String) -> bool:
 	return float(effectiveness[weapon][target_kind])>0
 
-func shot_distance(u:Dictionary,other:Dictionary) -> float:
+func shot_distance(u:Dictionary,other:Dictionary,victim:Dictionary={}) -> float:
 	var height:float=unit_altitude(u)-unit_altitude(other)
-	return sqrt(u.pos.distance_squared_to(other.pos)+height*height)
+	return sqrt(u.pos.distance_squared_to(victim.pos if not victim.is_empty() else other.pos)+height*height)
 
-func hit_chance(u:Dictionary,other:Dictionary) -> float:
+# `victim`: the soldier aimed at when the target is a section (aim_soldier).
+func hit_chance(u:Dictionary,other:Dictionary,victim:Dictionary={}) -> float:
 	if not effective_weapon(u.kind,other.kind):return 0.0
 	var chance:=0.95
 	if UAV_HIT.has(other.kind):chance=UAV_HIT[other.kind].get(u.kind,0.35)
 	elif other.kind=="helo":chance=0.85 if u.kind=="aa" else 0.45
-	elif not other.get("members",[]).is_empty():chance=infantry_exposure(u,other)
-	var fraction:=clampf(shot_distance(u,other)/maxf(1,weapon_range(u.kind,definitions[other.kind])),0,1)
+	elif not other.get("members",[]).is_empty():chance=infantry_exposure(u,other,victim)
+	var fraction:=clampf(shot_distance(u,other,victim)/maxf(1,weapon_range(u.kind,definitions[other.kind])),0,1)
 	chance*=lerpf(1.0,0.65,fraction*fraction)
 	# A diving strike drone flies straight at its victim: little crossing motion.
 	if other.state in ["MOVING","ADVANCING","RETREATING"]:chance*=0.65
@@ -620,11 +666,11 @@ func hit_chance(u:Dictionary,other:Dictionary) -> float:
 # Base chance for a shot at a soldier. Aimed small-arms fire must strike a
 # man-sized target (RIFLE_HIT point blank, under half that at full range); HE
 # needs only a near miss. Posture, cover, trench and garrison shrink the
-# exposed soldier (the one nearest the shooter).
+# soldier aimed at (by default the one nearest the shooter).
 const RIFLE_HIT:=0.45
-func infantry_exposure(u:Dictionary,other:Dictionary) -> float:
+func infantry_exposure(u:Dictionary,other:Dictionary,aimed:Dictionary={}) -> float:
 	var exposure:=1.0
-	var victim:Dictionary=Infantry.exposed_member(other,u.pos)
+	var victim:Dictionary=aimed if not aimed.is_empty() else Infantry.exposed_member(other,u.pos)
 	if not victim.is_empty():
 		var posture:String=victim.get("posture","STANDING")
 		if posture=="PRONE":exposure*=0.5
@@ -633,34 +679,43 @@ func infantry_exposure(u:Dictionary,other:Dictionary) -> float:
 		elif terrain.cover(victim.pos) or VehicleDamage.wreck_cover(self,victim.pos,u.pos):exposure*=0.7
 	if Garrison.inside(other):exposure*=0.6
 	if definitions[u.kind].get("combat_alias",u.kind) in HE_WEAPONS:return 0.95*(0.55+0.45*exposure)
-	var fraction:=clampf(shot_distance(u,other)/maxf(1,weapon_range(u.kind,definitions[other.kind])),0,1)
+	var fraction:=clampf(shot_distance(u,other,victim)/maxf(1,weapon_range(u.kind,definitions[other.kind])),0,1)
 	return RIFLE_HIT*exposure*lerpf(1.0,0.45,fraction)
 
 # One rifle round from a squad soldier (15 x 0.25) is the reference bullet.
 const BULLET_REF:=3.75
 # A hit on a section wounds soldiers instead of removing HP. damage_amount's
 # cover/garrison reduction becomes lethality < 1 (milder outcomes); weak rounds
-# (engineer carbines) are milder too. See Infantry.OUTCOMES.
-func infantry_hit(u:Dictionary,target:Dictionary,amount:float,scale:float) -> void:
+# (engineer carbines) are milder too. See Infantry.OUTCOMES. `victim` is the
+# soldier struck (default: the one nearest the shooter).
+func infantry_hit(u:Dictionary,target:Dictionary,amount:float,scale:float,victim:Dictionary={}) -> void:
 	var raw:float=float(definitions[u.kind].damage)*float(effectiveness[u.kind][target.kind])*scale
 	if amount<=0.0 or raw<=0.0:return
 	var he:bool=definitions[u.kind].get("combat_alias",u.kind) in HE_WEAPONS
 	var lethality:float=amount/raw if he else amount/BULLET_REF
-	Infantry.strike(target,"HE" if he else "BULLET",lethality,u.pos,time,combat_rng)
+	# Infantry.strike wounds the soldier nearest its source point: the victim's own position.
+	Infantry.strike(target,"HE" if he else "BULLET",lethality,victim.pos if not victim.is_empty() else u.pos,time,combat_rng)
 
 const HE_WEAPONS:=["tank","helo","boat","aa","at_gun","atgm"]
-func resolve_shot(u:Dictionary,target:Dictionary,scale:float) -> bool:
+# Against a section the shot goes at one soldier (`victim`, else shot_victim):
+# range, exposure, cover, the wound and the tracer endpoint are all his.
+func resolve_shot(u:Dictionary,target:Dictionary,scale:float,victim:Dictionary={}) -> bool:
 	if not alive(target) or not effective_weapon(u.kind,target.kind):return false
-	var hit:bool=combat_rng.randf()<hit_chance(u,target)
+	if victim.is_empty():victim=shot_victim(u,target)
+	elif victim.hp<=0:
+		# Downed earlier this tick: re-aim at another soldier in sight, or hold fire.
+		victim=shot_victim(u,target,false)
+		if victim.is_empty():return false
+	var hit:bool=combat_rng.randf()<hit_chance(u,target,victim)
 	if hit:
-		var amount:float=damage_amount(u,target)*scale
+		var amount:float=damage_amount(u,target,victim)*scale
 		# Buildings, field works, drones and sandbags: what reaches the target (structure_damage.gd).
 		amount=preload("res://scripts/structure_damage.gd").strike(self,u,target,amount)
 		if target.members.is_empty():
 			# Vehicles: penetration and component damage decide the integrity loss.
 			Infantry.hit(target,VehicleDamage.strike(self,u,target,amount),u.pos,time)
 		# Soldiers are wounded or killed (HE also wounds those nearby).
-		else:infantry_hit(u,target,amount,scale)
+		else:infantry_hit(u,target,amount,scale,victim)
 		target.last_hit=time
 	# Near misses can suppress exposed people; armor never receives rifle chip damage.
 	if definitions[target.kind].domain=="land" and definitions[target.kind].armor==0:
@@ -670,7 +725,7 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float) -> bool:
 		# Fallen comrades shake a section: casualties raise suppression.
 		if not target.members.is_empty():pin*=1.0+0.25*Infantry.casualties(target)
 		target.suppression=minf(1,target.suppression+pin)
-	var endpoint:Vector2=target.pos
+	var endpoint:Vector2=victim.pos if not victim.is_empty() else target.pos
 	if not hit:endpoint+=Vector2.from_angle(combat_rng.randf()*TAU)*combat_rng.randf_range(2.5,4.5)
 	# Weapons with an AIR_REACH fire their machine gun at aircraft, not the main gun.
 	var shot_kind:String="rifle" if AIR_REACH.has(u.kind) and definitions[target.kind].domain=="air" else (u.kind if u.kind in ["at_gun","bunker"] else definitions[u.kind].get("combat_alias",u.kind))
@@ -682,7 +737,7 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float) -> bool:
 		else:losses+=1
 	return hit
 
-func damage_amount(u: Dictionary, other: Dictionary) -> float:
+func damage_amount(u: Dictionary, other: Dictionary, victim:Dictionary={}) -> float:
 	var d: Dictionary = definitions[u.kind]
 	var td: Dictionary = definitions[other.kind]
 	var damage := float(d.damage)*float(effectiveness[u.kind][other.kind])
@@ -690,6 +745,7 @@ func damage_amount(u: Dictionary, other: Dictionary) -> float:
 	if other.members.is_empty() and damage>0 and td.has("armor_mm"):damage*=VehicleDamage.expected_scale(self,u,other)
 	var cover_pos:Vector2=other.pos
 	var nearest_member:=INF
+	if not victim.is_empty():cover_pos=victim.pos;nearest_member=-1.0
 	for member in other.get("members",[]):
 		if member.hp>0 and member.pos.distance_squared_to(u.pos)<nearest_member:
 			nearest_member=member.pos.distance_squared_to(u.pos)
@@ -981,6 +1037,8 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		var weapon:String="atgm" if u.kind=="atgm" and member.index==0 else "rifle"
 		var d:Dictionary=definitions[weapon]
 		var target:Dictionary={}
+		var victim:Dictionary={}
+		var checks_left:int=soldier_checks+SHOOTER_CHECKS
 		# Upper-floor windows: garrisoned soldiers out-range troops in the street.
 		var range_scale:float=Garrison.RANGE_SCALE if Garrison.inside(u) else 1.0
 		var nearest:=pow(float(d.range)*range_scale,2)
@@ -996,6 +1054,17 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			if not alive(other):continue
 			var od:Dictionary=definitions[other.kind]
 			var air:bool=od.domain=="air"
+			if not other.members.is_empty():
+				# Sections: aim at a soldier this man can see, nearest first.
+				var ordered:bool=not u.orders.is_empty() and u.orders[0].mode=="attack" and other.id==u.orders[0].target
+				var budget:int=mini(SOLDIER_CHECKS,checks_left-soldier_checks)
+				if budget<=0:continue
+				var reach_sq:float=pow(float(d.range)*range_scale,2)
+				var soldier:=aim_soldier(member.pos,other,reach_sq,true,INF if ordered else nearest,budget)
+				if soldier.is_empty():continue
+				target=other;victim=soldier
+				nearest=-1.0 if ordered else member.pos.distance_squared_to(soldier.pos)
+				continue
 			var distance:float=member.pos.distance_squared_to(other.pos)
 			var reach:float=float(d.range)*range_scale
 			if air:
@@ -1006,7 +1075,7 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			if air and other.id==member.target:priority*=0.5
 			if not u.orders.is_empty() and u.orders[0].mode=="attack" and other.id==u.orders[0].target:priority=-1.0
 			if distance<reach*reach and priority<nearest and (air or terrain.line_clear(member.pos,other.pos)):
-				target=other;nearest=priority
+				target=other;victim={};nearest=priority
 		var target_id:int=target.get("id",-1)
 		if member.target!=target_id:member.aim=0.0
 		member.target=target_id
@@ -1044,7 +1113,7 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			if member.posture=="PRONE" and pressure>0.65:member.state="PINNED";member.aim=0.0;continue
 			if member.travel>0.003 or time<member.posture_until:
 				member.state="SETTLING";member.aim=0.0;continue
-			var direction:Vector2=(target.pos-member.pos).normalized()
+			var direction:Vector2=((victim.pos if not victim.is_empty() else target.pos)-member.pos).normalized()
 			member.facing=member.facing.rotated(clampf(member.facing.angle_to(direction),-dt*4,dt*4))
 			if member.facing.dot(direction)<0.97:member.state="TURNING";member.aim=0.0;continue
 			if member.reload_until>time:
@@ -1058,7 +1127,7 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 				member.aim=0.0
 				continue
 		member.aim+=dt
-		member.facing=(target.pos-member.pos).normalized()
+		member.facing=((victim.pos if not victim.is_empty() else target.pos)-member.pos).normalized()
 		var preparation:float=0.75 if weapon=="atgm" else (0.45 if scenario.get("autonomy",false) else 0.2)+member.index*0.05
 		var hurt:bool=member.get("wound","")==Infantry.LIGHT
 		if hurt:preparation*=Infantry.LIGHT_AIM
@@ -1070,7 +1139,7 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		proxy["fire_height"]=0.75 if member.posture=="CROUCHED" else (0.4 if member.posture=="PRONE" else 0.95)
 		proxy.suppression=maxf(u.suppression,member.suppression)
 		if hurt:proxy["accuracy"]=Infantry.LIGHT_ACCURACY
-		resolve_shot(proxy,target,(1.0 if weapon=="atgm" else 0.25)*(0.4 if u.kind=="engineer" else 1.0))
+		resolve_shot(proxy,target,(1.0 if weapon=="atgm" else 0.25)*(0.4 if u.kind=="engineer" else 1.0),victim)
 		member.cooldown=float(d.interval)*(1.8 if proxy.suppression>0.6 else 1.0)
 		member.rounds-=1
 		member.last_shot=time

@@ -379,5 +379,7 @@ static func in_weapon_range(threat:Dictionary,u:Dictionary,sim) -> bool:
 		if not sim.effective_weapon(weapon,u.kind):continue
 		var definition:Dictionary=sim.definitions[weapon]
 		var height:float=float(definition.altitude)-float(sim.definitions[u.kind].altitude)
-		if source.pos.distance_squared_to(u.pos)+height*height<=float(definition.range)*float(definition.range):return true
+		# Per soldier, matching can_fire's soldier-to-soldier range (no centre-point flicker).
+		for body in ([u] if u.members.is_empty() else u.members):
+			if body.hp>0 and source.pos.distance_squared_to(body.pos)+height*height<=float(definition.range)*float(definition.range):return true
 	return false
