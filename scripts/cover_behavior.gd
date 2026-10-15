@@ -3,6 +3,13 @@ extends RefCounted
 
 # Fictional game distances/timings, not real-world movement doctrine.
 const LEASH:=10.0
+# Contact drill: on first incoming fire the section drops and returns fire for
+# this long before the first soldier rushes for shelter.
+const DRILL:=0.8
+# Slots rated for line of fire (the costly part of a search), and enough valid
+# ones to stop early. Cheap filters order the nearest candidates first.
+const RATED:=24
+const RATED_VALID:=8
 
 static func clear(member:Dictionary) -> void:
 	member["occupying"]=false
@@ -11,6 +18,7 @@ static func clear(member:Dictionary) -> void:
 	member["cover_phase"]=""
 	member["cover_blocked"]=0.0
 	member["cover_screened"]=false
+	member.erase("cover_from")
 
 static func update(u:Dictionary,sim) -> void:
 	if u.members.is_empty() or not sim.scenario.get("autonomy",false):return
@@ -20,12 +28,19 @@ static func update(u:Dictionary,sim) -> void:
 
 static func _update(u:Dictionary,sim) -> void:
 	var constrained:bool=u.has("building_id") or u.hold_command or u.get("regroup_active",false) or sim.time<u.get("cover_resume_after",0.0) or (not u.orders.is_empty() and u.orders[0].mode in ["move","retreat"]) or (not u.maneuver.is_empty() and u.maneuver.get("phase","")!="SUPPORT")
+	# First incoming fire after a quiet spell: drop and return fire before
+	# anyone rushes (DRILL). Fire taken while under orders is not a fresh contact.
+	var fired:float=float(u.get("fired_on",-100.0))
+	if fired>float(u.get("drill_seen",-100.0)):
+		if fired-float(u.get("drill_seen",-100.0))>8.0 and not constrained:u["drill_until"]=sim.time+DRILL
+		u["drill_seen"]=fired
 	if constrained:
 		for member in u.members:clear(member)
+		u["crossfire"]=false
 		return
 	var threats:Array=[]
 	var threat:Dictionary={}
-	var distance:=INF
+	var weight:=0.0
 	var neighbors:Array=sim.range_candidates(u.pos,25) if sim.ticking else sim.units
 	for other in neighbors:
 		if not sim.alive(other) or other.team==u.team or not sim.contact_known(u,other) or not sim.effective_unit(other,u.kind):continue
@@ -33,7 +48,13 @@ static func _update(u:Dictionary,sim) -> void:
 		var gap:float=u.pos.distance_squared_to(other.pos)
 		if gap<625:
 			threats.append(other)
-			if gap<distance:threat=other;distance=gap
+			# The main threat is the strongest per distance, not merely the nearest.
+			var w:float=power(other)/maxf(4.0,sqrt(gap))
+			if w>weight:threat=other;weight=w
+	if threats.size()>1:
+		threats.sort_custom(func(a,b):return power(a)/maxf(4.0,u.pos.distance_to(a.pos))>power(b)/maxf(4.0,u.pos.distance_to(b.pos)))
+		threats=threats.slice(0,3)
+	u["crossfire"]=crossfire(u,threats)
 	var alert:bool=not threat.is_empty() or u.suppression>0.2
 	if not alert:
 		# A section halted beside its own works occupies them (no enemy needed).
@@ -53,29 +74,63 @@ static func _update(u:Dictionary,sim) -> void:
 	# up sent two of three rifles away at once; dead records must not add slots.
 	var living:int=u.members.filter(func(m):return m.hp>0).size()
 	var limit:int=maxi(1,floori(living/2.0))
+	var bearing:Vector2=(threat.pos-u.pos).normalized() if not threat.is_empty() else Vector2.ZERO
 	for member in u.members:
 		if member.hp<=0:continue
 		var phase:String=member.get("cover_phase","")
 		if phase in ["SEEKING","SETTLING","SHELTERED"]:
-			var exposed:bool=member.get("cover_screened",false) and threats.any(func(contact):return sim.terrain.line_clear(contact.pos,member.cover_goal))
+			var weapon:String=member_weapon(u,member)
+			# A wall shelter seen by a threat it cannot answer from there is lost;
+			# one it can shoot back at is now a fire-from-cover position.
+			var exposed:bool=member.get("cover_screened",false) and threats.any(func(contact):return sees(sim,contact,member.cover_goal) and not answers(sim,weapon,member.cover_goal,contact))
+			# A shelter taken before this bearing was known (only suppressed, or
+			# halted facing a guess; field works carry no bearing) is checked
+			# against the new main threat: a wall face it sees but cannot be
+			# answered from is abandoned; screened or firing shelters are kept.
+			var stale:bool=not exposed and bearing!=Vector2.ZERO and member.has("cover_from") and (member.cover_from==Vector2.ZERO or member.cover_from.dot(bearing)<0.7)
+			if stale:
+				member.cover_from=bearing
+				exposed=not soft_cover(sim,member.cover_goal) and sees(sim,threat,member.cover_goal) and not answers(sim,weapon,member.cover_goal,threat)
+			# Shot at with no shot back (the enemy moved or took cover) and not
+			# pinned: every couple of seconds look for a firing slot a short rush
+			# away; a long run in the open is worse than holding the shelter.
+			elif not exposed and phase=="SHELTERED" and member.has("cover_from") and member.target<0 and sim.time>=member.cover_until and moving<limit and sim.time>=u.get("drill_until",0.0) and sim.time-float(u.get("fired_on",-100.0))<2.0 and maxf(u.suppression,member.suppression)<=0.65:
+				member.cover_until=sim.time+2.0+member.index*0.15
+				var result:=find_slot(u,member,sim,threat,threats)
+				if result.get("fire",false) and route_length(member.pos,result.path)<=6.0:
+					clear(member)
+					assign(u,member,sim,result,bearing)
+					member.cover_until=sim.time+2.0+member.index*0.15
+					moving+=1
+					continue
 			if exposed or member.cover_goal.distance_to(u.pos)>LEASH or member.get("cover_blocked",0.0)>2.0 or (phase!="SHELTERED" and sim.time>member.get("cover_deadline",0.0)):
-				clear(member);member.cover_until=sim.time+1.0
+				clear(member);member.cover_until=sim.time+(0.0 if stale and exposed else 1.0)
 			else:continue
 		if sim.time<member.cover_until:continue
-		if moving>=limit:
+		# Contact drill, then bounding: one soldier rushes while the rest fire.
+		if moving>=limit or sim.time<u.get("drill_until",0.0):
 			member.cover_phase="OVERWATCH"
 			continue
 		var result:=find_slot(u,member,sim,threat,threats)
 		member.cover_until=sim.time+2.0+member.index*0.15
 		if result.is_empty():member.cover_phase="EXPOSED";continue
-		member.cover_goal=result.pos
-		member["cover_screened"]=not threat.is_empty() and not soft_cover(sim,result.pos) and not sim.terrain.line_clear(threat.pos,result.pos)
-		member.cover_path=result.path
-		member.cover_phase="SEEKING"
-		member.cover_blocked=0.0
-		member["cover_deadline"]=sim.time+12.0
+		assign(u,member,sim,result,bearing)
 		moving+=1
-		sim.events.append({"type":"decision","unit":u.id,"phase":"COVER","reason":"Soldier moving to shelter","pos":result.pos})
+
+static func assign(u:Dictionary,member:Dictionary,sim,result:Dictionary,bearing:Vector2) -> void:
+	member.cover_goal=result.pos
+	member["cover_screened"]=result.screened
+	member["cover_from"]=bearing
+	member.cover_path=result.path
+	member.cover_phase="SEEKING"
+	member.cover_blocked=0.0
+	member["cover_deadline"]=sim.time+12.0
+	sim.events.append({"type":"decision","unit":u.id,"phase":"COVER","reason":"Soldier moving to shelter","pos":result.pos})
+
+static func route_length(from:Vector2,route:Array) -> float:
+	var length:=0.0
+	for point in route:length+=from.distance_to(point);from=point
+	return length
 
 static func find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threats:Array=[]) -> Dictionary:
 	var t0:int=Time.get_ticks_usec() if sim.profiling else 0
@@ -106,13 +161,10 @@ static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 		for i in int(length/1.3):
 			var t:=(i+0.5)*1.3
 			points.append(zone.rect.position+(Vector2(t,zone.rect.size.y/2) if long_x else Vector2(zone.rect.size.x/2,t)))
+	var nearby:Array=[]
 	for point in points:
 		if point.distance_to(u.pos)>LEASH:continue
 		if not sim.terrain.cover(point) or not sim.terrain.traversable(point,"land",0.8):continue
-		# Vegetation/rubble offer abstract partial protection. A wall slot must
-		# actually screen the observed threat rather than reward its exposed face.
-		var soft:bool=soft_cover(sim,point)
-		if not soft and threats.any(func(contact):return sim.terrain.line_clear(contact.pos,point)):continue
 		var reserved:=false
 		for other in occupants:
 			if not sim.alive(other) or sim.definitions[other.kind].domain!="land":continue
@@ -124,10 +176,22 @@ static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 				if point.distance_to(peer.pos)<1.65 or (other.team==u.team and peer.cover_goal!=Vector2.ZERO and point.distance_to(peer.cover_goal)<1.65):reserved=true
 		if reserved:continue
 		var score:float=member.pos.distance_to(point)
-		if not threat.is_empty():
-			if not sim.terrain.line_clear(threat.pos,point):score-=3.0
-			if point.distance_to(threat.pos)<member.pos.distance_to(threat.pos)-2:score+=4.0
-		candidates.append({"pos":point,"score":score})
+		if not threat.is_empty() and point.distance_to(threat.pos)<member.pos.distance_to(threat.pos)-2:score+=4.0
+		nearby.append({"pos":point,"score":score})
+	nearby.sort_custom(func(a,b):return a.score<b.score)
+	# Line-of-fire rating (the costly part) for the nearest candidates only.
+	# Pinned soldiers want a screen; otherwise a slot with a shot at a known
+	# enemy (fire from cover) beats one that only hides.
+	var weapon:String=member_weapon(u,member)
+	var pinned:bool=maxf(u.suppression,member.suppression)>0.65
+	for entry in nearby.slice(0,RATED):
+		var rating:=rate(sim,entry.pos,threat,threats,weapon)
+		if not rating.ok:continue
+		var score:float=entry.score+2.5*rating.flank
+		if rating.screened and not threat.is_empty():score-=3.0
+		if rating.fire:score-=1.0 if pinned else 4.0
+		candidates.append({"pos":entry.pos,"score":score,"screened":rating.screened and not threat.is_empty() and not rating.soft,"fire":rating.fire})
+		if candidates.size()>=RATED_VALID:break
 	candidates.sort_custom(func(a,b):return a.score<b.score)
 	var radius:float=member.get("body_radius",0.8)
 	for candidate in candidates.slice(0,6):
@@ -142,8 +206,75 @@ static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 		for point in route:
 			if point.distance_to(u.pos)>LEASH:bounded=false
 			length+=previous.distance_to(point);previous=point
-		if bounded and length<=18:return {"pos":candidate.pos,"path":route}
+		if bounded and length<=18:return {"pos":candidate.pos,"path":route,"screened":candidate.screened,"fire":candidate.fire}
 	return {}
+
+# How a slot stands against the observed threats: screened from the main one,
+# a shot at a known enemy (fire from cover), and how many others see it.
+# Vegetation/rubble/trenches protect from any side. A wall slot must screen
+# the main threat, or be its corner (a side-step from screened) with a shot at
+# it, and must not lie open to a threat it cannot answer.
+static func rate(sim,point:Vector2,threat:Dictionary,threats:Array,weapon:String) -> Dictionary:
+	var soft:=soft_cover(sim,point)
+	var screened:=true
+	var fire:=false
+	var main_fire:=false
+	var flank:=0
+	for contact in ([threat] if threats.is_empty() and not threat.is_empty() else threats):
+		if not sees(sim,contact,point):continue
+		var answer:=answers(sim,weapon,point,contact)
+		fire=fire or answer
+		if is_same(contact,threat):
+			screened=false;main_fire=answer
+		else:
+			# Open to a threat it cannot answer: never behind a wall, and only
+			# reluctantly in vegetation/rubble.
+			flank+=1 if answer else 2
+			if not soft and not answer:return {"ok":false}
+	if not soft and not screened and not (main_fire and corner(sim,point,threat)):return {"ok":false}
+	return {"ok":true,"screened":screened,"fire":fire,"flank":flank,"soft":soft}
+
+# A side-step (and half a step back) from the slot is out of the threat's sight:
+# the soldier fires around the end of the wall rather than from its open face.
+static func corner(sim,point:Vector2,threat:Dictionary) -> bool:
+	var away:Vector2=(point-threat.pos).normalized()
+	for side in [1.0,-1.0]:
+		var duck:Vector2=point+away.orthogonal()*side*1.3+away*0.6
+		if sim.terrain.traversable(duck,"land",0.6) and not sim.terrain.line_clear(threat.pos,duck):return true
+	return false
+
+# Whether a threat can shoot at `point`: line of fire within its weapon reach
+# (synthetic threats reach everywhere).
+static func sees(sim,contact:Dictionary,point:Vector2) -> bool:
+	if contact.has("kind"):
+		var weapon:String=contact.kind if contact.get("members",[]).is_empty() else ("atgm" if contact.kind=="atgm" else "rifle")
+		var reach:float=float(sim.definitions[weapon].get("range",0.0))
+		if point.distance_squared_to(contact.pos)>reach*reach:return false
+	return sim.terrain.line_clear(contact.pos,point)
+
+# Whether a soldier at `point` can hit this contact (synthetic threats cannot be answered).
+static func answers(sim,weapon:String,point:Vector2,contact:Dictionary) -> bool:
+	if not contact.has("kind") or not sim.effective_weapon(weapon,contact.kind):return false
+	var reach:float=float(sim.definitions[weapon].range)
+	return point.distance_squared_to(contact.pos)<=reach*reach
+
+static func member_weapon(u:Dictionary,member:Dictionary) -> String:
+	return "atgm" if u.kind=="atgm" and member.index==0 else "rifle"
+
+# Threat weight: a vehicle or emplacement outweighs a single rifle.
+static func power(other:Dictionary) -> float:
+	if other.get("members",[]).is_empty():return 3.0
+	var living:=0
+	for member in other.members:
+		if member.hp>0:living+=1
+	return float(living)
+
+# Known threats from two clearly different bearings.
+static func crossfire(u:Dictionary,threats:Array) -> bool:
+	for i in threats.size():
+		for j in range(i+1,threats.size()):
+			if (threats[i].pos-u.pos).normalized().dot((threats[j].pos-u.pos).normalized())<0.3:return true
+	return false
 
 # Squadmates holding still (overwatch, sheltered) never yield, and a soldier may
 # not close within a shoulder's width of one, so a route brushing past one
@@ -223,6 +354,7 @@ static func halt_in_cover(u:Dictionary,sim,threat_dir:Vector2) -> bool:
 		member.cover_goal=result.pos;member.cover_path=result.path;member.cover_phase="SEEKING";member.cover_blocked=0.0
 		member["cover_screened"]=false;member["occupying"]=true;member["hold_facing"]=threat_dir
 		member.cover_until=sim.time+100000.0;member["cover_deadline"]=sim.time+100000.0
+		member["cover_from"]=Vector2.ZERO
 		any=true
 	if any:sim.events.append({"type":"decision","unit":u.id,"phase":"COVER","reason":"Section taking cover at halt","pos":u.pos})
 	return any

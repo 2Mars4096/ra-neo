@@ -13,6 +13,9 @@
 - Persistent battlefield remains: craters and scorch stamped into 64 m ground tiles. They are round, irregular and rimmed. Cost stays flat (0.002 ms with 3000 marks), uploads are capped at 2 tiles per frame (13 µs native), and debris is capped at 512 pieces, oldest replaced first. Fireballs have a hot core and dark edges.
 - Vehicle follow-ups: abandoned vehicles do not explode, wrecks give infantry cover, repair points restore tracks, gun and crew, and tanks and HE fell the 80 collision trees.
 - Cover-search fixes: wall sampling uses the building index, and routes blocked by still squadmates are rejected. test_garrison and test_regroup_recovery now pass.
+- Contact tactics: on first fire, soldiers drop within 0.5 s and return fire. They prefer corner and edge cover they can fire from, re-check shelters when a new threat appears, go prone in crossfire, crouch in shelter, and rush one at a time. engage_idle no longer pulls sections out of firing cover (`test_contact_drill`).
+- Re-crew or capture abandoned vehicles: right-click with an infantry section, about 4 s of work, and two soldiers board (`test_recrew`).
+- FPV drone HUD name, threat tag and dive pose. Craters use smooth B-spline sampling. Audio and presentation-cache timing tests are now robust to machine load.
 - Renderer: Metal/Mobile was benchmarked (engine p95 18.6 -> 10.9 ms) but kept off because colours wash out. The project stays on GL Compatibility.
 
 ## 2026-10-15 — Parallel round: vehicle routing, explosions, presentation cost, counter-drone and FPV swarms

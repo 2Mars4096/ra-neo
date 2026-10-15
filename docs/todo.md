@@ -56,12 +56,15 @@
 - [ ] Renderer: Metal/Mobile measured 2026-10-15: engine process p95 18.6 -> 10.9 ms, frame p95 unchanged (~26 ms, sim-bound); harbor looks identical but Canal Watch and effect colours wash out (linear vs sRGB colour pipeline). Stayed on GL Compatibility; recalibrate colours before switching.
 - [x] Explosion VFX: ~3x larger, layered flash/fireball/shockwave/debris/dust column, camera shake; native screenshot review loop.
 - [x] World damage: buildings (damaged -> breached -> collapsed rubble, garrison casualties), field works degrade under HE, boats (flooding/engine/fire), helicopters (forced landing/crash), drones fragile, HE destroys nearby props/trees.
-- [x] Vehicle follow-ups (re-crewing abandoned vehicles still open): abandoned vehicles should not explode; wreck cover for infantry; field repair of components.
+- [x] Vehicle follow-ups incl. re-crew/capture of abandoned vehicles: abandoned vehicles should not explode; wreck cover for infantry; field repair of components.
 - [x] Player-bought drone swarm strike (HUD purchase).
 - [x] Test failures fixed (garrison cover search; regroup counts occupying/in-contact cover within leash): garrison "halted section takes cover against buildings (1 of 3)"; regroup recovery (3) - design call: halted cover distance vs 2.8 m regroup limit.
-- [ ] Timing-only checks flaky under heavy machine load: test_audio synthesis <150 ms, test_presentation_cache frame counts (also fail on older commits under load).
+- [x] Timing checks made load-robust (test_audio calibrated, test_presentation_cache controlled clock).
+- [ ] Large group orders: issuing 16 units across the map still costs ~0.22-0.25 s on the click under load (was ~900 ms); test_hitches 250 ms check is marginal under heavy load. Consider spreading formation-slot/route setup across ticks.
 - [ ] Testing economy: restore normal supply (1600, 3/s) when testing ends.
 - [ ] Deferred by player: wounded marker / bleed-out countdown, rescue of stranded wounded.
+
+- [x] Smarter contact tactics: contact drill, fire-from-cover corner slots, shelter re-evaluation, crossfire prone, crouch in cover, one-at-a-time rushes.
 
 ## Next development priorities
 

@@ -243,6 +243,8 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 		member.cooldown-=dt
 		member.suppression=maxf(0,member.suppression-dt*0.12)
 		var offset:Vector2=member.offset
+		# Caught in the open by crossfire: spread to prone spacing.
+		if member.get("cover_phase","")=="EXPOSED" and u.get("crossfire",false):offset*=1.5
 		var desired:Vector2=u.pos+offset
 		if member.get("aiding",-1)>=0:
 			# Buddy aid: kneel beside the casualty; no shelter moves meanwhile.
@@ -608,3 +610,27 @@ static func prone_clear(u:Dictionary,member:Dictionary,sim) -> bool:
 			for peer in other.members:
 				if peer.hp>0 and not (other.id==u.id and peer.index==member.index) and member.pos.distance_to(peer.pos)<1.15+float(peer.get("body_radius",0.8)):return false
 	return true
+
+# Incoming fire (a near miss or hit raises section suppression) stamps
+# u.fired_on: the contact drill keeps soldiers low and Cover delays the rush.
+const CONTACT_LOW:=4.0
+static func note_fire(u:Dictionary,now:float) -> void:
+	if u.suppression>float(u.get("pressure_seen",0.0))+0.01 or float(u.last_hit)>float(u.get("hit_seen",-100.0)):u["fired_on"]=now
+	u["pressure_seen"]=u.suppression
+	u["hit_seen"]=u.last_hit
+
+# A soldier holding still goes flat under heavy suppression, or in crossfire
+# while not (yet) sheltered, where there is room. Callers pre-check the cheap
+# conditions; the room check scans every soldier, so a failed one is retried
+# twice a second.
+static func goes_flat(u:Dictionary,member:Dictionary,sim,contact:bool,phase:String) -> bool:
+	if not (maxf(member.suppression,u.suppression)>0.65 or (contact and u.get("crossfire",false) and phase!="SETTLING" and phase!="SHELTERED" and not member.get("in_trench",false))):return false
+	if member.posture=="PRONE":return true
+	if sim.time<float(member.get("prone_retry",0.0)):return false
+	if prone_clear(u,member,sim):return true
+	member["prone_retry"]=sim.time+0.5
+	return false
+
+# Recent incoming fire or lingering suppression: the section is in contact.
+static func in_contact(u:Dictionary,now:float) -> bool:
+	return now-float(u.get("fired_on",-100.0))<CONTACT_LOW or u.suppression>0.2

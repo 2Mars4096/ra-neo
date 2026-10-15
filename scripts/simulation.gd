@@ -954,6 +954,9 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		if Infantry.carrying(u):u.pos=(u.carry_from as Vector2).lerp(u.pos,Infantry.CARRY_SCALE)
 		u.erase("carry_from")
 	var eligible_by_weapon:Dictionary={}
+	var autonomy:bool=scenario.get("autonomy",false)
+	if autonomy:Infantry.note_fire(u,time)
+	var contact:bool=autonomy and Infantry.in_contact(u,time)
 	for member in u.members:
 		if member.hp<=0:continue
 		member["in_trench"]=terrain.dug_in(member.pos)
@@ -1009,29 +1012,36 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		member.target=target_id
 		if target.is_empty():
 			member.aim=0.0
-			if member.posture=="PRONE":
+			# In a trench or any shelter soldiers stay down behind the parapet;
+			# holding still in contact or alert (any cover phase) they keep low
+			# too (contact drill), flat when pinned or caught in crossfire.
+			var phase:String=member.get("cover_phase","")
+			var sheltered:bool=member.in_trench or phase=="SETTLING" or phase=="SHELTERED"
+			var still:bool=autonomy and member.travel<=0.003
+			var rest:String="CROUCHED" if sheltered or (still and (contact or phase!="")) else "STANDING"
+			if still and (maxf(member.suppression,u.suppression)>0.65 or (contact and u.get("crossfire",false))) and Infantry.goes_flat(u,member,self,contact,phase):rest="PRONE"
+			if member.posture=="PRONE" and rest!="PRONE":
 				member.posture="RISING"
 				member.posture_until=time+0.45
 			elif member.posture!="RISING" or time>=member.posture_until:
-				# In a trench or behind cover soldiers stay down behind the parapet.
-				var sheltered:bool=member.in_trench or (member.get("occupying",false) and member.get("cover_phase","") in ["SETTLING","SHELTERED"])
-				member.posture="CROUCHED" if sheltered else "STANDING"
+				member.posture=rest
 				if sheltered and member.has("hold_facing"):member.facing=member.facing.slerp(member.hold_facing,0.2).normalized()
-				member.body_radius=0.8
+				member.body_radius=1.15 if rest=="PRONE" else 0.8
 			continue
-		if scenario.get("autonomy",false):
+		if autonomy:
 			if member.posture=="RISING" and time<member.posture_until:
 				member.aim=0.0;member.state="RISING";continue
 			var pressure:float=maxf(member.suppression,u.suppression)
 			var desired_posture:="STANDING" if member.travel>0.003 else "CROUCHED"
-			if pressure>0.65 and member.travel<=0.003 and Infantry.prone_clear(u,member,self):desired_posture="PRONE"
+			if member.travel<=0.003 and (pressure>0.65 or (contact and u.get("crossfire",false))) and Infantry.goes_flat(u,member,self,contact,member.get("cover_phase","")):desired_posture="PRONE"
 			if desired_posture!=member.posture:
 				member.posture=desired_posture
 				member.posture_until=time+0.35
 				member.aim=0.0
 			if member.posture=="PRONE":member.body_radius=1.15
 			elif time>=member.posture_until:member.body_radius=0.8
-			if member.posture=="PRONE":member.state="PINNED";member.aim=0.0;continue
+			# Pinned soldiers stay flat; one prone by choice (crossfire) still fires.
+			if member.posture=="PRONE" and pressure>0.65:member.state="PINNED";member.aim=0.0;continue
 			if member.travel>0.003 or time<member.posture_until:
 				member.state="SETTLING";member.aim=0.0;continue
 			var direction:Vector2=(target.pos-member.pos).normalized()
@@ -1057,7 +1067,7 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		var proxy:Dictionary=u.duplicate()
 		proxy.kind=weapon
 		proxy.pos=member.pos
-		proxy["fire_height"]=0.75 if member.posture=="CROUCHED" else 0.95
+		proxy["fire_height"]=0.75 if member.posture=="CROUCHED" else (0.4 if member.posture=="PRONE" else 0.95)
 		proxy.suppression=maxf(u.suppression,member.suppression)
 		if hurt:proxy["accuracy"]=Infantry.LIGHT_ACCURACY
 		resolve_shot(proxy,target,(1.0 if weapon=="atgm" else 0.25)*(0.4 if u.kind=="engineer" else 1.0))

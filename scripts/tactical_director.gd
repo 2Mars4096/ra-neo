@@ -168,6 +168,12 @@ static func engage_idle(sim,u:Dictionary)->void:
 	var weapon:String=u.kind if u.members.is_empty() else ("atgm" if u.kind=="atgm" and sim.effective_weapon("atgm",enemy.kind) else "rifle")
 	var reach:float=float(sim.definitions[weapon].range)
 	if best<=reach*0.95 and sim.terrain.line_clear(u.pos,enemy.pos):return
+	# Soldiers settling into shelters that will see the enemy fire from cover,
+	# and a pinned section stays behind its shelters, rather than walking out.
+	for m in u.members:
+		if m.hp<=0 or m.get("cover_phase","") not in ["SEEKING","SETTLING","SHELTERED"]:continue
+		if u.suppression>0.65 and m.cover_phase=="SHELTERED":return
+		if m.cover_goal.distance_to(enemy.pos)<=reach and sim.terrain.line_clear(m.cover_goal,enemy.pos):return
 	var desired:Vector2=enemy.pos+(u.pos-enemy.pos).normalized()*reach*0.8
 	var post:Vector2=u.post
 	if desired.distance_to(post)>ENGAGE_LEASH:desired=post+(desired-post).limit_length(ENGAGE_LEASH)
