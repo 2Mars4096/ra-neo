@@ -18,6 +18,13 @@ const SITE_STATUS := {"queued":"QUEUED · Built next · RESUME = now","paused":"
 const SITE_LABELS := {"queued":"QUEUED","paused":"PAUSED","lost":"NO BUILDER","en_route":"EN ROUTE","off_site":"OFF SITE","pinned":"PINNED","regrouping":"REGROUPING"}
 # Building states from UnitAnimation.state shown over a selected section/vehicle.
 const BUILDING_STATES := ["ENTERING","GARRISONED","EXITING","BOMBARDING"]
+# Guide rows for field-ops scenarios: right-click and A-click special actions.
+const FIELD_ORDERS := [
+	["GARRISON","Infantry: right-click a building. Fire from windows; move to leave."],
+	["RE-CREW","Infantry: right-click an abandoned hull to crew it or capture it."],
+	["CLEAR","Engineers: right-click enemy wire, hedgehogs, sandbags or trench."],
+	["SHELL","Tanks and guns: A, then click a building. Others move alongside."],
+	["FPV / WORKS","FPV button, then click a seen enemy. Drag lays lines; T rotates."]]
 const UNIT_NAMES := {"rifle":"RIFLE SECTION","atgm":"AT TEAM","engineer":"ENGINEERS","tank":"MAIN BATTLE TANK","drone":"SCOUT UAV","helo":"GUNSHIP","boat":"CORVETTE","aa":"AIR DEFENSE","harvester":"HARVESTER","fpv_drone":"FPV DRONE"}
 var battle: Node3D
 var scenario_entries: Array[Dictionary] = []
@@ -362,6 +369,7 @@ func draw_top(sim) -> void:
 	if battle.paused and not battle.show_help and sim.result=="":
 		console_panel(pause_rect)
 		text_at("TACTICAL PAUSE",pause_rect.position+Vector2(21,20),13,TEAL,true)
+	if battle.cursor_hint!="" and not battle.show_help and sim.result=="":draw_cursor_hint()
 	if battle.show_help:draw_guide()
 	if sim.result!="":draw_result()
 
@@ -812,11 +820,22 @@ func draw_minimap(sim) -> void:
 	cv.draw_rect(minimap,LINE,false,1)
 	text_at("THEATER / CLICK TO PAN",minimap.position+Vector2(0,minimap.size.y+17),9,MUTED)
 
+# Small action tag beside the pointer (battle.refresh_cursor_hint sets the text).
+func draw_cursor_hint() -> void:
+	var at:=pointer()+Vector2(16,18)
+	var width:=font.get_string_size(battle.cursor_hint,HORIZONTAL_ALIGNMENT_LEFT,-1,12).x+16
+	# Drawn without console_panel: the tag follows the pointer and must not block clicks.
+	panel(Rect2(at,Vector2(width,22)),INK)
+	text_at(battle.cursor_hint,at+Vector2(8,16),12,ORANGE if battle.cursor_hint=="Shell" else TEAL,true)
+
 func draw_guide() -> void:
 	var w:=size.x
 	var h:=size.y
 	cv.draw_rect(Rect2(Vector2.ZERO,size),Color(0.035,0.043,0.035,0.87))
-	var r:=Rect2(w/2-350,h/2-252,700,504)
+	# Field scenarios add FIELD_ORDERS rows; the panel grows to keep them inside.
+	var field:bool=not battle.sim.field_ops.is_empty()
+	var extra:=FIELD_ORDERS.size()*28 if field else 0
+	var r:=Rect2(w/2-350,h/2-252-extra/2,700,504+extra)
 	panel(r,INK)
 	text_at("OPERATION  /  01",r.position+Vector2(34,38),12,TEAL,true)
 	text_at(battle.sim.scenario.name,r.position+Vector2(34,79),34,WHITE,true)
@@ -845,10 +864,11 @@ func draw_guide() -> void:
 		lines[4]=["ENGINEERS","Select engineers, pick a field work, click a visible site."]
 		lines[5]=["BUILDERS","Sites grow with engineers on site. Orders pause; RESUME keeps work."]
 		lines[6]=["SUPPORT","Aid posts treat soldiers, repair points mend vehicles. No revival."]
+		lines.append_array(FIELD_ORDERS)
 	for i in lines.size():
 		text_at(lines[i][0],r.position+Vector2(34,224+i*28),10,TEAL,true)
 		text_at(lines[i][1],r.position+Vector2(160,224+i*28),13,WHITE)
-	text_at("Arrows / screen edges pan  •  Wheel zoom  •  F focus  •  Space pause",r.position+Vector2(34,420),12,MUTED)
+	text_at("Arrows / screen edges pan  •  Wheel zoom  •  F focus  •  Space pause  •  M mute  •  F1 guide",r.position+Vector2(34,420+extra),12,MUTED)
 	# Modal buttons replace background hit targets.
 	hits.clear()
 	modal=true
@@ -865,7 +885,7 @@ func draw_guide() -> void:
 	var width:=(632.0-7.0*(count-1))/count
 	for i in count:
 		button("scenario:"+str(listed[i].index),listed[i].label,Rect2(r.position+Vector2(34+i*(width+7.0),119),Vector2(width,25)),true,active==listed[i].index)
-	button("begin","DEPLOY  →",Rect2(r.position+Vector2(34,446),Vector2(632,38)))
+	button("begin","DEPLOY  →",Rect2(r.position+Vector2(34,446+extra),Vector2(632,38)))
 
 func draw_result() -> void:
 	cv.draw_rect(Rect2(Vector2.ZERO,size),Color(0.035,0.043,0.035,0.82))

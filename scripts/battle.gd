@@ -5,6 +5,7 @@ const Visuals = preload("res://scripts/visuals.gd")
 const Effects = preload("res://scripts/effects.gd")
 const HUD = preload("res://scripts/hud.gd")
 const Motion = preload("res://scripts/unit_animation.gd")
+const StructureDamage = preload("res://scripts/structure_damage.gd")
 var sim := Sim.new()
 var art := Visuals.new()
 var effects := Effects.new()
@@ -37,6 +38,13 @@ var build_drag:=false
 var build_drag_start:=Vector2.ZERO
 var field_choice_cache:Dictionary={}
 var pointer:=Vector2(-1,-1)
+# Shift-queued special actions waiting for their section (see run_pending).
+var pending_actions:Array[Dictionary]=[]
+# Action the selection would take at the cursor ("Garrison", "Clear", ...).
+var cursor_hint:=""
+var hint_dirty:=false
+var hint_msec:=-1000
+const HINT_INTERVAL_MSEC:=100
 var site_watch:Dictionary={}
 var paused := true
 var show_help := true
@@ -364,6 +372,7 @@ func _physics_process(dt: float) -> void:
 			members.resize(unit.members.size())
 			for i in members.size():members[i]=unit.members[i].pos
 		sim.tick(dt)
+		if not pending_actions.is_empty():run_pending()
 		if benchmark and benchmark_ready and Time.get_ticks_msec()-bench_started>2000:
 			sim_costs.append((Time.get_ticks_usec()-start)/1000.0)
 
@@ -385,6 +394,7 @@ func _process(dt: float) -> void:
 		shown_fog_density=density
 		atmosphere.fog_density=density
 	toast_time=maxf(0,toast_time-dt)
+	if hint_dirty and Time.get_ticks_msec()-hint_msec>=HINT_INTERVAL_MSEC:refresh_cursor_hint()
 	marker_time=maxf(0,marker_time-dt)
 	marker.visible=marker_time>0
 	if marker.visible:
@@ -687,63 +697,37 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		notify("Field structures are fixed • select a section to move")
 		attack_mode=false
 		return
-	# Right-click an abandoned vehicle with infantry selected: the nearest
-	# section climbs in (re-crew; an enemy hull is captured).
-	if enemy<0 and not attack:
-		var hull:Dictionary=sim.VehicleDamage.abandoned_at(sim,destination)
-		if not hull.is_empty() and sim.VehicleDamage.order_recrew(sim,ids,hull.id)>0:
-			notify(("Section moving to capture the enemy %s" if hull.team!=0 else "Section moving to re-crew the %s") % sim.VehicleDamage.LABEL.get(hull.kind,str(hull.kind).capitalize()))
-			ping()
-			return
-	# Right-click an obstacle (enemy wire/hedgehogs/sandbags/trench, or a
-	# finished own work) with engineers selected: clear it.
-	if not attack and not sim.field_ops.is_empty():
-		var obstacle_id:=enemy if enemy>=0 else pick(p)
-		var obstacle:Dictionary=sim.get_unit(obstacle_id) if obstacle_id>=0 else {}
-		var own_unfinished:bool=not obstacle.is_empty() and obstacle.team==0 and float(obstacle.get("build_left",0.0))>0
-		if not obstacle.is_empty() and not own_unfinished and sim.FieldOps.can_clear(sim,obstacle):
-			var sappers:Array=ids.filter(func(id):return sim.get_unit(id).kind=="engineer")
-			if not sappers.is_empty():
-				if sim.FieldOps.clear_site(sim,obstacle_id,int(sappers[0])):
-					notify("Engineers clearing %s" % HUD.FIELD_LABELS.get(obstacle.kind,"obstacle"))
-					ping()
-				else:notify(str(sim.field_ops.get("last_build_error","Cannot clear this")))
+	# Right-click special actions (re-crew, clear, resume, garrison) and A-click
+	# shelling go to the sections able to do them; the rest of a mixed selection
+	# takes the normal order to the clicked point. Shift queues the action behind
+	# a busy section's current orders (pending_actions).
+	var note:=""
+	var plan:=special_plan(p,enemy,attack,ids)
+	if not plan.is_empty():
+		var now:Array=plan.units.filter(func(id):return not queued or sim.get_unit(id).orders.is_empty())
+		var later:Array=plan.units.filter(func(id):return not now.has(id))
+		var acted:Array=run_action(plan,now) if not now.is_empty() else []
+		for id in later:pending_actions.append({"action":plan.action,"target":plan.target,"unit":id,"group":int(sim.get_unit(id).command_group)})
+		var rest:Array=ids.filter(func(id):return not plan.units.has(id))
+		if acted.is_empty() and later.is_empty():
+			note=action_failure(plan)
+			if note!="" and rest.is_empty():
+				notify(note)
+				attack_mode=false
 				return
-	# Right-click an unfinished friendly work with engineers selected: build it.
-	if enemy<0 and not attack and not sim.field_ops.is_empty():
-		var site_id:=pick(p)
-		var site:Dictionary=sim.get_unit(site_id) if site_id>=0 else {}
-		if not site.is_empty() and is_structure(site) and float(site.get("build_left",0.0))>0:
-			var engineers:Array=ids.filter(func(id):return sim.get_unit(id).kind=="engineer")
-			if not engineers.is_empty():
-				if sim.FieldOps.resume(sim,site_id,int(engineers[0])):
-					notify("Engineers resuming construction")
-					ping()
-				else:notify(str(sim.field_ops.get("last_build_error","Cannot resume this site")))
-				return
-	# Attack-click (A) a city building with HE-armed vehicles: shell it.
-	if attack and enemy<0 and not sim.field_ops.is_empty():
-		var target_building:int=building_under(p)
-		if target_building>=0:
-			var shelling:int=preload("res://scripts/structure_damage.gd").bombard(sim,ids,target_building)
-			attack_mode=false
-			if shelling>0:
-				notify("%d unit%s shelling the building" % [shelling,"" if shelling==1 else "s"])
+		else:
+			note=action_note(plan,acted.size(),later.size())
+			if rest.is_empty():
+				notify(note)
 				ping()
+				attack_mode=false
 				return
-	# Right-click a city building with infantry selected: garrison it.
-	if enemy<0 and not attack and not sim.field_ops.is_empty():
-		var building:int=building_under(p)
-		if building>=0:
-			var infantry:Array=selected.filter(func(id):return sim.Garrison.can_garrison(sim,sim.get_unit(id)))
-			var sent:int=sim.Garrison.order(sim,infantry,building)
-			if sent>0:
-				notify("%d section%s entering building • fire from windows · move to leave" % [sent,"" if sent==1 else "s"])
-				ping()
-				return
-			if not infantry.is_empty():
-				notify("Building full or no doorway reachable")
-				return
+		if note!="":ids=ids.filter(func(id):return not acted.has(id) and not later.has(id))
+		# A building's interior has no route: the others close up at its approach.
+		if plan.action in ["garrison","shell"]:
+			var approach:=building_approach(int(plan.target),ids)
+			if approach.x>=0:destination=approach
+	var lead:=note+" • " if note!="" else ""
 	var mode:="attack" if enemy>=0 else ("attack_move" if attack else "move")
 	# Immobilised hulls (tracks/engine out) cannot move: say so and move the rest.
 	var stuck:Array=[] if mode=="attack" else ids.filter(func(id):return sim.get_unit(id).get("mobility_kill",false) and sim.definitions[sim.get_unit(id).kind].domain!="air")
@@ -752,14 +736,14 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		var hull:Dictionary=sim.get_unit(stuck[0])
 		stuck_note=("%s immobilised · cannot move" % sim.VehicleDamage.LABEL.get(hull.kind,str(hull.kind).capitalize())) if stuck.size()==1 else "%d vehicles immobilised · cannot move" % stuck.size()
 		if stuck.size()==ids.size():
-			notify(stuck_note)
+			notify(lead+stuck_note)
 			attack_mode=false
 			return
 		ids=ids.filter(func(id):return not stuck.has(id))
 	var before:=active_sites()
 	var count:=sim.issue(ids,destination,mode,queued,enemy)
 	if count==0:
-		notify(sim.order_feedback)
+		notify(lead+sim.order_feedback)
 	else:
 		if sim.order_adjusted:
 			for id in ids:
@@ -769,10 +753,124 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 					break
 		marker.position=Vector3(destination.x,0.1,destination.y)
 		marker_time=1.0
-		notify(("Nearest accessible position" if sim.order_adjusted else ("Queued" if queued else "Order confirmed"))+" • %d / %d sections" % [count,ids.size()]+release_note(before))
-		if stuck_note!="":notify(stuck_note+" • %d / %d moving" % [count,ids.size()+stuck.size()])
+		notify(lead+("Nearest accessible position" if sim.order_adjusted else ("Queued" if queued else "Order confirmed"))+" • %d / %d sections" % [count,ids.size()]+release_note(before))
+		if stuck_note!="":notify(lead+stuck_note+" • %d / %d moving" % [count,ids.size()+stuck.size()])
 		ping()
 	attack_mode=false
+
+# The special action a click at p gives the selection (re-crew, clear, resume,
+# shell, garrison; first match wins) or {} for a plain move/attack. units are
+# the sections that would carry it out; label is the cursor hint.
+func special_plan(p:Vector2,enemy:int,attack:bool,ids:Array) -> Dictionary:
+	if enemy<0 and not attack:
+		var hull:Dictionary=sim.VehicleDamage.abandoned_at(sim,world_pos(p))
+		if not hull.is_empty():
+			var crew:=-1
+			var nearest:=INF
+			for id in ids:
+				var section:Dictionary=sim.get_unit(id)
+				if sim.VehicleDamage.can_recrew(sim,section) and section.pos.distance_squared_to(hull.pos)<nearest:
+					crew=id
+					nearest=section.pos.distance_squared_to(hull.pos)
+			if crew>=0:return {"action":"recrew","target":hull.id,"units":[crew],"label":"Capture" if hull.team!=0 else "Re-crew","name":sim.VehicleDamage.LABEL.get(hull.kind,str(hull.kind).capitalize()),"enemy":hull.team!=0}
+	if sim.field_ops.is_empty():return {}
+	if not attack:
+		var engineers:Array=ids.filter(func(id):return sim.get_unit(id).kind=="engineer")
+		var work_id:=enemy if enemy>=0 else pick(p)
+		var work:Dictionary=sim.get_unit(work_id) if work_id>=0 and not engineers.is_empty() else {}
+		var unfinished:bool=not work.is_empty() and work.team==0 and float(work.get("build_left",0.0))>0
+		if not work.is_empty() and not unfinished and sim.FieldOps.can_clear(sim,work):
+			return {"action":"clear","target":work_id,"units":engineers.slice(0,1),"label":"Clear","name":HUD.FIELD_LABELS.get(work.kind,"obstacle")}
+		if enemy<0 and unfinished and is_structure(work):
+			return {"action":"resume","target":work_id,"units":engineers.slice(0,1),"label":"Build"}
+	if enemy>=0:return {}
+	var building:int=building_under(p)
+	if building<0:return {}
+	var able:Array=ids.filter(func(id):return can_shell(sim.get_unit(id))) if attack else ids.filter(func(id):return sim.Garrison.can_garrison(sim,sim.get_unit(id)))
+	if able.is_empty():return {}
+	return {"action":"shell" if attack else "garrison","target":building,"units":able,"label":"Shell" if attack else "Garrison"}
+
+# Open ground beside a building for the given sections: the doorway nearest
+# their centre, wide enough for the largest of them.
+func building_approach(building:int,ids:Array) -> Vector2:
+	var centre:=Vector2.ZERO
+	var radius:=0.0
+	for id in ids:
+		var u:Dictionary=sim.get_unit(id)
+		centre+=u.pos
+		radius=maxf(radius,float(sim.definitions[u.kind].radius))
+	if ids.is_empty():return Vector2(-1,-1)
+	return sim.Garrison.entry_point(sim,building,centre/ids.size(),radius)
+
+# HE-armed mobile units StructureDamage.bombard accepts.
+func can_shell(u:Dictionary) -> bool:
+	if not sim.alive(u) or not u.members.is_empty() or StructureDamage.he_spec(sim,u).is_empty():return false
+	var d:Dictionary=sim.definitions[u.kind]
+	return not d.get("strike",false) and not d.get("structure",false) and float(d.speed)>0.0
+
+# Carries out a special action now; returns the sections that took it.
+func run_action(plan:Dictionary,units:Array) -> Array:
+	var target:int=int(plan.target)
+	match plan.action:
+		"recrew":return units.slice(0,1) if sim.VehicleDamage.order_recrew(sim,units.slice(0,1),target)>0 else []
+		"clear":return units.slice(0,1) if sim.FieldOps.clear_site(sim,target,int(units[0])) else []
+		"resume":return units.slice(0,1) if sim.FieldOps.resume(sim,target,int(units[0])) else []
+		"shell":
+			StructureDamage.bombard(sim,units,target)
+			return units.filter(func(id):return int(sim.get_unit(id).get("bombard",-1))==target)
+		"garrison":
+			sim.Garrison.order(sim,units,target)
+			return units.filter(func(id):return int(sim.get_unit(id).get("garrison_target",-1))==target)
+	return []
+
+func action_note(plan:Dictionary,now:int,later:int) -> String:
+	var queued:=" · %d after current orders" % later if later>0 else ""
+	match plan.action:
+		"recrew":
+			var text:=("capture the enemy %s" if plan.enemy else "re-crew the %s") % plan.name
+			return "Section moving to "+text if now>0 else "Queued: "+text+" after current orders"
+		"clear":return "Engineers clearing %s" % plan.name if now>0 else "Queued: engineers clear %s after current orders" % plan.name
+		"resume":return "Engineers resuming construction" if now>0 else "Queued: engineers resume construction after current orders"
+		"shell":
+			if now==0:return "Queued: %d unit%s shell the building after current orders" % [later,"" if later==1 else "s"]
+			return "%d unit%s shelling the building" % [now,"" if now==1 else "s"]+queued
+	if now==0:return "Queued: %d section%s enter the building after current orders" % [later,"" if later==1 else "s"]
+	return "%d section%s entering building • fire from windows · move to leave" % [now,"" if now==1 else "s"]+queued
+
+# Refusal toast; "" lets the click fall through to a normal order for everyone.
+func action_failure(plan:Dictionary) -> String:
+	match plan.action:
+		"garrison":return "Building full or no doorway reachable"
+		"clear":return str(sim.field_ops.get("last_build_error","Cannot clear this"))
+		"resume":return str(sim.field_ops.get("last_build_error","Cannot resume this site"))
+	return ""
+
+# Shift-queued special actions start once the section's orders run out. A new
+# direct order (new command group), Stop (orders and intent cleared) or death
+# drops them. Polled per sim tick; the list is usually empty.
+func run_pending() -> void:
+	for i in range(pending_actions.size()-1,-1,-1):
+		var job:Dictionary=pending_actions[i]
+		var u:Dictionary=sim.get_unit(int(job.unit))
+		if not sim.alive(u) or int(u.command_group)!=int(job.group) or (u.orders.is_empty() and u.intent.is_empty()):
+			pending_actions.remove_at(i)
+			continue
+		if not u.orders.is_empty():continue
+		pending_actions.remove_at(i)
+		if run_action(job,[job.unit]).is_empty():
+			var reason:=action_failure(job)
+			notify(reason if reason!="" else "Queued action no longer possible")
+
+# Cursor action hint for the hovered target, recomputed on input at most every
+# HINT_INTERVAL_MSEC (never per frame on its own).
+func refresh_cursor_hint() -> void:
+	hint_dirty=false
+	hint_msec=Time.get_ticks_msec()
+	cursor_hint=""
+	if selected.is_empty() or show_help or sim.result!="" or build_mode!="" or strike_mode or dragging or pointer.x<0 or hud.action_at(pointer)!="":return
+	var ids:=orderable()
+	if ids.is_empty():return
+	cursor_hint=str(special_plan(pointer,pick(pointer,true),attack_mode,ids).get("label",""))
 
 func ui_action(action: String, p: Vector2) -> void:
 	match action:
@@ -944,6 +1042,7 @@ func _input(event: InputEvent) -> void:
 	if not is_instance_valid(hud):
 		return
 	if event is InputEventMouse:pointer=event.position
+	if event is InputEventMouse or event is InputEventKey:hint_dirty=true
 	if event is InputEventMagnifyGesture:
 		if not show_help and sim.result=="" and hud.action_at(event.position)=="":
 			request_zoom(1.0/maxf(event.factor,0.01))
