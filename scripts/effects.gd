@@ -380,6 +380,7 @@ var _live_clock:=0.0
 var _live_wreck_seen:Dictionary={} # unit id -> effects time the wreck was first seen
 var _live_tilts:Dictionary={} # unit id -> root Node3D carrying a damage pose
 var _live_tilt_units:Array[Dictionary]=[]
+var live_paused:=false # explicit pause for watch() hosts; battle.gd's own `paused` is read from the parent
 # Ground point under the view centre, ground radius of the view (INF: no culling) and a zoom LOD factor.
 var view_focus:=Vector3.ZERO
 var view_radius:=INF
@@ -1148,7 +1149,14 @@ func _update_live(dt:float) -> void:
 		_live_clock=LIVE_SCAN
 		_live_scan(sim)
 	_update_live_tilts()
+	if live_paused or _host_paused():return # particles already out finish; no new ones while the battle is paused
 	for e in live_emitters:_live_emit(sim,e,dt)
+
+# battle.gd's pause (and help overlay) freezes the sim; its benchmark runs regardless.
+func _host_paused() -> bool:
+	var host:=get_parent()
+	if host==null or host.get("benchmark")==true:return false
+	return host.get("paused")==true or host.get("show_help")==true
 
 # Damage pose on flooding and falling hulls; roots that no longer qualify are levelled once.
 func _update_live_tilts() -> void:
@@ -1156,7 +1164,7 @@ func _update_live_tilts() -> void:
 	var posed:={}
 	for u in _live_tilt_units:
 		var root=live_nodes.get(u.id)
-		if not is_instance_valid(root) or not (root is Node3D):continue
+		if not is_instance_valid(root) or not (root is Node3D) or root.has_meta("sink_from"):continue # battle.gd sinks it
 		if _visuals_script==null:_visuals_script=load("res://scripts/visuals.gd")
 		_visuals_script.apply_damage_pose(root,u)
 		posed[u.id]=root
@@ -1167,7 +1175,7 @@ func _reset_live_tilts(keep:Dictionary) -> void:
 	for id in _live_tilts:
 		if keep.has(id):continue
 		var root=_live_tilts[id]
-		if is_instance_valid(root) and root.basis!=Basis.IDENTITY:root.basis=Basis.IDENTITY
+		if is_instance_valid(root) and not root.has_meta("sink_from"):_visuals_script.apply_damage_pose(root,{}) # levels the root and its selection ring
 	if keep.is_empty():_live_tilts={}
 
 func _live_emit(sim, e:Dictionary, dt:float) -> void:

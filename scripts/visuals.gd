@@ -799,7 +799,21 @@ static func damage_pose(u:Dictionary)->Basis:
 	forward=forward.normalized() if forward.length_squared()>0.0001 else Vector3.FORWARD
 	return Basis(forward,list)*Basis(forward.cross(Vector3.UP),trim)
 
-# Writes only on change, so a settled root is not re-notified every frame.
+# Writes only on change, so a settled root is not re-notified every frame. The
+# root's "Selection" ring is counter-posed so it stays flat on the ground/water
+# under the root origin; its local height (battle.gd writes position.y) is kept,
+# so the two writers never fight. apply_damage_pose(root,{}) levels both.
 static func apply_damage_pose(root:Node3D,u:Dictionary)->void:
 	var pose:=damage_pose(u)
 	if not root.basis.is_equal_approx(pose):root.basis=pose
+	var ring:=root.get_node_or_null("Selection") as Node3D
+	if ring!=null:level_ring(ring,pose)
+
+static func level_ring(ring:Node3D,pose:Basis)->void:
+	var flat:=pose.inverse().get_rotation_quaternion()
+	if not ring.quaternion.is_equal_approx(flat):ring.quaternion=flat # keeps the ring's scale
+	# Local x/z that cancel the pose's horizontal lean of the ring's height offset.
+	var h:=ring.position.y
+	var det:=pose.x.x*pose.z.z-pose.z.x*pose.x.z
+	var offset:=Vector3(h*(pose.z.x*pose.y.z-pose.y.x*pose.z.z)/det,h,h*(pose.y.x*pose.x.z-pose.x.x*pose.y.z)/det)
+	if not ring.position.is_equal_approx(offset):ring.position=offset

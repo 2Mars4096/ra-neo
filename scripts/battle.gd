@@ -508,6 +508,10 @@ func sync_units(dt: float) -> void:
 			node.visible=true
 			if not node.has_meta("wreck_shown"):show_wreck(node,u)
 			continue
+		# A lost boat that was on screen slips under over SINK_SECONDS of sim time, then hides.
+		if u.kind=="boat" and not sim.alive(u):
+			sink_boat(node,u)
+			continue
 		# Fallen soldiers of a destroyed section stay where they fell.
 		node.visible=(sim.alive(u) or sim.Infantry.has_remains(u)) and u.visible
 		if not node.visible:
@@ -563,6 +567,28 @@ func sync_units(dt: float) -> void:
 
 	contact_shadows.multimesh.visible_instance_count=contact_shadow_count
 	contact_shadows.visible=camera_size>45.0 and contact_shadow_count>0
+
+# Settles stern-first and drops SINK_DEPTH below where it died; no new nodes or
+# materials, and hidden for good once under, so draw cost stays flat. Frozen while paused.
+const SINK_SECONDS:=3.0
+const SINK_DEPTH:=3.2
+const SINK_TRIM:=0.32
+func sink_boat(node:Node3D,u:Dictionary)->void:
+	if not node.has_meta("sink_from"):
+		if not node.visible:return # died unseen or already gone
+		# Keeps the flooding list it died with; effects.gd stops posing a root once it carries sink_from.
+		var forward:=Vector3(u.facing.x,0,u.facing.y)
+		var trim_axis:=forward.normalized().cross(Vector3.UP) if forward.length_squared()>0.0001 else Vector3.RIGHT
+		node.set_meta("sink_from",[float(sim.time),node.position,node.basis,trim_axis])
+		node.get_meta("selection").visible=false
+	if not node.visible:return
+	var start:Array=node.get_meta("sink_from")
+	var t:=clampf((float(sim.time)-float(start[0]))/SINK_SECONDS,0.0,1.0)
+	if t>=1.0:
+		node.visible=false
+		return
+	Motion.set_position(node,(start[1] as Vector3)+Vector3.DOWN*SINK_DEPTH*t*t)
+	Motion.set_basis(node,Basis(start[3],SINK_TRIM*t)*(start[2] as Basis))
 
 func _make_contact_shadows()->void:
 	contact_shadows=MultiMeshInstance3D.new()

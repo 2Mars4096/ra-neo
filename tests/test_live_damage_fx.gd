@@ -80,6 +80,15 @@ func run()->void:
 	var black:=dark_smoke(effects.volume,boat.pos,8.0)
 	check(flames>=1,"burning hull shows flame (%d)" % flames)
 	check(black>=4,"burning hull vents black smoke (%d)" % black)
+	# Paused: emitters keep their slots but spawn nothing new; particles already out finish.
+	effects.live_paused=true
+	effects.volume.clear();effects.glow.clear()
+	advance(effects,1.0)
+	check(mode_of(effects,boat.id)==Effects.LIVE_FIRE,"paused: burning hull keeps its emitter")
+	check(effects.volume.live==0 and effects.glow.live==0,"paused: no new flame or smoke (%d volume, %d glow)" % [effects.volume.live,effects.glow.live])
+	effects.live_paused=false
+	advance(effects,1.0)
+	check(near(effects.volume,Effects.FIRE,boat.pos,4.0)+dark_smoke(effects.volume,boat.pos,8.0)>=1,"unpaused: burning hull vents again")
 	boat.fire_until=sim.time-1.0
 	advance(effects,1.0)
 	check(mode_of(effects,boat.id)<0,"fire out: emitter released")
@@ -108,6 +117,25 @@ func run()->void:
 	loose.damage_smoke(Vector3(10,1,10),0.1)
 	check(loose.volume.live>0,"unbound: legacy damage_smoke still emits")
 	loose.free()
+
+	# --- the selection ring stays flat and under the hull while the root carries a damage pose
+	var stage:=Node3D.new();root.add_child(stage)
+	var posed:Node3D=Visuals.new().make_unit(stage,boat)
+	var ring:Node3D=posed.get_node("Selection")
+	ring.position.y=0.91 # battle.gd: 0.13 above the water for a hull riding 0.78 low
+	posed.position=Vector3(boat.pos.x,-0.78,boat.pos.y)
+	boat.flood=1.0
+	Visuals.apply_damage_pose(posed,boat)
+	var hull_tilt:=rad_to_deg(posed.global_basis.y.angle_to(Vector3.UP))
+	var ring_tilt:=rad_to_deg(ring.global_basis.y.angle_to(Vector3.UP))
+	var ring_drift:=Vector2(ring.global_position.x-posed.global_position.x,ring.global_position.z-posed.global_position.z).length()
+	check(hull_tilt>10.0 and ring_tilt<0.5,"ring stays flat on a listing hull (hull %.1f, ring %.2f deg)" % [hull_tilt,ring_tilt])
+	check(ring_drift<0.01 and absf(ring.global_position.y-0.13)<0.05,"ring stays under the hull at the waterline (drift %.3f m, y %.2f)" % [ring_drift,ring.global_position.y])
+	check(ring.global_basis.get_scale().is_equal_approx(Vector3.ONE),"ring keeps its scale")
+	Visuals.apply_damage_pose(posed,{})
+	check(posed.basis==Basis.IDENTITY and ring.quaternion.is_equal_approx(Quaternion.IDENTITY) and ring.position.is_equal_approx(Vector3(0,0.91,0)),"levelling restores the ring")
+	stage.free()
+	boat.flood=0.0
 
 	# --- flooding: hull lists, settles and throws spray; sinking levels the root again
 	boat.flood=0.5;boat.flood_rate=0.03;boat.altitude=-0.65
@@ -227,8 +255,38 @@ func battle_checks()->void:
 	check(battle.effects.view_radius<200.0 and battle.effects.view_radius>10.0,"battle: view radius from the camera (%.1f)" % battle.effects.view_radius)
 	check(node!=null and rad_to_deg(node.basis.y.angle_to(Vector3.UP))>5.0,"battle: flooding hull node lists")
 	check(node!=null and node.position.y<-0.5,"battle: flooding hull sits low (y %.2f)" % (node.position.y if node else 0.0))
+	var ring:Node3D=node.get_node("Selection")
+	battle.selected=[boat.id]
+	for i in 3:await process_frame
+	check(ring.visible and rad_to_deg(ring.global_basis.y.angle_to(Vector3.UP))<0.5,"battle: selected listing hull keeps a flat ring (%.2f deg)" % rad_to_deg(ring.global_basis.y.angle_to(Vector3.UP)))
+	check(Vector2(ring.global_position.x-node.global_position.x,ring.global_position.z-node.global_position.z).length()<0.01 and absf(ring.global_position.y-0.13)<0.05,"battle: ring centred at the waterline (y %.2f)" % ring.global_position.y)
+	# Paused battle: the burning hull spawns nothing new.
+	battle.paused=true
+	await process_frame
+	battle.effects.volume.clear();battle.effects.glow.clear()
+	for i in 30:await process_frame
+	check(battle.effects.volume.live==0 and battle.effects.glow.live==0,"battle paused: no live damage spawns (%d volume, %d glow)" % [battle.effects.volume.live,battle.effects.glow.live])
+	battle.paused=false
+	for i in 30:await process_frame
+	check(battle.effects.volume.live>0,"battle unpaused: burning hull smokes again (%d)" % battle.effects.volume.live)
+	# Lost boat: slips under over SINK_SECONDS of sim time keeping its list, then hides.
+	boat.fire_until=-1.0
+	var died_at:float=sim.time
+	var top:=node.position.y
+	var list:=rad_to_deg(node.basis.y.angle_to(Vector3.UP))
 	boat.hp=0.0
-	for i in 20:await process_frame
-	check(node.basis==Basis.IDENTITY,"battle: lost hull root levelled")
+	while sim.time-died_at<1.5:await physics_frame
+	await process_frame
+	check(node.visible and not ring.visible,"battle: sinking hull still shown, ring hidden")
+	check(node.position.y<top-0.3,"battle: sinking hull drops (%.2f -> %.2f)" % [top,node.position.y])
+	check(rad_to_deg(node.basis.y.angle_to(Vector3.UP))>=list-0.5,"battle: sinking hull keeps its list, no snap level (%.1f -> %.1f deg)" % [list,rad_to_deg(node.basis.y.angle_to(Vector3.UP))])
+	var mid:=node.position.y
+	while sim.time-died_at<battle.SINK_SECONDS*0.9:await physics_frame
+	await process_frame
+	check(node.visible and node.position.y<mid,"battle: still going under at %.1f s (y %.2f)" % [sim.time-died_at,node.position.y])
+	while sim.time-died_at<battle.SINK_SECONDS+0.2:await physics_frame
+	await process_frame
+	check(not node.visible,"battle: sunk hull hidden after %.1f s" % battle.SINK_SECONDS)
+	check(node.get_child_count()==2,"battle: sinking adds no nodes (%d children)" % node.get_child_count())
 	battle.queue_free()
 	await process_frame
