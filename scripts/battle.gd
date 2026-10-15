@@ -745,6 +745,17 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 				notify("Building full or no doorway reachable")
 				return
 	var mode:="attack" if enemy>=0 else ("attack_move" if attack else "move")
+	# Immobilised hulls (tracks/engine out) cannot move: say so and move the rest.
+	var stuck:Array=[] if mode=="attack" else ids.filter(func(id):return sim.get_unit(id).get("mobility_kill",false) and sim.definitions[sim.get_unit(id).kind].domain!="air")
+	var stuck_note:=""
+	if not stuck.is_empty():
+		var hull:Dictionary=sim.get_unit(stuck[0])
+		stuck_note=("%s immobilised · cannot move" % sim.VehicleDamage.LABEL.get(hull.kind,str(hull.kind).capitalize())) if stuck.size()==1 else "%d vehicles immobilised · cannot move" % stuck.size()
+		if stuck.size()==ids.size():
+			notify(stuck_note)
+			attack_mode=false
+			return
+		ids=ids.filter(func(id):return not stuck.has(id))
 	var before:=active_sites()
 	var count:=sim.issue(ids,destination,mode,queued,enemy)
 	if count==0:
@@ -759,6 +770,7 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		marker.position=Vector3(destination.x,0.1,destination.y)
 		marker_time=1.0
 		notify(("Nearest accessible position" if sim.order_adjusted else ("Queued" if queued else "Order confirmed"))+" • %d / %d sections" % [count,ids.size()]+release_note(before))
+		if stuck_note!="":notify(stuck_note+" • %d / %d moving" % [count,ids.size()+stuck.size()])
 		ping()
 	attack_mode=false
 

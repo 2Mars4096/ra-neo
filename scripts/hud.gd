@@ -16,6 +16,8 @@ const FIELD_EFFECTS := {"tactical_cover":"Cover for infantry behind it","observa
 # Site conditions mirror the FieldOps.tick gates; none tells a pinned builder to move.
 const SITE_STATUS := {"queued":"QUEUED · Built next · RESUME = now","paused":"PAUSED · Press RESUME to continue","lost":"BUILDER LOST · RESUME with engineer","en_route":"EN ROUTE · Engineers heading to site","off_site":"OFF SITE · Engineers short of site","pinned":"PINNED · Work resumes as fire eases","regrouping":"REGROUPING · Engineers gathering","building":"BUILDING · Engineers at work"}
 const SITE_LABELS := {"queued":"QUEUED","paused":"PAUSED","lost":"NO BUILDER","en_route":"EN ROUTE","off_site":"OFF SITE","pinned":"PINNED","regrouping":"REGROUPING"}
+# Building states from UnitAnimation.state shown over a selected section/vehicle.
+const BUILDING_STATES := ["ENTERING","GARRISONED","EXITING","BOMBARDING"]
 const UNIT_NAMES := {"rifle":"RIFLE SECTION","atgm":"AT TEAM","engineer":"ENGINEERS","tank":"MAIN BATTLE TANK","drone":"SCOUT UAV","helo":"GUNSHIP","boat":"CORVETTE","aa":"AIR DEFENSE","harvester":"HARVESTER","fpv_drone":"FPV DRONE"}
 var battle: Node3D
 var scenario_entries: Array[Dictionary] = []
@@ -267,12 +269,25 @@ func draw_world(sim) -> void:
 			cv.draw_rect(Rect2(p+Vector2(-15,0),Vector2(30*maxf(0,u.hp/u.max_hp),4)),TEAL if u.team==0 else RED)
 		# Inbound strike drones are tagged so the threat reads before it dives.
 		if u.kind=="fpv_drone" and u.team!=0 and not selected:text_at("FPV",p+Vector2(-9,-7),9,RED,true)
+		var status_row:=false
 		if selected:
 			text_at("FPV" if u.kind=="fpv_drone" else str(u.kind).to_upper(),p+Vector2(-15,-7),9,TEAL,true)
+			status_row=true
 			if u.suppression>0.6:
 				text_at("PINNED",p+Vector2(-21,-20),10,ORANGE,true)
 			elif u.recovering:
 				text_at("REPAIR +",p+Vector2(-23,-20),10,TEAL,true)
+			elif BUILDING_STATES.has(u.get("visual_state","")):
+				var building_state:String=u.visual_state
+				text_at(building_state,p+Vector2(-font.get_string_size(building_state,HORIZONTAL_ALIGNMENT_LEFT,-1,10).x/2,-20),10,TEAL,true)
+			else:status_row=false
+		# Vehicle component damage (u.visible already hides unseen enemies); two
+		# tags at most in the world, the full list is in the selected-unit panel.
+		if u.has("crew"):
+			var tags:=damage_tags(sim,u)
+			if not tags.is_empty():
+				var tag:String=" · ".join(tags.slice(0,2))
+				text_at(tag,p+Vector2(-font.get_string_size(tag,HORIZONTAL_ALIGNMENT_LEFT,-1,9).x/2,-32 if status_row else -20),9,ORANGE if u.team==0 else RED,true)
 		if u.team==0 and u.suppression>0.1:
 			cv.draw_rect(Rect2(p+Vector2(-15,6),Vector2(30*u.suppression,2)),ORANGE)
 		if u.team==0 and float(u.get("build_left",0.0))>0:
@@ -283,6 +298,15 @@ func draw_world(sim) -> void:
 			if SITE_LABELS.has(condition):
 				var label:String=SITE_LABELS[condition]
 				text_at(label,p+Vector2(-font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,10).x/2,25),10,ORANGE,true)
+	# Abandoned hulls (dead, so skipped above) can be re-crewed or captured;
+	# an enemy hull is tagged only while its ground is in sight.
+	for wreck in sim.VehicleDamage.wrecks(sim):
+		var hull:Dictionary=sim.get_unit(int(wreck.id))
+		if not sim.VehicleDamage.recrewable(sim,hull):continue
+		if hull.team!=0 and not sim.visible_cells.has(sim.terrain.cell(hull.pos)):continue
+		var p:Vector2=battle.screen_pos(hull.pos,1.6)
+		if not battlefield_rect().has_point(p) or p.y<65:continue
+		text_at("ABANDONED",p+Vector2(-font.get_string_size("ABANDONED",HORIZONTAL_ALIGNMENT_LEFT,-1,9).x/2,0),9,MUTED,true)
 	if battle.dragging and battle.drag_start.distance_to(get_local_mouse_position())>5:
 		var rect := Rect2(battle.drag_start,get_local_mouse_position()-battle.drag_start).abs()
 		cv.draw_rect(rect,Color(0.68,0.76,0.48,0.09))
@@ -613,6 +637,7 @@ func draw_sidebar(sim) -> void:
 	button("attack","A  ATTACK-MOVE",Rect2(x+18,y+62,232,31),mobile,battle.attack_mode)
 	button("stop","S  HOLD",Rect2(x+18,y+99,113,29),mobile)
 	button("retreat","R  RETREAT",Rect2(x+137,y+99,113,29),mobile)
+	var tags:=damage_tags(sim,units[0]) if units.size()==1 else PackedStringArray()
 	if units.size()==1 and units[0].get("structure",false) and not sim.field_ops.is_empty():
 		var site:Dictionary=units[0]
 		var unfinished:=float(site.get("build_left",0.0))>0
@@ -639,7 +664,22 @@ func draw_sidebar(sim) -> void:
 		var queue:Array=units[0].get("queue",[])
 		text_at("QUEUE EMPTY" if queue.is_empty() else "%s · %.0fs (%d)" % [queue[0].kind.to_upper(),queue[0].left,queue.size()],Vector2(x+18,y+147),10,WHITE)
 		button("cancel_queue","CANCEL",Rect2(x+179,y+132,71,23),not queue.is_empty())
+	elif not tags.is_empty():text_at(fit_text(" · ".join(tags),234,10),Vector2(x+18,y+151),10,ORANGE,true)
 	else:text_at("SHIFT queue · F focus · Wheel zoom",Vector2(x+18,y+151),10,MUTED)
+
+# Component damage the player must read (vehicle_damage.gd state), most
+# important first. Infantry wounds are deliberately never labelled.
+static func damage_tags(sim,u:Dictionary) -> PackedStringArray:
+	var tags:=PackedStringArray()
+	if not u.has("crew"):return tags
+	if u.get("abandoned",false):tags.append("ABANDONED")
+	if u.has("crash"):tags.append("GOING DOWN")
+	if u.get("mobility_kill",false):tags.append("DAMAGED" if sim.definitions[u.kind].domain=="air" else "IMMOBILISED")
+	if u.get("firepower_kill",false):tags.append("GUN OUT")
+	if float(u.get("fire_until",-1.0))>sim.time:tags.append("ON FIRE")
+	if float(u.get("flood_rate",0.0))>0.0:tags.append("FLOODING")
+	if int(u.crew)<int(u.crew_full):tags.append("CREW %d/%d" % [int(u.crew),int(u.crew_full)])
+	return tags
 
 # Queued count badge plus a deployment timer on the unit at the head of the queue.
 func draw_queue_badge(sim,kind:String,tile:Rect2) -> void:

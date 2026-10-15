@@ -4,9 +4,15 @@ extends RefCounted
 static func state(u:Dictionary,sim,moving:bool=false) -> String:
 	if u.hp<=0:return "DESTROYED"
 	if u.kind=="fpv_drone":return FPV_STATES.get(u.state,"HOMING") # Autonomous munition: no orders.
+	# Building states (garrison.gd, structure_damage.gd) outrank the transient
+	# combat cues, which would otherwise hide them behind CYCLING/HOLDING.
+	var transit:String=u.get("garrison_transit","")
+	if transit!="":return "ENTERING" if transit=="IN" else "EXITING"
 	if u.recovering:return "RECOVERING"
 	if not u.orders.is_empty() and u.orders[0].mode=="retreat":return "WITHDRAWING"
 	if u.suppression>0.6:return "PINNED"
+	if int(u.get("garrison",-1))>=0:return "GARRISONED"
+	if u.has("bombard") and u.orders.is_empty():return "BOMBARDING"
 	if sim.time-float(u.get("last_hit",-100))<0.5:return "BRACING"
 	if sim.time-float(u.get("last_shot",-100))<0.24:return "FIRING"
 	if u.state=="AIMING":return "ACQUIRING"
