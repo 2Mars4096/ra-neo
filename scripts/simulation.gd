@@ -144,6 +144,7 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 	var formation: Dictionary = {}
 	var spacing: Dictionary = {}
 	var slots: Array[Dictionary] = []
+	terrain.begin_path_memo()
 	for id in ids:
 		var member:=get_unit(int(id))
 		if alive(member):
@@ -166,7 +167,10 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 			for obj in objectives:
 				if destination.distance_to(obj.pos)<2.0 and domain=="land": sector_order=true
 			if not sector_order:
+				# Candidate spots only need reachability, not a whole smoothed route.
+				terrain.path_probe=true
 				target=terrain.reachable_destination(u.pos,destination,domain,radius,terrain.mobility_profile(u.kind))
+				terrain.path_probe=false
 				if target.x<0:continue
 				order_adjusted=true
 		if mode != "attack" and ids.size() > 1:
@@ -184,12 +188,20 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 			target = enemy.pos
 			if not terrain.traversable(target, domain, radius):
 				target = attack_position(u, enemy)
+		# Over the tick's route budget, validate reachability only (grid search)
+		# and plan the route at the start of a later tick.
+		var planned:=take_route_budget(u.pos,target)
 		if mode!="attack":
+			terrain.path_probe=not planned
 			target=formation_slot(target,u,slots)
+			terrain.path_probe=false
 			if target.x<0: continue
-		var route := terrain.path(u.pos, target, domain,radius,standing_bodies(u,u.pos,target,ids),terrain.mobility_profile(u.kind))
-		if route.is_empty():route=terrain.path(u.pos, target, domain,radius,[],terrain.mobility_profile(u.kind))
-		if route.is_empty():
+		var route:Array=[]
+		if planned:
+			route=order_route(u,target,ids)
+			if route.is_empty():
+				continue
+		elif mode=="attack" and not terrain.reachable(u.pos,target,domain,radius,terrain.mobility_profile(u.kind)):
 			continue
 		if not queued:
 			FieldOps.pause_builder(self,u.id)
@@ -198,6 +210,7 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 			u.command_group=command_serial
 			u.orders.clear()
 			u.path.clear()
+			u.erase("route_pending")
 		if u.orders.size() >= 12:
 			continue
 		var order := {"mode":mode,"pos":target,"target":target_id}
@@ -205,11 +218,91 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 		if u.orders.size()==1:u.intent=order.duplicate()
 		slots.append({"pos":target,"radius":crowd_radius(u.kind),"layer":collision_layer(u)})
 		if u.orders.size() == 1:
-			u.path = route
+			if planned:u.path = route
+			else:defer_route(u,"order")
 		u.state = "ADVANCING" if mode == "attack_move" else "MOVING"
 		accepted += 1
+	terrain.end_path_memo()
 	return accepted
 
+# Route planning budget. A cross-map route costs ~20 ms of GDScript, so each
+# tick spends a fixed, deterministic amount of planning: ROUTE_BUDGET units
+# (~ms, estimated 1 + length/40 per route) for routes planned on the spot, and
+# ROUTE_QUEUE_WORK string-pull checks for queued routes, which plan
+# incrementally at the start of each tick, first come first served. Routes over
+# budget queue (deferrable callers) or retry next tick; an urgent caller may
+# still take the first route of a tick. Short tactical hops are never deferred.
+const ROUTE_BUDGET:=14.0
+const ROUTE_FREE_DISTANCE:=16.0
+const ROUTE_QUEUE_WORK:=180
+const ROUTE_SEARCH_WORK:=40 # a queued route's grid search, in check units
+const ROUTE_WORK_PER_UNIT:=14 # string-pull checks per budget unit
+var route_budget:=ROUTE_BUDGET
+var route_queue:Array=[]
+
+func route_cost(from:Vector2,to:Vector2)->float:
+	var distance:=from.distance_to(to)
+	return 0.0 if distance<ROUTE_FREE_DISTANCE else 1.0+distance/40.0
+
+# Charges the budget and returns true when a route may be planned now.
+func take_route_budget(from:Vector2,to:Vector2,urgent:bool=false)->bool:
+	var cost:=route_cost(from,to)
+	if cost<=0.0:return true
+	if cost>route_budget and not (urgent and route_budget>=ROUTE_BUDGET):return false
+	route_budget-=cost
+	return true
+
+# Ordered route: around standing friendlies when possible, else plain terrain.
+func order_route(u:Dictionary,target:Vector2,ignore:Array=[])->Array:
+	var d:Dictionary=definitions[u.kind]
+	var route:Array=terrain.path(u.pos,target,d.domain,float(d.radius),standing_bodies(u,u.pos,target,ignore),terrain.mobility_profile(u.kind))
+	if route.is_empty():route=terrain.path(u.pos,target,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind))
+	return route
+
+# The unit holds (path empty) until its queued route is ready. mode "order"
+# plans like issue(), "direct" like a resumed objective (terrain only).
+func defer_route(u:Dictionary,mode:String)->void:
+	u.path=[]
+	u["route_pending"]={"mode":mode,"order":u.orders[0]}
+	if not route_queue.has(u.id):route_queue.append(u.id)
+
+func route_waiting(u:Dictionary)->bool:
+	var pending:Dictionary=u.get("route_pending",{})
+	return not pending.is_empty() and u.path.is_empty() and u.maneuver.is_empty() and not u.orders.is_empty() and is_same(u.orders[0],pending.order)
+
+func plan_queued_routes()->void:
+	var work:=ROUTE_QUEUE_WORK
+	while not route_queue.is_empty() and work>0:
+		var u:=get_unit(int(route_queue[0]))
+		if not alive(u) or not route_waiting(u):
+			if not u.is_empty():u.erase("route_pending")
+			route_queue.pop_front()
+			continue
+		var pending:Dictionary=u.route_pending
+		var d:Dictionary=definitions[u.kind]
+		var goal:Vector2=u.orders[0].pos
+		if not pending.has("job"):
+			var bodies:Array=standing_bodies(u,u.pos,goal) if pending.mode=="order" else []
+			pending.around=not bodies.is_empty()
+			pending.job=terrain.path_job(u.pos,goal,d.domain,float(d.radius),bodies,terrain.mobility_profile(u.kind))
+			work-=ROUTE_SEARCH_WORK
+		var job:Dictionary=pending.job
+		var before:int=job.work
+		var done:=terrain.path_job_step(job,maxi(0,work))
+		work-=job.work-before
+		if not done:break
+		if job.result.is_empty() and pending.around:
+			# As issue(): without a way around standing friendlies, plan on terrain.
+			pending.around=false
+			pending.job=terrain.path_job(u.pos,goal,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind))
+			work-=ROUTE_SEARCH_WORK
+			continue
+		route_queue.pop_front()
+		u.erase("route_pending")
+		u.path=job.result
+		# As when a route runs out: the order completes and the next one plans.
+		if u.path.is_empty():finish_order(u)
+	route_budget-=float(ROUTE_QUEUE_WORK-work)/ROUTE_WORK_PER_UNIT
 
 func attack_position(u:Dictionary,enemy:Dictionary)->Vector2:
 	var d:Dictionary=definitions[u.kind]
@@ -714,6 +807,9 @@ func fpv_detonate(u:Dictionary,d:Dictionary) -> void:
 			else:losses+=1
 	events.append({"type":"destroyed","kind":u.kind,"pos":origin,"visible":seen})
 
+# Weather re-weighting of cached nav grids, in cells per tick (~1 ms); a
+# full 256x192 grid catches up in 4 ticks.
+const NAV_WEIGHT_CELLS_PER_TICK:=12288
 # Opt-in phase timing for profiling tools (off in play).
 var profiling:=false
 var profile:Dictionary={}
@@ -732,6 +828,9 @@ func tick(dt: float) -> void:
 	time += dt
 	weather=Weather.sample(time,scenario.get("autonomy",false))
 	terrain.wetness=weather.wetness
+	terrain.advance_navigation_weights(NAV_WEIGHT_CELLS_PER_TICK)
+	route_budget=ROUTE_BUDGET
+	plan_queued_routes()
 	recruit_clock = maxf(0, recruit_clock-dt)
 	sensor_clock -= dt
 	if profiling:lap=_lap("setup+spatial",lap)
@@ -978,9 +1077,15 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			finish_order(u)
 			return
 		if contact_known(u,target) and terrain.traversable(target.pos, d.domain,float(d.radius)):
-			order.pos = target.pos
-			u.path = terrain.path(u.pos, order.pos, d.domain,float(d.radius),[],terrain.mobility_profile(u.kind))
-		u.repath = 1.0
+			# Over budget: keep the current route and retry next tick.
+			if take_route_budget(u.pos,target.pos,true):
+				order.pos = target.pos
+				u.path = terrain.path(u.pos, order.pos, d.domain,float(d.radius),[],terrain.mobility_profile(u.kind))
+				u.repath = 1.0
+		else:u.repath = 1.0
+	if route_waiting(u):
+		u.speed_now=move_toward(u.speed_now,0.0,dt*8.0)
+		return
 	while not u.path.is_empty() and u.pos.distance_to(u.path[0])<0.1:u.path.pop_front()
 	if u.path.is_empty():
 		finish_order(u)
@@ -994,7 +1099,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			u["stall_pos"]=u.pos;u["stall_at"]=time
 		u["stall_seen"]=time
 		stalled=time-float(u.stall_at)>2.0
-	if (u.blocked_time>1.5 or stalled) and u.repath<=0:
+	if (u.blocked_time>1.5 or stalled) and u.repath<=0 and take_route_budget(u.pos,order.pos,true):
 		var avoid:Array=[]
 		var keep_right:Array=[]
 		for other in movement_neighbors(u):
@@ -1213,10 +1318,8 @@ func finish_order(u: Dictionary) -> void:
 	u.path.clear()
 	if not u.orders.is_empty():
 		u.intent=u.orders[0].duplicate()
-		var domain:String=definitions[u.kind].domain
-		var radius:float=float(definitions[u.kind].radius)
-		u.path = terrain.path(u.pos, u.orders[0].pos, domain,radius,standing_bodies(u,u.pos,u.orders[0].pos),terrain.mobility_profile(u.kind))
-		if u.path.is_empty():u.path=terrain.path(u.pos, u.orders[0].pos, domain,radius,[],terrain.mobility_profile(u.kind))
+		if take_route_budget(u.pos,u.orders[0].pos):u.path=order_route(u,u.orders[0].pos)
+		else:defer_route(u,"order")
 
 func update_objectives(dt: float) -> void:
 	for obj in objectives:

@@ -16,6 +16,9 @@ static func plan(sim,u:Dictionary,pos:Vector2,phase:String,reason:String,duratio
 	for other in sim.units:
 		if other.id==u.id or not sim.alive(other) or other.team!=u.team:continue
 		if not other.maneuver.is_empty() and pos.distance_to(other.maneuver.pos)<float(d.radius)+float(sim.definitions[other.kind].radius)+0.4:return false
+	# Over the tick's route budget the maneuver is not taken now; the next
+	# decision (<1 s) reconsiders it.
+	if route_hint.is_empty() and not sim.take_route_budget(u.pos,pos,true):return false
 	var t0:int=Time.get_ticks_usec() if sim.profiling else 0
 	var route:Array=route_hint if not route_hint.is_empty() else sim.terrain.path(u.pos,pos,d.domain,d.radius,[],sim.terrain.mobility_profile(u.kind))
 	if sim.profiling:sim._lap("director_path",t0)
@@ -35,6 +38,9 @@ static func resume(sim,u:Dictionary,reason:String="Regrouping toward objective")
 	u.next_decision=sim.time+5.0
 	u.commit_until=sim.time+5.0
 	if not u.orders.is_empty():
+		if not sim.take_route_budget(u.pos,u.orders[0].pos):
+			sim.defer_route(u,"direct")
+			return
 		var d:Dictionary=sim.definitions[u.kind]
 		var t0:int=Time.get_ticks_usec() if sim.profiling else 0
 		u.path=sim.terrain.path(u.pos,u.orders[0].pos,d.domain,d.radius,[],sim.terrain.mobility_profile(u.kind))

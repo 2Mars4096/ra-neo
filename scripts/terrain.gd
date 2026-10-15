@@ -42,6 +42,12 @@ var navigation_weights:Dictionary={}
 var navigation_weight_epoch:=0
 var navigation_weight_wetness:=0.0
 var navigation_weights_initialized:=false
+# Per-cell soil class cache and per-profile layer progress (columns built).
+var navigation_surface:=PackedByteArray()
+var navigation_surface_columns:=0
+var navigation_weight_columns:Dictionary={}
+# Set once a simulation drives advance_navigation_weights() each tick.
+var incremental_weights:=false
 var dynamic_blocks:Array[Rect2]=[]
 var field_cover:Array[Rect2]=[]
 # Completed non-solid engineer works: {rect, speed:{profile:x}, cover:[classes], conceal}.
@@ -176,13 +182,24 @@ func ground_speed(p:Vector2,profile:String="default") -> float:
 	return zone*_base_ground_speed(p,profile)
 
 func _base_ground_speed(p:Vector2,profile:String) -> float:
-	if on_road(p):return 1.0
+	return _surface_speed(_surface_class(p),profile)
+
+# Soil class (index into SURFACES). Classifying is the costly part of ground
+# speed; navigation caches it per cell so weather re-weights are table lookups.
+const SURFACES:=["road","mud","rough","open"]
+func _surface_class(p:Vector2)->int:
+	if on_road(p):return 0
+	if mud.has_point(p):return 1
+	return 2 if cover(p,false) else 3
+
+func _surface_speed(surface:int,profile:String)->float:
+	if surface==0:return 1.0
 	if not MOBILITY.has(profile):
-		if mud.has_point(p):return 0.5*(1.0-wetness*0.25)
-		return (0.7 if cover(p,false) else 1.0)*(1.0-wetness*0.12)
-	var surface:="mud" if mud.has_point(p) else ("rough" if cover(p,false) else "open")
+		if surface==1:return 0.5*(1.0-wetness*0.25)
+		return (0.7 if surface==2 else 1.0)*(1.0-wetness*0.12)
 	var factors:Dictionary=MOBILITY[profile]
-	return float(factors[surface])*(1.0-wetness*float(factors["wet_"+surface]))
+	var name:String=SURFACES[surface]
+	return float(factors[name])*(1.0-wetness*float(factors["wet_"+name]))
 
 # Detection multiplier for land units under engineer camouflage.
 func concealment(p:Vector2) -> float:
@@ -440,29 +457,79 @@ func update_field_geometry(blocks:Array,covers:Array)->bool:
 	# Other showcase scenarios derive surface roughness from dynamic blocks.
 	if not changed.is_empty() and style=="showcase" and not field_mode:
 		navigation_weights.clear()
+		navigation_surface_columns=0
 		navigation_weights_initialized=false
 		navigation_weight_epoch+=1
 		navigation_weight_wetness=wetness
 		navigation_wetness_bucket=int(wetness*4)
 	return not changed.is_empty()
 
-func _navigation_weight_layer(profile:String)->PackedFloat32Array:
-	if navigation_weights.has(profile):return navigation_weights[profile]
+# Surface classes of nav columns [0,end). Reset navigation_surface_columns
+# whenever soil/cover geometry changes; weather alone never invalidates it.
+func _surface_upto(end:int)->void:
+	if navigation_surface.size()!=nav_size.x*nav_size.y:
+		navigation_surface.resize(nav_size.x*nav_size.y);navigation_surface_columns=0
+	for x in range(navigation_surface_columns,end):
+		for y in nav_size.y:navigation_surface[x*nav_size.y+y]=_surface_class(nav_center(Vector2i(x,y)))
+	navigation_surface_columns=maxi(navigation_surface_columns,end)
+
+# Weight layer of a profile with columns [0,end) priced at the band's wetness
+# sample: a table lookup per cell, exact ground_speed inside field zones.
+func _weight_layer_upto(profile:String,end:int)->PackedFloat32Array:
+	var weights:PackedFloat32Array
+	if navigation_weights.has(profile):weights=navigation_weights[profile]
+	else:
+		weights.resize(nav_size.x*nav_size.y)
+		navigation_weight_columns[profile]=0
+	var start:int=navigation_weight_columns.get(profile,0)
+	navigation_weights_initialized=true
+	if start>=end:
+		navigation_weights[profile]=weights
+		return weights
+	_surface_upto(end)
 	# All lazily requested profiles use the same wetness sample as the first
 	# query of this band, preserving the previous eager refresh's weights.
 	var live_wetness:=wetness
 	wetness=navigation_weight_wetness
-	var weights:=PackedFloat32Array();weights.resize(nav_size.x*nav_size.y)
-	for x in nav_size.x:
-		for y in nav_size.y:weights[x*nav_size.y+y]=1.0/ground_speed(nav_center(Vector2i(x,y)),profile)
+	var inverse:=PackedFloat64Array()
+	for surface in SURFACES.size():inverse.append(1.0/_surface_speed(surface,profile))
+	var rows:=nav_size.y
+	for x in range(start,end):
+		for i in range(x*rows,x*rows+rows):weights[i]=inverse[navigation_surface[i]]
+	for zone in field_zones:
+		var rect:Rect2=zone.rect
+		for x in range(maxi(start,floori(rect.position.x/nav_cell_size)),mini(end,ceili(rect.end.x/nav_cell_size)+1)):
+			for y in range(maxi(0,floori(rect.position.y/nav_cell_size)),mini(rows,ceili(rect.end.y/nav_cell_size)+1)):
+				var point:=nav_center(Vector2i(x,y))
+				if rect.has_point(point):weights[x*rows+y]=1.0/ground_speed(point,profile)
 	wetness=live_wetness
 	navigation_weights[profile]=weights
-	navigation_weights_initialized=true
+	navigation_weight_columns[profile]=end
 	return weights
 
-func nav_grid(domain: String, radius: float, profile:String="default") -> AStarGrid2D:
-	_ensure_static_index()
-	if domain!="land":profile="default"
+func _navigation_weight_layer(profile:String)->PackedFloat32Array:
+	return _weight_layer_upto(profile,nav_size.x)
+
+# Copy layer columns [resume,end) into a cached grid; complete at nav_size.x.
+func _refresh_grid_weights(grid:AStarGrid2D,profile:String,end:int)->void:
+	if grid.get_meta("weight_epoch",-1)==navigation_weight_epoch:return
+	var start:=_grid_weight_column(grid)
+	if start<end:
+		var weights:=_weight_layer_upto(profile,end)
+		var rows:=nav_size.y
+		for x in range(start,end):
+			for y in rows:grid.set_point_weight_scale(Vector2i(x,y),weights[x*rows+y])
+	if end>=nav_size.x:grid.set_meta("weight_epoch",navigation_weight_epoch)
+	else:
+		grid.set_meta("weight_pending",navigation_weight_epoch)
+		grid.set_meta("weight_column",maxi(start,end))
+
+func _grid_weight_column(grid:AStarGrid2D)->int:
+	return grid.get_meta("weight_column",0) if grid.get_meta("weight_pending",-1)==navigation_weight_epoch else 0
+
+func _sync_weight_band(domain:String)->void:
+	var explicit:=navigation_weights.is_empty() and navigation_weights_initialized
+	if explicit:navigation_surface_columns=0
 	var bucket:=int(wetness*4)
 	if bucket!=navigation_wetness_bucket:
 		navigation_wetness_bucket=bucket
@@ -471,18 +538,46 @@ func nav_grid(domain: String, radius: float, profile:String="default") -> AStarG
 		navigation_weight_epoch+=1
 		navigation_weight_wetness=wetness
 	# Explicit weight-cache invalidation also starts a coherent new sample.
-	elif domain=="land" and navigation_weights.is_empty() and navigation_weights_initialized:
+	elif domain=="land" and explicit:
 		navigation_weight_epoch+=1
 		navigation_weight_wetness=wetness
 		navigation_weights_initialized=false
+
+# Simulation tick hook. Weather bands re-weight cached land grids a fixed number
+# of cells per tick (deterministic, never a whole-map stall inside one unit's
+# query). Until a grid catches up, paths price its remaining columns with the
+# previous band; solids are always current, so routes stay valid.
+const SURFACE_COST:=32 # classifying a cell costs ~32 weight writes
+func advance_navigation_weights(cells:int)->void:
+	incremental_weights=true
+	_sync_weight_band("land")
+	var columns:=maxi(1,cells/maxi(1,nav_size.y))
+	for key in navigation:
+		if str(key).get_slice(":",0)!="land":continue
+		var grid:AStarGrid2D=navigation[key]
+		if grid.get_meta("weight_epoch",-1)==navigation_weight_epoch:continue
+		var start:=_grid_weight_column(grid)
+		var end:=mini(nav_size.x,start+columns)
+		if navigation_surface_columns<end:
+			_surface_upto(mini(end,navigation_surface_columns+maxi(1,columns/SURFACE_COST)))
+			end=mini(end,navigation_surface_columns)
+			columns=0
+		if end>start:_refresh_grid_weights(grid,str(key).get_slice(":",2),end)
+		columns-=end-start
+		if columns<=0:return
+
+func nav_grid(domain: String, radius: float, profile:String="default") -> AStarGrid2D:
+	return _nav_grid(domain,radius,profile,true)
+
+# current=false (ticking simulations) returns a cached grid mid weather refresh.
+func _nav_grid(domain:String,radius:float,profile:String,current:bool)->AStarGrid2D:
+	_ensure_static_index()
+	if domain!="land":profile="default"
+	_sync_weight_band(domain)
 	var key:="%s:%.2f:%s" % [domain,radius,profile]
 	if navigation.has(key):
 		var cached:AStarGrid2D=navigation[key]
-		if domain=="land" and cached.get_meta("weight_epoch",-1)!=navigation_weight_epoch:
-			var updated:=_navigation_weight_layer(profile)
-			for x in nav_size.x:
-				for y in nav_size.y:cached.set_point_weight_scale(Vector2i(x,y),updated[x*nav_size.y+y])
-			cached.set_meta("weight_epoch",navigation_weight_epoch)
+		if domain=="land" and current:_refresh_grid_weights(cached,profile,nav_size.x)
 		return cached
 	var weights:=_navigation_weight_layer(profile) if domain=="land" else PackedFloat32Array()
 	var grid:=AStarGrid2D.new()
@@ -519,20 +614,31 @@ func segment_clear(a: Vector2, b: Vector2, domain: String, radius: float) -> boo
 	return true
 
 func nearest_cell(p: Vector2, grid: AStarGrid2D, domain: String, radius: float) -> Vector2i:
-	var base:=nav_cell(p)
-	var best:=Vector2i(-1,-1)
-	var distance:=INF
-	var anchors:Dictionary=grid.get_meta("anchors",{})
+	return _nearest_open(p,nav_cell(p),grid,grid.get_meta("anchors",{}),domain,radius,[])
+
+# Of the open cells in the 7x7 block around base, the one whose anchor is
+# nearest p (earliest in x-major scan order on ties) and reachable from p in a
+# clear straight line past `avoid`. Line checks run nearest-first and stop at
+# the first success: the same cell as testing every candidate, for a fraction
+# of the segment samples.
+func _nearest_open(p:Vector2,base:Vector2i,grid:AStarGrid2D,anchors:Dictionary,domain:String,radius:float,avoid:Array)->Vector2i:
+	var ids:Array[Vector2i]=[]
+	var distances:=PackedFloat64Array()
 	for x in range(base.x-3,base.x+4):
 		for y in range(base.y-3,base.y+4):
 			var id:=Vector2i(x,y)
 			if not grid.is_in_boundsv(id) or grid.is_point_solid(id): continue
-			var center:=_anchor(anchors,id)
-			var dist:=p.distance_squared_to(center)
-			if dist<distance and segment_clear(p,center,domain,radius):
-				distance=dist
-				best=id
-	return best
+			ids.append(id);distances.append(p.distance_squared_to(_anchor(anchors,id)))
+	while true:
+		var pick:=-1
+		var nearest:=INF
+		for i in distances.size():
+			if distances[i]<nearest:nearest=distances[i];pick=i
+		if pick<0:return Vector2i(-1,-1)
+		var point:=_anchor(anchors,ids[pick])
+		if avoids_bodies(p,point,avoid) and segment_clear(p,point,domain,radius):return ids[pick]
+		distances[pick]=INF
+	return Vector2i(-1,-1)
 
 # Project a click in open ground that is too tight for a whole unit. Never turn
 # a click inside a solid parcel, water, or outside the map into an implicit move.
@@ -550,16 +656,110 @@ func reachable_destination(from:Vector2, desired:Vector2, domain:String, radius:
 	return Vector2(-1,-1)
 
 func path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid:Array = [], profile:String="default") -> Array[Vector2]:
+	if path_probe and avoid.is_empty():
+		var reach:Array[Vector2]=[]
+		if reachable(from,to,domain,radius,profile):reach.append(to)
+		return reach
+	var key:=[from,to,domain,radius,profile]
+	var memo:=path_memo_active and avoid.is_empty()
+	if memo and path_memo.has(key):return path_memo[key].duplicate()
 	# Tracked vehicles plan straight through crushable street furniture.
 	crush_pass=domain=="land" and profile=="tracked"
+	var started:=Time.get_ticks_usec()
 	var planned:=_path(from,to,domain,radius,avoid,profile)
+	path_usec+=Time.get_ticks_usec()-started;path_calls+=1
 	crush_pass=false
+	if memo:path_memo[key]=planned.duplicate()
 	return planned
 
-func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid:Array = [], profile:String="default") -> Array[Vector2]:
-	var result: Array[Vector2] = []
+# Opt-in reuse of identical obstacle-free queries while the caller guarantees
+# that terrain and grids do not change (one command batch).
+var path_memo_active:=false
+var path_memo:Dictionary={}
+func begin_path_memo()->void:
+	path_memo_active=true;path_memo.clear();path_links.clear()
+func end_path_memo()->void:
+	path_memo_active=false;path_memo.clear();path_links.clear()
+
+# While set, obstacle-free path() calls only answer reachability ([to] or []):
+# lets a caller validate a destination now and plan the real route later.
+var path_probe:=false
+# Planning statistics for profiling tools.
+var path_calls:=0
+var path_usec:=0
+
+# Grid-search reachability without route smoothing (~1 ms instead of ~20 ms
+# for a cross-map route). Agrees with path() except in rare cases where a found
+# cell chain cannot be string-pulled.
+func reachable(from:Vector2,to:Vector2,domain:String,radius:float=-1,profile:String="default")->bool:
 	if radius<0: radius=default_radius(domain)
-	if not traversable(from,domain,radius) or not traversable(to,domain,radius): return result
+	crush_pass=domain=="land" and profile=="tracked"
+	var found:=_reachable(from,to,domain,radius,profile)
+	crush_pass=false
+	return found
+
+func _reachable(from:Vector2,to:Vector2,domain:String,radius:float,profile:String)->bool:
+	if not traversable(from,domain,radius) or not traversable(to,domain,radius):return false
+	if domain=="air" or segment_clear(from,to,domain,radius):return true
+	var grid:=_nav_grid(domain,radius,profile,not incremental_weights)
+	var start:=nearest_cell(from,grid,domain,radius)
+	var end:=nearest_cell(to,grid,domain,radius)
+	if start.x<0 or end.x<0:return false
+	if not path_memo_active:return not grid.get_id_path(start,end).is_empty()
+	# Within a batch the grid is fixed, so connectivity is transitive: link both
+	# ends to a cell of a route found earlier with short searches instead of a
+	# cross-map one (exact; a failed link falls back to the full search).
+	var links:Array=path_links.get_or_add(grid,[])
+	for linked in links:
+		if _linked(grid,start,linked) and _linked(grid,end,linked):return true
+	var ids:=grid.get_id_path(start,end)
+	if ids.is_empty():return false
+	var cells:=PackedVector2Array()
+	for id in ids:cells.append(Vector2(id))
+	links.append(cells)
+	return true
+
+var path_links:Dictionary={}
+func _linked(grid:AStarGrid2D,id:Vector2i,cells:PackedVector2Array)->bool:
+	var best:=Vector2.ZERO
+	var nearest:=INF
+	for cell in cells:
+		var distance:=Vector2(id).distance_squared_to(cell)
+		if distance<nearest:nearest=distance;best=cell
+	return nearest==0.0 or not grid.get_id_path(id,Vector2i(best)).is_empty()
+
+func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid:Array = [], profile:String="default") -> Array[Vector2]:
+	var job:=_path_begin(from,to,domain,radius,avoid,profile)
+	_path_smooth(job,-1)
+	return job.result
+
+# Resumable planning for budgeted callers. path_job() runs the grid search;
+# path_job_step() string-pulls with at most `work` look-ahead segment checks
+# per call. A job finished on unchanged terrain yields exactly path()'s route;
+# edges published in a later step are checked against the terrain of that step.
+func path_job(from:Vector2,to:Vector2,domain:String,radius:float=-1,avoid:Array=[],profile:String="default")->Dictionary:
+	crush_pass=domain=="land" and profile=="tracked"
+	var started:=Time.get_ticks_usec()
+	var job:=_path_begin(from,to,domain,radius,avoid,profile)
+	path_usec+=Time.get_ticks_usec()-started;path_calls+=1
+	crush_pass=false
+	return job
+
+func path_job_step(job:Dictionary,work:int)->bool:
+	if job.done:return true
+	crush_pass=job.domain=="land" and job.profile=="tracked"
+	var started:=Time.get_ticks_usec()
+	job.edges.clear() # terrain may have changed since the last step
+	_path_smooth(job,work)
+	path_usec+=Time.get_ticks_usec()-started
+	crush_pass=false
+	return job.done
+
+func _path_begin(from: Vector2, to: Vector2, domain: String, radius: float, avoid:Array, profile:String) -> Dictionary:
+	var result: Array[Vector2] = []
+	var job:={"done":true,"result":result,"work":0}
+	if radius<0: radius=default_radius(domain)
+	if not traversable(from,domain,radius) or not traversable(to,domain,radius): return job
 	var direct_clear:bool=(domain=="air" or segment_clear(from,to,domain,radius)) and avoids_bodies(from,to,avoid)
 	# Hulls cannot trace a line exactly (and footprints are sampled), so vehicle
 	# shortcuts keep a margin. Every published edge still clears the true radius.
@@ -567,13 +767,13 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 	var direct_roomy:bool=direct_clear and (room==radius or segment_clear(from,to,domain,room))
 	if direct_roomy and (domain!="land" or segment_travel_cost(from,to,domain,profile)<=from.distance_to(to)*1.01):
 		result.append(to)
-		return result
-	var grid:=nav_grid(domain,radius,profile)
+		return job
+	var grid:=_nav_grid(domain,radius,profile,not incremental_weights)
 	var start:=nearest_cell(from,grid,domain,radius)
 	var end:=nearest_cell(to,grid,domain,radius)
 	if start.x<0 or end.x<0:
 		if direct_clear:result.append(to)
-		return result
+		return job
 	var anchors:Dictionary=grid.get_meta("anchors",{})
 	var changed:Array[Vector2i]=[]
 	for body in avoid:
@@ -586,22 +786,16 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 	# The nearest cell center can be inside a neighboring body even when the
 	# actual position is clear. Pick a reachable center before asking AStar.
 	if not avoid.is_empty():
-		var safe_start:=Vector2i(-1,-1)
-		var best_distance:=INF
-		for x in range(maxi(0,start.x-3),mini(nav_size.x,start.x+4)):
-			for y in range(maxi(0,start.y-3),mini(nav_size.y,start.y+4)):
-				var candidate:=Vector2i(x,y)
-				var point:=_anchor(anchors,candidate)
-				if grid.is_point_solid(candidate) or not segment_clear(from,point,domain,radius) or not avoids_bodies(from,point,avoid):continue
-				if from.distance_squared_to(point)<best_distance:
-					best_distance=from.distance_squared_to(point);safe_start=candidate
+		var safe_start:=_nearest_open(from,start,grid,anchors,domain,radius,avoid)
 		if safe_start.x<0:
 			for id in changed:grid.set_point_solid(id,false)
 			if direct_clear:result.append(to)
-			return result
+			return job
 		start=safe_start
 	var ids:Array[Vector2i]=[]
 	var raw: Array[Vector2]=[]
+	# Edge checks repeat across anchor re-plans and smoothing: memoise them.
+	var edges:Dictionary={}
 	# An anchored cell can link to a neighbour across thin geometry. When such an
 	# edge fails, close its anchored cells for this query and plan again.
 	var skip:=0 if anchors.is_empty() else 2
@@ -611,7 +805,7 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 		for id in ids:raw.append(_anchor(anchors,id))
 		raw.append(to)
 		if ids.is_empty() or anchors.is_empty():break
-		var failed:=_first_blocked_edge(from,raw,domain,radius,avoid,skip)
+		var failed:=_first_blocked_edge(from,raw,domain,radius,avoid,skip,edges)
 		if failed<0:break
 		var closed:=false
 		# Last attempt: plan on cell centres only (the conservative grid).
@@ -625,19 +819,40 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 	for id in changed:grid.set_point_solid(id,false)
 	if ids.is_empty():
 		if direct_clear:result.append(to)
-		return result
-	# String-pull only where the whole footprint clears geometry.
-	var origin:=from
-	var index:=0
+		return job
+	job.merge({"done":false,"raw":raw,"origin":from,"index":0,"from":from,"to":to,"domain":domain,"radius":radius,"room":room,"avoid":avoid,"profile":profile,"skip":skip,"direct_clear":direct_clear,"direct_roomy":direct_roomy,"edges":edges},true)
+	return job
+
+# String-pull only where the whole footprint clears geometry. work<0: finish.
+func _path_smooth(job:Dictionary,work:int)->void:
+	if job.done:return
+	var result:Array[Vector2]=job.result
+	var raw:Array[Vector2]=job.raw
+	var from:Vector2=job.from
+	var to:Vector2=job.to
+	var domain:String=job.domain
+	var radius:float=job.radius
+	var room:float=job.room
+	var avoid:Array=job.avoid
+	var profile:String=job.profile
+	var skip:int=job.skip
+	var origin:Vector2=job.origin
+	var index:int=job.index
+	var spent:=0
 	while index<raw.size():
+		if work>=0 and spent>=work:
+			job.origin=origin;job.index=index;job.work+=spent
+			return
 		# Grid cells alone do not certify their connecting edges (or dynamic
 		# exclusions at the end cell). Never publish an unchecked first edge.
 		# Anchored routes may step over a node whose own edge clips a corner.
-		index=_reach(origin,raw,index,domain,radius,avoid,skip)
+		index=_reach(origin,raw,index,domain,radius,avoid,skip,job.edges)
+		spent+=1
 		if index<0:
 			result.clear()
-			if direct_clear:result.append(to)
-			return result
+			if job.direct_clear:result.append(to)
+			job.done=true;job.work+=spent
+			return
 		var furthest:=index
 		var raw_costs:Array[float]=[segment_travel_cost(origin,raw[index],domain,profile)]
 		# Bounded look-ahead keeps smoothing linear in route length. Find the
@@ -648,6 +863,7 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 		for next in range(index+1,mini(raw.size(),index+17)):
 			if origin.distance_to(raw[next])>60.0:break
 			raw_costs.append(raw_costs.back()+segment_travel_cost(raw[next-1],raw[next],domain,profile))
+			spent+=1
 			if not segment_clear(origin,raw[next],domain,room) or not avoids_bodies(origin,raw[next],avoid): break
 			visible=next
 		for next in range(visible,index,-1):
@@ -657,29 +873,35 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 		result.append(raw[furthest])
 		origin=raw[furthest]
 		index=furthest+1
-	if direct_roomy:
+	if job.direct_roomy:
 		var route_cost:=0.0
 		var previous:=from
 		for point in result:
 			route_cost+=segment_travel_cost(previous,point,domain,profile);previous=point
 		if segment_travel_cost(from,to,domain,profile)<=route_cost:
 			result.clear();result.append(to)
-	return result
+	job.done=true;job.work+=spent
 
 # First raw node at or up to `skip` nodes after index reachable from origin
-# with a clear footprint, or -1.
-func _reach(origin:Vector2,raw:Array[Vector2],index:int,domain:String,radius:float,avoid:Array,skip:int)->int:
+# with a clear footprint, or -1. `edges` memoises results for one query.
+func _reach(origin:Vector2,raw:Array[Vector2],index:int,domain:String,radius:float,avoid:Array,skip:int,edges:Dictionary)->int:
 	for next in range(index,mini(raw.size(),index+skip+1)):
-		if segment_clear(origin,raw[next],domain,radius) and avoids_bodies(origin,raw[next],avoid):return next
+		var key:=Vector4(origin.x,origin.y,raw[next].x,raw[next].y)
+		var clear:bool
+		if edges.has(key):clear=edges[key]
+		else:
+			clear=segment_clear(origin,raw[next],domain,radius) and avoids_bodies(origin,raw[next],avoid)
+			edges[key]=clear
+		if clear:return next
 	return -1
 
 # Index of the first raw node that cannot be reached from the route so far,
 # or -1 when the whole chain clears geometry and avoided bodies.
-func _first_blocked_edge(from:Vector2,raw:Array[Vector2],domain:String,radius:float,avoid:Array,skip:int)->int:
+func _first_blocked_edge(from:Vector2,raw:Array[Vector2],domain:String,radius:float,avoid:Array,skip:int,edges:Dictionary)->int:
 	var previous:=from
 	var index:=0
 	while index<raw.size():
-		var next:=_reach(previous,raw,index,domain,radius,avoid,skip)
+		var next:=_reach(previous,raw,index,domain,radius,avoid,skip,edges)
 		if next<0:return index
 		previous=raw[next];index=next+1
 	return -1
@@ -814,6 +1036,7 @@ func rebuild_static_index(invalidate_navigation:bool=true)->void:
 	_static_counts=[blocks.size(),roadside_blocks.size(),prop_blocks.size(),woods.size(),static_cover.size(),trees.size(),water_blocks.size()]
 	if invalidate_navigation:
 		navigation.clear();navigation_weights.clear()
+	navigation_surface_columns=0
 
 func _ensure_static_index()->void:
 	if _static_counts.is_empty() or _static_counts[0]!=blocks.size() or _static_counts[1]!=roadside_blocks.size() or _static_counts[2]!=prop_blocks.size() or _static_counts[3]!=woods.size() or _static_counts[4]!=static_cover.size() or _static_counts[5]!=trees.size() or _static_counts[6]!=water_blocks.size():rebuild_static_index()
