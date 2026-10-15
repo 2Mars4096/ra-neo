@@ -27,8 +27,12 @@ func _init()->void:
 	var all_designs:Array[String]=[]
 	var draws:=0
 	var vertices:=0
-	for scenario in scenarios:
+	for scenario_index in scenarios.size():
+		var scenario:Dictionary=scenarios[scenario_index]
 		if scenario.get("style","")!="showcase":continue
+		# Mirrors visuals.make_world: the harbor (scenario 6) builds city-building
+		# specs through make_harbor_world, not the parcel kit (test_harbor_visuals).
+		if scenario_index==6:continue
 		var profiles:Array=[]
 		for i in scenario.blocks.size():
 			var a:Array=scenario.blocks[i]

@@ -48,8 +48,20 @@ var counterattack_sent:=false
 var counterattack_ids:Array=[]
 var collision_checks := 0
 var spatial: Dictionary = {}
+# Units per bucket layer as of rebuild_spatial (a unit's layer never changes):
+# sparse layers (sea, air) are filtered directly instead of scanning cells.
+var spatial_layers:Array=[[],[],[],[]]
 var use_spatial_targeting:=true
 var spatial_targeting_threshold:=64
+# target_candidates: [section, spread bound] for sections whose soldiers stand
+# wider than SPREAD_NARROW from the anchor; wide_ids maps id -> entry index.
+var wide_sections:Array=[]
+var wide_ids:Dictionary={}
+var spread_serial:=-1
+var spatial_serial:=0 # Counts rebuild_spatial calls (once per tick).
+const SPREAD_NARROW:=4.0
+const SPREAD_SLACK:=1.0
+const NO_UNITS:=[] # Shared read-only default for empty spatial buckets.
 var use_actor_index:=true
 var actor_spatial:Dictionary={}
 var actor_radius_max:=1.15
@@ -431,7 +443,7 @@ func update_visibility() -> void:
 		if not alive(observer) or observer.get("build_left",0.0)>0 or comms_blocked(observer):
 			continue
 		var d: Dictionary = definitions[observer.kind]
-		var candidates:Array=range_candidates(observer.pos,float(d.sight)*float(weather.sight_scale)) if indexed else units
+		var candidates:Array=range_candidates(observer.pos,float(d.sight)*float(weather.sight_scale)+(Garrison.SIGHT_BONUS if Garrison.inside(observer) else 0.0)) if indexed else units
 		for target in candidates:
 			if not alive(target) or target.team == observer.team:
 				continue
@@ -1573,11 +1585,14 @@ func bucket(u:Dictionary) -> Vector3i:
 
 func rebuild_spatial() -> void:
 	spatial.clear()
+	spatial_serial+=1
+	for layer in spatial_layers:layer.clear()
 	for u in units:
 		if not alive(u):continue
 		var key:=bucket(u)
 		if not spatial.has(key):spatial[key]=[]
 		spatial[key].append(u)
+		spatial_layers[key.z].append(u)
 
 func target_candidates(u:Dictionary) -> Array:
 	# Direct fixture/tool calls may mutate positions outside a tick. Preserve
@@ -1586,20 +1601,68 @@ func target_candidates(u:Dictionary) -> Array:
 	var d:Dictionary=definitions[u.kind]
 	if float(d.damage)<=0 and u.members.is_empty():return []
 	var reach:float=float(d.range)*(Garrison.RANGE_SCALE if Garrison.inside(u) else 1.0)
+	var offset:=section_offset(u)
+	# Per-soldier fire reaches a target section through its soldiers, not its
+	# anchor. Buckets cover sections whose soldiers stand within SPREAD_NARROW of
+	# their anchor; the few wider ones (cover runs, window posts) are listed per
+	# tick with their spread. A section refreshes its entry when it queries,
+	# right after moving; SPREAD_SLACK covers the anchor nudge after that query
+	# (casualty carry). Extra candidates are harmless: the exhaustive path
+	# considers every unit, so only missing ones would change outcomes.
+	if spread_serial!=spatial_serial:
+		spread_serial=spatial_serial;wide_sections.clear();wide_ids.clear()
+		for other in units:
+			if alive(other):
+				var spread:float=section_offset(other)
+				if spread>SPREAD_NARROW:wide_ids[other.id]=wide_sections.size();wide_sections.append([other,spread+SPREAD_SLACK])
+	if wide_ids.has(u.id):wide_sections[wide_ids[u.id]][1]=maxf(wide_sections[wide_ids[u.id]][1],offset+SPREAD_SLACK)
+	elif offset>SPREAD_NARROW:wide_ids[u.id]=wide_sections.size();wide_sections.append([u,offset+SPREAD_SLACK])
+	var base:float=reach+offset
+	var outer:float=base+SPREAD_NARROW+SPREAD_SLACK
+	var result:Array=[]
+	# Sections are infantry: only the land layer (0) needs the wider scan.
+	for layer in 4:
+		var scan:float=outer if layer==0 else base
+		for other in layer_candidates(u.pos,scan,layer):
+			if not alive(other):continue
+			var gap:float=u.pos.distance_squared_to(other.pos)
+			if gap<=base*base or (gap<=outer*outer and not other.members.is_empty() and sqrt(gap)<=base+section_offset(other)):result.append(other)
+	# Wide sections beyond the scan; inside it the buckets already decided.
+	for entry in wide_sections:
+		var other:Dictionary=entry[0]
+		var gap:float=u.pos.distance_squared_to(other.pos)
+		var bound:float=base+float(entry[1])
+		if gap>outer*outer and gap<=bound*bound and alive(other):result.append(other)
+	result.sort_custom(func(a,b):return a.id<b.id)
+	return result
+
+# Farthest living soldier from the section anchor (0 for single bodies).
+func section_offset(u:Dictionary) -> float:
 	var offset:=0.0
 	for member in u.members:
-		if member.hp>0:offset=maxf(offset,member.pos.distance_to(u.pos))
-	return range_candidates(u.pos,reach+offset)
+		if member.hp>0:offset=maxf(offset,member.pos.distance_squared_to(u.pos))
+	return sqrt(offset)
 
 func range_candidates(origin:Vector2,radius:float) -> Array:
 	var result:Array=[]
-	for x in range(floori((origin.x-radius)/8),floori((origin.x+radius)/8)+1):
-		for y in range(floori((origin.y-radius)/8),floori((origin.y+radius)/8)+1):
-			for layer in 4:
-				for other in spatial.get(Vector3i(x,y,layer),[]):
-					if alive(other) and origin.distance_squared_to(other.pos)<=radius*radius:result.append(other)
+	for layer in 4:
+		for other in layer_candidates(origin,radius,layer):
+			if alive(other) and origin.distance_squared_to(other.pos)<=radius*radius:result.append(other)
 	# Preserve insertion-order ties and seeded combat outcomes across the optimization.
 	result.sort_custom(func(a,b):return a.id<b.id)
+	return result
+
+# Units of one bucket layer whose cells overlap the square around `origin`
+# (callers filter by distance and life): the cells, or the whole layer list
+# when it holds fewer units than the square has cells.
+func layer_candidates(origin:Vector2,radius:float,layer:int) -> Array:
+	var x0:=floori((origin.x-radius)/8);var x1:=floori((origin.x+radius)/8)
+	var y0:=floori((origin.y-radius)/8);var y1:=floori((origin.y+radius)/8)
+	var listed:Array=spatial_layers[layer]
+	if listed.size()<=(x1-x0+1)*(y1-y0+1):return listed
+	var result:Array=[]
+	for x in range(x0,x1+1):
+		for y in range(y0,y1+1):result.append_array(spatial.get(Vector3i(x,y,layer),NO_UNITS))
 	return result
 
 func movement_neighbors(u:Dictionary) -> Array:
