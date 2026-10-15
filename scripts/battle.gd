@@ -587,11 +587,30 @@ func consume_events() -> void:
 			var a:=Vector3(event.from.x,float(event.from_y),event.from.y)
 			var b:=Vector3(event.to.x,float(event.to_y),event.to.y)
 			effects.fire(event.kind,a,b,event.get("hit",true),sim.terrain.is_water(event.to),event.get("target_kind",""),sim.terrain.is_water(event.from))
+		elif event.type=="vehicle_damage" and event.team==0 and event.effect in ["recrewed","captured"]:
+			remap_recrew(event)
 		elif event.type=="destroyed" and event.visible:
 			var kind:String=event.get("kind","")
 			var height:=maxf(0.7,float(sim.definitions[kind].altitude)) if sim.definitions.has(kind) else 0.7
 			effects.destroyed(kind,Vector3(event.pos.x,height,event.pos.y),sim.terrain.is_water(event.pos))
 	sim.events.clear()
+
+# A re-crewed or captured vehicle is a new unit: wherever its old hull or the
+# boarding section was (selection, control groups), the vehicle joins, and the
+# hull (and a section that climbed in whole) drops out.
+func remap_recrew(event:Dictionary)->void:
+	var fresh:int=int(event.unit)
+	var section:int=int(event.get("section",-1))
+	var gone:Array=[int(event.get("from",-1))]
+	if not sim.alive(sim.get_unit(section)):gone.append(section)
+	selected=recrew_list(selected,fresh,[section]+gone,gone)
+	for key in groups:groups[key]=recrew_list(groups[key],fresh,[section]+gone,gone)
+
+func recrew_list(list:Array,fresh:int,sources:Array,gone:Array)->Array:
+	if not sources.any(func(id):return list.has(id)):return list
+	var out:Array=list.filter(func(id):return not gone.has(id))
+	if not out.has(fresh):out.append(fresh)
+	return out
 
 func notify(message: String) -> void:
 	toast=message

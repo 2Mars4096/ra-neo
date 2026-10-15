@@ -492,8 +492,54 @@ static func tick_recrew(sim,dt:float)->void:
 		section.reason="Re-crewing %d%%" % int(100.0*minf(1.0,float(job.done)/RECREW_SECONDS))
 		if float(job.done)>=RECREW_SECONDS:
 			jobs.remove_at(i)
-			_board(sim,section,hull)
+			var fresh:=_board(sim,section,hull)
+			# AI jobs: the vehicle and what is left of the section carry on.
+			if job.has("resume") and not fresh.is_empty():
+				sim.issue([fresh.id],job.resume.pos,job.resume.mode)
+				if sim.alive(section):sim.issue([section.id],job.resume.pos,job.resume.mode)
 	if jobs.is_empty():sim.remove_meta(RECREW)
+
+# Enemy AI (field_ops tick): a section near its own side's abandoned hull climbs
+# back in (an attacking one resumes its attack afterwards); an idle section
+# captures an abandoned opposing hull within ENEMY_RECREW_CAPTURE. Neither
+# starts under fire. Polled every ENEMY_RECREW_PERIOD s; returns jobs started.
+const ENEMY_RECREW_PERIOD:=2.0
+const ENEMY_RECREW_OWN:=15.0
+const ENEMY_RECREW_CAPTURE:=25.0
+const ENEMY_RECREW_CALM:=0.3
+const ENEMY_RECREW_QUIET:=4.0
+const RECREW_AI_NEXT:="vehicle_recrew_ai_next"
+static func enemy_recrew(sim,team:int=1)->int:
+	if sim.has_meta(RECREW_AI_NEXT) and sim.time<float(sim.get_meta(RECREW_AI_NEXT)):return 0
+	sim.set_meta(RECREW_AI_NEXT,sim.time+ENEMY_RECREW_PERIOD)
+	var sent:=0
+	var busy:Array=[]
+	var taken:Array=[]
+	for job in sim.get_meta(RECREW) if sim.has_meta(RECREW) else []:
+		busy.append(int(job.section))
+		taken.append(int(job.hull))
+	for wreck in wrecks(sim).duplicate():
+		if not wreck.get("abandoned",false) or int(wreck.id) in taken:continue
+		var hull:Dictionary=sim.get_unit(int(wreck.id))
+		if not recrewable(sim,hull):continue
+		var own:bool=hull.team==team
+		var best:Dictionary={}
+		var nearest:float=pow(ENEMY_RECREW_OWN if own else ENEMY_RECREW_CAPTURE,2)
+		for section in sim.units:
+			if section.team!=team or int(section.id) in busy or not can_recrew(sim,section):continue
+			if not own and not section.orders.is_empty():continue
+			if section.get("garrison",-1)>=0 or float(section.suppression)>=ENEMY_RECREW_CALM or sim.time-float(section.last_hit)<ENEMY_RECREW_QUIET:continue
+			var gap:float=section.pos.distance_squared_to(hull.pos)
+			if gap<nearest:
+				best=section
+				nearest=gap
+		if best.is_empty():continue
+		var resume:Dictionary={} if best.orders.is_empty() else {"pos":best.orders[-1].pos,"mode":"attack_move" if best.orders[-1].mode=="attack" else best.orders[-1].mode}
+		if order_recrew(sim,[best.id],hull.id)==0:continue
+		if not resume.is_empty():sim.get_meta(RECREW)[-1]["resume"]=resume
+		busy.append(int(best.id))
+		sent+=1
+	return sent
 
 # Soldiers climb in: a fresh hull replaces the wreck. Returns the new vehicle.
 static func _board(sim,section:Dictionary,hull:Dictionary)->Dictionary:
@@ -531,9 +577,19 @@ static func _board(sim,section:Dictionary,hull:Dictionary)->Dictionary:
 	var list:Array=wrecks(sim)
 	for k in range(list.size()-1,-1,-1):
 		if int(list[k].id)==int(hull.id):list.remove_at(k)
+	# Clear the wreck from the field nav now (not at the end of the tick), so
+	# the vehicle can be routed straight away.
+	if not sim.field_ops.is_empty():sim.FieldOps.sync_obstacles(sim)
 	var captured:bool=hull.team!=section.team
-	if not captured and hull.team==0:sim.losses=maxi(0,sim.losses-1)
+	# The bail-out was counted as a kill/loss for the hull's side; the hull is
+	# back in service (either side), so revoke it. Each hull is counted once,
+	# for the side that owned it when it was finally knocked out.
+	if hull.team==1:sim.kills=maxi(0,sim.kills-1)
+	else:sim.losses=maxi(0,sim.losses-1)
 	_event(sim,fresh,"captured" if captured else "recrewed")
+	# Battle remaps selection and control groups from the hull (and a section
+	# that climbed in whole) to the new vehicle.
+	sim.events[-1].merge({"from":hull.id,"section":section.id})
 	if fresh.team==0:
 		var label:String=LABEL.get(fresh.kind,str(fresh.kind).capitalize())
 		sim.events.append({"type":"warning","text":("Enemy %s captured · %d crew aboard" if captured else "%s re-crewed · %d crew aboard") % [label,count]})

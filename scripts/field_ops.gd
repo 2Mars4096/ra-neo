@@ -813,6 +813,8 @@ static func tick(sim,dt:float)->void:
 	sim.credits+=dt*float(sim.field_ops.income_rate)
 	process_queue(sim)
 	enemy_offensive(sim)
+	# Enemy infantry re-crew their abandoned hulls and capture the player's.
+	sim.VehicleDamage.enemy_recrew(sim)
 	idle_engineers_continue(sim)
 	progress_clearing(sim,dt)
 	enemy_breach(sim)
