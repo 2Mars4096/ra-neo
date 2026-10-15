@@ -96,8 +96,9 @@ static func wall_point(building:Dictionary,from:Vector2)->Vector2:
 
 # --- resolve_shot hook --------------------------------------------------------
 # Called for every hit with the damage about to be applied; returns the damage
-# that actually reaches the target.
-static func strike(sim,u:Dictionary,target:Dictionary,amount:float)->float:
+# that actually reaches the target. `victim`: the soldier struck when the target
+# is a section (resolve_shot's victim); empty = the soldier nearest the shooter.
+static func strike(sim,u:Dictionary,target:Dictionary,amount:float,victim:Dictionary={})->float:
 	var td:Dictionary=sim.definitions[target.kind]
 	if td.get("fragile",false):
 		# A small airframe rarely survives any hit that connects.
@@ -106,7 +107,9 @@ static func strike(sim,u:Dictionary,target:Dictionary,amount:float)->float:
 	if Garrison.inside(target):
 		var building:Dictionary=Garrison.index(sim).buildings[int(target.garrison)]
 		var state:int=mini(int(building.state),BREACHED)
-		if not he.is_empty():damage_building(sim,building.id,float(he.structure),u.pos,wall_point(building,u.pos),target.id)
+		# The round bursts on the wall at the struck soldier's window.
+		var aim:Vector2=victim.pos if not victim.is_empty() else u.pos
+		if not he.is_empty():damage_building(sim,building.id,float(he.structure),u.pos,wall_point(building,aim),target.id)
 		return amount*(LEAK_SMALL[state] if he.is_empty() else LEAK_HE[state])
 	if td.get("structure",false):
 		if he.is_empty():
@@ -118,17 +121,20 @@ static func strike(sim,u:Dictionary,target:Dictionary,amount:float)->float:
 			var chance:float=float(td.cook_off.chance)+0.5*(1.0-clampf(after/maxf(1.0,target.max_hp),0.0,1.0))
 			if after<=0.0 or _rng(sim).randf()<chance:start_cook_off(sim,target)
 		return amount
-	if not target.members.is_empty() and not sim.terrain.field_cover.is_empty():return amount*sandbag_leak(sim,u,target)
+	if not target.members.is_empty() and not sim.terrain.field_cover.is_empty():return amount*sandbag_leak(sim,u,target,victim)
 	return amount
 
 # Worn sandbags stop less: the cover factor drifts from COVER_SCALE to none as
-# the work behind the soldier nearest the shooter loses integrity.
-static func sandbag_leak(sim,u:Dictionary,target:Dictionary)->float:
+# the work behind the struck soldier (`victim`, as in damage_amount; else the
+# one nearest the shooter) loses integrity.
+static func sandbag_leak(sim,u:Dictionary,target:Dictionary,victim:Dictionary={})->float:
 	var cover_pos:Vector2=target.pos
-	var nearest:=INF
-	for member in target.members:
-		if member.hp>0 and member.pos.distance_squared_to(u.pos)<nearest:
-			nearest=member.pos.distance_squared_to(u.pos);cover_pos=member.pos
+	if not victim.is_empty():cover_pos=victim.pos
+	else:
+		var nearest:=INF
+		for member in target.members:
+			if member.hp>0 and member.pos.distance_squared_to(u.pos)<nearest:
+				nearest=member.pos.distance_squared_to(u.pos);cover_pos=member.pos
 	for rect in sim.terrain.field_cover:
 		if rect.has_point(cover_pos) or not rect.grow(1.4).has_point(cover_pos):continue
 		for work in sim.units:

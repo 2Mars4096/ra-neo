@@ -710,7 +710,7 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float,victim:Dictionary={
 	if hit:
 		var amount:float=damage_amount(u,target,victim)*scale
 		# Buildings, field works, drones and sandbags: what reaches the target (structure_damage.gd).
-		amount=preload("res://scripts/structure_damage.gd").strike(self,u,target,amount)
+		amount=preload("res://scripts/structure_damage.gd").strike(self,u,target,amount,victim)
 		if target.members.is_empty():
 			# Vehicles: penetration and component damage decide the integrity loss.
 			Infantry.hit(target,VehicleDamage.strike(self,u,target,amount),u.pos,time)
