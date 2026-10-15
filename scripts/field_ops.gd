@@ -200,6 +200,7 @@ static func enemy_offensive(sim)->void:
 	if state.is_empty():
 		state={"next":float(plan.get("first",150.0)),"index":0,"active":[],"strength":0.0}
 		sim.field_ops["waves"]=state
+	if not state.active.is_empty():follow_recrew(sim,state)
 	# Withdraw a broken wave so it does not trickle into the defence one unit at a time.
 	if not state.active.is_empty():
 		var alive:Array=state.active.filter(func(id):return sim.alive(sim.get_unit(id)))
@@ -231,6 +232,8 @@ static func enemy_offensive(sim)->void:
 	# From the second wave on, an FPV swarm strikes ahead of the assault.
 	if state.index>=2:launch_swarm(sim,target,mini(8,4+state.index/2))
 	state.active=main+flank+scouts
+	state.target=target
+	state.recrew={}
 	state.strength=0.0
 	for id in state.active:state.strength+=float(sim.get_unit(id).hp)
 	sim.issue(scouts,target,"attack_move")
@@ -246,6 +249,29 @@ static func enemy_offensive(sim)->void:
 		break
 	if flank.size()>0 and sim.get_unit(flank[0]).orders.is_empty():sim.issue(flank,target,"attack_move")
 	sim.events.append({"type":"warning","text":"ENEMY ASSAULT WAVE %d • %d units inbound" % [state.index,state.active.size()]})
+
+# Re-crew follows the wave: a vehicle boarded by a wave section joins the wave
+# (its integrity adds to the wave's strength, while the boarders have already
+# left the section's hp) and takes up the wave's attack if it has no orders.
+# Open re-crew jobs of wave sections are remembered (section -> hull); when one
+# closes and the hull was boarded, that section crewed it.
+static func follow_recrew(sim,state:Dictionary)->void:
+	var jobs:Array=sim.get_meta(sim.VehicleDamage.RECREW) if sim.has_meta(sim.VehicleDamage.RECREW) else []
+	if jobs.is_empty() and state.get("recrew",{}).is_empty():return
+	var open:Dictionary={}
+	for job in jobs:open[int(job.section)]=int(job.hull)
+	var pending:Dictionary=state.get("recrew",{})
+	for section_id in pending:
+		if open.get(section_id,-1)==pending[section_id]:continue
+		var fresh:Dictionary=sim.get_unit(int(sim.get_unit(pending[section_id]).get("recrewed_as",-1)))
+		if not sim.alive(fresh) or fresh.team!=1 or fresh.id in state.active:continue
+		state.active.append(fresh.id)
+		state.strength+=float(fresh.hp)
+		if fresh.orders.is_empty() and state.has("target"):sim.issue([fresh.id],state.target,"attack_move")
+	var next:Dictionary={}
+	for section_id in open:
+		if section_id in state.active:next[section_id]=open[section_id]
+	state.recrew=next
 
 # FPV swarms: groups of 4-8 loitering munitions fly straight in from the
 # launcher's side and dive on assigned units. Between assault waves the enemy
