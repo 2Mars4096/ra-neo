@@ -91,10 +91,31 @@ func _init()->void:
 		tally[effect]=tally.get(effect,0)+1
 	sim.remove_meta(VehicleDamage.WRECKS)
 	print("OUTCOMES tank AP vs tank side (n=%d): %s" % [trials,str(tally)])
-	var weights:Dictionary=sim.definitions.tank.damage_effects
-	for effect in weights:
-		var share:float=float(tally.get(effect,0))/trials
-		check(absf(share-float(weights[effect]))<0.03,"%s share %.3f near authored %.2f" % [effect,share,weights[effect]])
+	# Penetrations act by the zone struck (armor_zones pen): each authored
+	# behind-armour effect at its odds for a full-calibre round.
+	var heavy:Dictionary=VehicleDamage.PENETRATION.atgm
+	var all_zones:Array=[]
+	for face in VehicleDamage.zones(sim,"tank"):all_zones.append_array(face)
+	var seen_zone:Dictionary={}
+	for zone in all_zones:
+		if seen_zone.has(zone.zone):continue
+		seen_zone[zone.zone]=true
+		var out:=zone_outcomes(sim,target,zone,heavy,3000)
+		print("ZONE %-13s pen %s -> %s" % [zone.zone,str(zone.pen),str(out)])
+		var cat:float=float(out.get("catastrophic",0.0))
+		check(absf(cat-float(zone.pen.get("catastrophic",0.0)))<0.03,"%s ammunition hits %.3f near authored %.2f" % [zone.zone,cat,zone.pen.get("catastrophic",0.0)])
+		var crew:float=float(out.get("crew_hit",0.0))/maxf(0.001,1.0-cat)
+		check(absf(crew-float(zone.pen.get("crew",0.0)))<0.04,"%s crew casualties %.3f near authored %.2f" % [zone.zone,crew,zone.pen.get("crew",0.0)])
+	var roof_out:Dictionary=zone_outcomes(sim,target,all_zones.filter(func(z):return z.zone=="turret_roof")[0],heavy,3000)
+	check(float(roof_out.catastrophic)+float(roof_out.crew_hit)>0.85,"a Javelin through the turret roof usually kills crew or the ammunition (%.2f)" % (float(roof_out.catastrophic)+float(roof_out.crew_hit)))
+	var face:Dictionary=zone_outcomes(sim,target,all_zones.filter(func(z):return z.zone=="turret_glacis")[0],VehicleDamage.PENETRATION.tank,3000)
+	check(float(face.catastrophic)+float(face.crew_hit)>0.7,"APFSDS through the turret face usually kills crew or the ammunition (%.2f)" % (float(face.catastrophic)+float(face.crew_hit)))
+	var deck:Dictionary=zone_outcomes(sim,target,all_zones.filter(func(z):return z.zone=="engine_deck")[0],heavy,3000)
+	check(float(deck.get("mobility",0.0))>0.85 and float(deck.get("fire",0.0))>0.5 and float(deck.get("catastrophic",0.0))==0.0,"engine deck: mobility kill and fire, no ammunition (%s)" % str(deck))
+	var lower:Dictionary=zone_outcomes(sim,target,all_zones.filter(func(z):return z.zone=="lower_plate")[0],heavy,3000)
+	check(float(lower.get("mobility",0.0))>0.4 and float(lower.crew_hit)>0.5,"lower plate: driver and mobility (%s)" % str(lower))
+	var light:Dictionary=zone_outcomes(sim,target,all_zones.filter(func(z):return z.zone=="turret_side")[0],VehicleDamage.PENETRATION.aa,3000)
+	check(float(light.get("catastrophic",0.0))==0.0 and float(light.crew_hit)<float(face.crew_hit)*0.6,"autocannon penetrations: smaller behind-armour effect, no ammunition detonation (%s)" % str(light))
 	check(not tally.has("ricochet"),"flank AP never ricochets")
 	tally.clear()
 	target.facing=Vector2.RIGHT
@@ -253,12 +274,18 @@ func _init()->void:
 	# Top attack (16 m is beyond the top-attack minimum) strikes the roof from
 	# any side; in direct-attack mode the frontal arc still holds.
 	var flank:=kill_times(true)
+	var flank_missiles:=missiles_used
 	var frontal:=kill_times(false)
+	var frontal_missiles:=missiles_used
+	print("MISSILES to kill, top attack: flank %s (mean %.1f) | front %s (mean %.1f)" % [str(flank_missiles),mean(flank_missiles),str(frontal_missiles),mean(frontal_missiles)])
 	print("ATGM x2 vs TANK top attack flank: mean %.1fs %s | front: mean %.1fs %s" % [mean(flank),str(flank),mean(frontal),str(frontal)])
 	check(not flank.has(-1.0) and not frontal.has(-1.0),"two Javelin teams always kill the tank within 120 s")
 	check(mean(frontal)<mean(flank)*1.25,"top attack: frontal kills about as fast as flank kills")
 	var direct_flank:=kill_times(true,true)
+	var direct_flank_missiles:=missiles_used
 	var direct_front:=kill_times(false,true)
+	var direct_front_missiles:=missiles_used
+	print("MISSILES to kill, direct attack: flank %s (mean %.1f) | front %s (mean %.1f)" % [str(direct_flank_missiles),mean(direct_flank_missiles),str(direct_front_missiles),mean(direct_front_missiles)])
 	print("ATGM x2 vs TANK direct attack flank: mean %.1fs %s | front: mean %.1fs %s" % [mean(direct_flank),str(direct_flank),mean(direct_front),str(direct_front)])
 	check(not direct_flank.has(-1.0),"direct attack kills the tank from the flank within 120 s")
 	check(mean(direct_front)>mean(direct_flank)*1.8,"direct attack: flank kills markedly faster than frontal fire")
@@ -298,10 +325,29 @@ func _init()->void:
 
 	# --- 10. Tank duel: square-on at 18 m, both firing ---------------------------------
 	var duels:=duel_times()
-	print("TANK DUEL square-on 18 m: mean %.1fs %s" % [mean(duels),str(duels)])
-	check(not duels.has(-1.0),"a frontal tank duel is decided within 90 s")
+	print("TANK DUEL square-on 18 m: out of action (destroyed, abandoned or gun out) mean %.1fs %s | first kill %s" % [mean(duels),str(duels),str(duel_kills)])
+	check(not duels.has(-1.0),"a frontal tank duel is decided (one tank out of action) within 90 s")
 	print("VEHICLE DAMAGE: %d checks, %d failures" % [checks,failures])
 	quit(0 if failures==0 else 1)
+
+# Shares of `n` penetrations of `zone` by `spec` (fresh hull each time):
+# catastrophic, crew_hit (any casualty or bail-out), mobility, firepower, fire.
+func zone_outcomes(sim,target:Dictionary,zone:Dictionary,spec:Dictionary,n:int)->Dictionary:
+	var out:={"catastrophic":0.0,"crew_hit":0.0}
+	for i in n:
+		reset(target)
+		target.erase("fire_until")
+		VehicleDamage.ensure_state(sim,target)
+		sim.events.clear()
+		VehicleDamage._pen_effects(sim,target,zone,spec,VehicleDamage._rng(sim),10.0)
+		for event in sim.events:
+			if event.type!="vehicle_damage":continue
+			var key:String={"abandoned":"crew_hit","crew":"crew_hit"}.get(event.effect,event.effect)
+			if key in ["catastrophic","crew_hit","mobility","firepower","fire"]:out[key]=float(out.get(key,0.0))+1.0/n
+	if sim.has_meta(VehicleDamage.WRECKS):sim.remove_meta(VehicleDamage.WRECKS)
+	if sim.has_meta(VehicleDamage.HAZARDS):sim.remove_meta(VehicleDamage.HAZARDS)
+	for key in out:out[key]=snappedf(float(out[key]),0.001)
+	return out
 
 func reset(u:Dictionary)->void:
 	for key in ["crew","crew_full","mobility_kill","firepower_kill","optics_kill","accuracy","abandoned","buttoned_until","reload_mark","aim_mark"]:u.erase(key)
@@ -333,7 +379,8 @@ func mean(values:Array)->float:
 # Seconds to kill; -1 = survived 120 s.
 func kill_times(flank:bool,direct:bool=false)->Array:
 	var times:Array=[]
-	for trial in 8:
+	missiles_used=[]
+	for trial in 12:
 		var sim=Sim.new(false,0)
 		if direct:sim.definitions.atgm.top_attack_min_m=1.0e9
 		sim.combat_rng.seed=1000+trial
@@ -347,13 +394,21 @@ func kill_times(flank:bool,direct:bool=false)->Array:
 		tank.facing=Vector2.UP if flank else Vector2.LEFT
 		sim.update_visibility()
 		var killed:=-1.0
+		var fired:=0
 		for i in 120*30:
 			tank.cooldown=1000.0
 			sim.tactical_clock=1000.0
 			sim.tick(1.0/30)
+			for event in sim.events:
+				if event.type=="missile_impact":fired+=1
+			sim.events.clear()
 			if not sim.alive(tank):killed=sim.time;break
 		times.append(snappedf(killed,0.1))
+		missiles_used.append(fired)
 	return times
+
+# Missiles that reached the tank in each kill_times trial (last call).
+var missiles_used:Array=[]
 
 # Penetration chance of `weapon` at `distance` m against a tank whose hull is
 # yawed `yaw` degrees off the line of fire (0 = square-on).
@@ -366,6 +421,7 @@ func yawed_chance(sim,weapon:String,yaw:float,distance:float)->float:
 # preset, as kill_times). Seconds to the first loss; -1 = none within 90 s.
 func duel_times()->Array:
 	var times:Array=[]
+	duel_kills=[]
 	for trial in 6:
 		var sim=Sim.new(false,0)
 		sim.combat_rng.seed=3000+trial
@@ -379,9 +435,20 @@ func duel_times()->Array:
 		b.facing=Vector2.LEFT
 		sim.update_visibility()
 		var decided:=-1.0
+		var killed:=-1.0
 		for i in 90*30:
 			sim.tactical_clock=1000.0
 			sim.tick(1.0/30)
-			if not sim.alive(a) or not sim.alive(b):decided=sim.time;break
+			if decided<0.0 and (out_of_action(sim,a) or out_of_action(sim,b)):decided=sim.time
+			if not sim.alive(a) or not sim.alive(b):killed=sim.time;break
 		times.append(snappedf(decided,0.1))
+		duel_kills.append(snappedf(killed,0.1))
 	return times
+
+# Out of the fight: destroyed, abandoned or main gun disabled.
+func out_of_action(sim,u:Dictionary)->bool:
+	return not sim.alive(u) or u.get("firepower_kill",false)
+
+# Seconds to the first hull destroyed or abandoned in each duel_times trial
+# (-1: none within 90 s).
+var duel_kills:Array=[]

@@ -103,6 +103,12 @@
             "optics": 0.06,
             "mobility": 0.03,
             "firepower": 0.03
+          },
+          "pen": {
+            "crew": 0.7,
+            "catastrophic": 0.25,
+            "firepower": 0.3,
+            "fire": 0.15
           }
         },
         {
@@ -113,6 +119,11 @@
             "optics": 0.35,
             "firepower": 0.2,
             "shock": 0.2
+          },
+          "pen": {
+            "firepower": 0.8,
+            "crew": 0.4,
+            "catastrophic": 0.1
           }
         },
         {
@@ -122,6 +133,12 @@
           "nonpen": {
             "mobility": 0.3,
             "shock": 0.2
+          },
+          "pen": {
+            "crew": 0.6,
+            "mobility": 0.6,
+            "fire": 0.25,
+            "catastrophic": 0.05
           }
         }
       ],
@@ -133,6 +150,12 @@
           "nonpen": {
             "mobility": 0.35,
             "shock": 0.2
+          },
+          "pen": {
+            "crew": 0.5,
+            "mobility": 0.5,
+            "fire": 0.3,
+            "catastrophic": 0.15
           }
         },
         {
@@ -142,6 +165,11 @@
           "nonpen": {
             "optics": 0.1,
             "shock": 0.25
+          },
+          "pen": {
+            "crew": 0.7,
+            "catastrophic": 0.35,
+            "firepower": 0.3
           }
         }
       ],
@@ -153,6 +181,10 @@
           "nonpen": {
             "mobility": 0.4,
             "shock": 0.1
+          },
+          "pen": {
+            "mobility": 0.9,
+            "fire": 0.6
           }
         },
         {
@@ -161,30 +193,44 @@
           "mm": 120,
           "nonpen": {
             "shock": 0.2
+          },
+          "pen": {
+            "catastrophic": 0.75,
+            "crew": 0.05
           }
         }
       ],
       "roof": [
         {
           "zone": "turret_roof",
-          "share": 0.45,
+          "share": 0.65,
           "mm": 50,
           "nonpen": {
             "optics": 0.3,
             "shock": 0.3
+          },
+          "pen": {
+            "crew": 0.85,
+            "catastrophic": 0.3,
+            "firepower": 0.4
           }
         },
         {
           "zone": "engine_deck",
-          "share": 0.55,
+          "share": 0.35,
           "mm": 30,
           "nonpen": {
             "mobility": 0.4,
             "shock": 0.15
+          },
+          "pen": {
+            "mobility": 0.9,
+            "fire": 0.6
           }
         }
       ]
-    }
+    },
+    "ammo_vented": true
   },
   "drone": {
     "name": "GHOST UAV",
@@ -311,6 +357,11 @@
           "nonpen": {
             "optics": 0.3,
             "shock": 0.3
+          },
+          "pen": {
+            "crew": 0.7,
+            "catastrophic": 0.5,
+            "fire": 0.4
           }
         }
       ]

@@ -36,7 +36,8 @@ extends RefCounted
 
 # Armour/crew/effect data live in the vehicle rows of units.json:
 #   armor_mm [front, side, rear] (uniform plates when a row has no zones),
-#   armor_zones {front|side|rear: [{zone, share, mm, nonpen {effect: chance}}]},
+#   armor_zones {front|side|rear|roof: [{zone, share, mm, nonpen {effect: chance},
+#     pen {effect: chance} (behind-armour effects of a penetration, _pen_effects)}]},
 #   hull_area [front, side, rear], crew, nonpen_damage, damage_effects {weights}.
 # Weapon penetration (RHA-equivalent at point blank and at maximum range),
 # chance that a penetration knocks out a component, and whether it can cook
@@ -147,12 +148,12 @@ static func zones(sim,kind:String)->Array:
 		var name:String=["front","side","rear"][face]
 		var list:Array=[]
 		if authored.has(name):
-			for zone in authored[name]:list.append({"zone":str(zone.get("zone",name)),"share":float(zone.share),"mm":maxf(1.0,float(zone.mm)),"nonpen":zone.get("nonpen",{})})
-		else:list.append({"zone":name,"share":1.0,"mm":maxf(1.0,float(d.armor_mm[face])),"nonpen":legacy})
+			for zone in authored[name]:list.append({"zone":str(zone.get("zone",name)),"share":float(zone.share),"mm":maxf(1.0,float(zone.mm)),"nonpen":zone.get("nonpen",{}),"pen":zone.get("pen",{})})
+		else:list.append({"zone":name,"share":1.0,"mm":maxf(1.0,float(d.armor_mm[face])),"nonpen":legacy,"pen":{}})
 		table.append(list)
 	var roof:Array=[]
-	for zone in authored.get("roof",[]):roof.append({"zone":str(zone.get("zone","roof")),"share":float(zone.share),"mm":maxf(1.0,float(zone.mm)),"nonpen":zone.get("nonpen",{})})
-	if roof.is_empty():roof.append({"zone":"roof","share":1.0,"mm":maxf(1.0,float(d.armor_mm.min())),"nonpen":legacy})
+	for zone in authored.get("roof",[]):roof.append({"zone":str(zone.get("zone","roof")),"share":float(zone.share),"mm":maxf(1.0,float(zone.mm)),"nonpen":zone.get("nonpen",{}),"pen":zone.get("pen",{})})
+	if roof.is_empty():roof.append({"zone":"roof","share":1.0,"mm":maxf(1.0,float(d.armor_mm.min())),"nonpen":legacy,"pen":{}})
 	table.append(roof)
 	cache[kind]=table
 	return table
@@ -252,6 +253,7 @@ static func strike(sim,u:Dictionary,target:Dictionary,amount:float)->float:
 		else:_event(sim,target,"ricochet",false)
 		return _finish(sim,target,base*nonpen)
 	var damage:float=base
+	if not location.zone.pen.is_empty():return _pen_effects(sim,target,location.zone,spec,rng,damage)
 	if rng.randf()<float(spec.effect):
 		var effect:String=_pick(rng,td.get("damage_effects",{}),spec.heavy)
 		match effect:
@@ -268,20 +270,7 @@ static func strike(sim,u:Dictionary,target:Dictionary,amount:float)->float:
 					target.firepower_kill=true
 					_report(sim,target,effect,"%s weapons disabled" if td.domain=="air" else "%s main gun disabled")
 			"crew":
-				target.crew=maxi(0,int(target.crew)-1)
-				target.suppression=maxf(target.suppression,0.9)
-				target.cooldown=maxf(float(target.cooldown),0.0)+float(td.interval)
-				target.aim_time=0.0
-				if target.crew<=0:
-					# The hull's remaining integrity, kept for re-crewing.
-					if td.domain!="air":target["abandoned_hp"]=maxf(0.0,float(target.hp)-damage)
-					target.hp=0.0
-					if td.domain=="air":_report(sim,target,"catastrophic","%s pilot lost · crashed")
-					else:
-						target.abandoned=true
-						_report(sim,target,"abandoned","%s crew bailed out · vehicle abandoned")
-					return _finish(sim,target,0.0)
-				_report(sim,target,effect,"%s crew casualty")
+				if _crew_hit(sim,target,damage,1):return _finish(sim,target,0.0)
 			"fire":
 				if float(target.get("fire_until",-1.0))<sim.time:
 					var missing:int=int(target.crew_full)-int(target.crew)
@@ -298,6 +287,64 @@ static func strike(sim,u:Dictionary,target:Dictionary,amount:float)->float:
 					target["crash"]="spin" if effect=="tail_rotor" else "landing"
 					_hazard(sim,target)
 					_report(sim,target,effect,"%s tail rotor hit · going down" if effect=="tail_rotor" else "%s hydraulics hit · forced landing")
+	return _finish(sim,target,damage)
+
+# Crew casualties; true when the last crew member is lost (the land crew bails
+# out, the hull is abandoned; an aircraft crashes).
+static func _crew_hit(sim,target:Dictionary,damage:float,count:int)->bool:
+	var td:Dictionary=sim.definitions[target.kind]
+	target.crew=maxi(0,int(target.crew)-count)
+	target.suppression=maxf(target.suppression,0.9)
+	target.cooldown=maxf(float(target.cooldown),0.0)+float(td.interval)
+	target.aim_time=0.0
+	if target.crew>0:
+		_report(sim,target,"crew","%s crew casualty" if count==1 else "%s crew casualties")
+		return false
+	# The hull's remaining integrity, kept for re-crewing.
+	if td.domain!="air":target["abandoned_hp"]=maxf(0.0,float(target.hp)-damage)
+	target.hp=0.0
+	if td.domain=="air":_report(sim,target,"catastrophic","%s pilot lost · crashed")
+	else:
+		target.abandoned=true
+		_report(sim,target,"abandoned","%s crew bailed out · vehicle abandoned")
+	return true
+
+# Behind-armour effects of a penetration, by the zone struck (units.json
+# armor_zones pen {effect: chance}). Each effect is rolled independently, its
+# chance scaled by the round's behind-armour effect (PENETRATION effect: a
+# large HEAT jet or an APFSDS rod 1.0, autocannon 0.3), so one penetration can
+# wound the crew and start a fire. "catastrophic" is stowed ammunition
+# detonating (heavy rounds only): the vehicle is destroyed (rows with
+# ammo_vented: the bustle's blow-off panels vent it, the crew escapes, the hull
+# burns out). "crew" is one casualty, a second with SECOND_CASUALTY (heavy
+# rounds). The crew field is an abstraction of a real crew (2 for a 4-man
+# tank), so one casualty here is about two crewmen; WWII US data put about one
+# casualty per lost five-man tank (Dupuy, 1.28 if it burned), so a crew
+# compartment penetration costs about 0.5-1 abstract casualty.
+const SECOND_CASUALTY:=0.15
+static func _pen_effects(sim,target:Dictionary,zone:Dictionary,spec:Dictionary,rng:RandomNumberGenerator,damage:float)->float:
+	var td:Dictionary=sim.definitions[target.kind]
+	var scale:float=float(spec.effect)
+	var rolled:Dictionary={}
+	for key in zone.pen:
+		if rng.randf()<float(zone.pen[key])*scale:rolled[key]=true
+	if rolled.has("catastrophic") and spec.heavy:
+		target.hp=0.0
+		if td.get("ammo_vented",false):_report(sim,target,"catastrophic","%s ammunition fire vented · crew escaped · knocked out")
+		else:_report(sim,target,"catastrophic","%s destroyed · ammunition cook-off")
+		return _finish(sim,target,0.0)
+	if rolled.has("crew") and _crew_hit(sim,target,damage,2 if spec.heavy and rng.randf()<SECOND_CASUALTY else 1):return _finish(sim,target,0.0)
+	if rolled.has("mobility") and not target.mobility_kill:
+		target.mobility_kill=true
+		_report(sim,target,"mobility","%s immobilised")
+	if rolled.has("firepower") and not target.firepower_kill:
+		target.firepower_kill=true
+		_report(sim,target,"firepower","%s main gun disabled")
+	if rolled.has("fire") and float(target.get("fire_until",-1.0))<sim.time:
+		target["fire_until"]=sim.time+rng.randf_range(FIRE_SECONDS.x,FIRE_SECONDS.y)
+		_hazard(sim,target)
+		_report(sim,target,"fire","%s on fire")
+	if rolled.is_empty():_event(sim,target,"penetration")
 	return _finish(sim,target,damage)
 
 static func _hazard(sim,target:Dictionary)->void:
