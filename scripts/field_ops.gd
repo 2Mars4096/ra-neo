@@ -869,6 +869,7 @@ static func clear_site(sim,site_id:int,engineer_id:int)->bool:
 	var engineer:Dictionary=sim.get_unit(engineer_id)
 	if not can_clear(sim,site):return fail(sim,"Only wire, obstacles, sandbags, berms, nets and trenches can be cleared")
 	if not sim.alive(engineer) or engineer.kind!="engineer" or engineer.team!=0 or sim.comms_blocked(engineer):return fail(sim,"Select a living engineer section")
+	if engineer.get("combat_ineffective",false):return fail(sim,sim.DOWNED_NOTE)
 	if site.team!=0 and not sim.contact_known(engineer,site):return fail(sim,"Obstacle not currently spotted")
 	var plan:=work_plan(sim,site.kind,site.pos,engineer,true,site.id,site.get("rotated",false))
 	if plan.reason!="":return fail(sim,"No route to the obstacle")
@@ -953,7 +954,7 @@ static func switch_builder(sim,site:Dictionary)->int:
 # Engineers left idle (no orders, not building) pick up their queued segments.
 static func idle_engineers_continue(sim)->void:
 	for engineer in sim.units:
-		if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or engineer.has("building_id") or engineer.has("clearing_id") or not engineer.orders.is_empty():continue
+		if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or engineer.has("building_id") or engineer.has("clearing_id") or not engineer.orders.is_empty() or engineer.get("combat_ineffective",false):continue
 		if sim.units.any(func(s):return sim.alive(s) and s.get("queued_for",-1)==engineer.id and s.get("build_left",0.0)>0):
 			continue_queue(sim,engineer)
 

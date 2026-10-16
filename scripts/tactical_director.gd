@@ -52,6 +52,8 @@ static func update(sim) -> void:
 	if not sim.scenario.get("autonomy",false):return
 	for u in sim.units:
 		if not sim.alive(u) or sim.definitions[u.kind].get("structure",false) or u.has("building_id") or u.kind=="harvester" or sim.definitions[u.kind].domain!="land" or u.hold_command:continue
+		# A section whose survivors are all down cannot move: nothing to direct.
+		if u.get("combat_ineffective",false):continue
 		if not u.members.is_empty() and contact_drill(sim,u):continue
 		var intent:Dictionary=u.intent if u.orders.is_empty() else u.orders[0]
 		if u.orders.is_empty() and (intent.is_empty() or intent.mode in ["move","retreat"] or u.maneuver.get("phase","")=="ENGAGE"):

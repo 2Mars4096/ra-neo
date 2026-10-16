@@ -167,6 +167,9 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 		var u := get_unit(int(id))
 		if not alive(u) or definitions[u.kind].get("structure",false):
 			continue
+		if u.get("combat_ineffective",false):
+			order_feedback=DOWNED_NOTE
+			continue
 		if comms_blocked(u):
 			order_feedback="LINK LOST • Last orders continue; capture EXCHANGE to restore radio"
 			continue
@@ -405,7 +408,7 @@ func update_tactics(dt: float) -> void:
 	if tactical_clock>0:return
 	tactical_clock=3.0
 	for u in living(1):
-		if definitions[u.kind].domain!="land":continue
+		if definitions[u.kind].domain!="land" or u.get("combat_ineffective",false):continue
 		if u.hp<Infantry.capacity(u)*0.3:
 			if u.orders.is_empty() and u.pos.distance_to(rally_point(u))>10:retreat([u.id])
 			elif not u.orders.is_empty() and u.orders[0].mode!="retreat":retreat([u.id])
@@ -1151,6 +1154,7 @@ func tick(dt: float) -> void:
 		u.cooldown -= dt
 		u.repath -= dt
 		Infantry.reconcile(u)
+		if u.get("combat_ineffective",false):hold_downed(u)
 		var move_lap:int=Time.get_ticks_usec() if profiling else 0
 		if not Garrison.inside(u) and Garrison.transit(u)=="":Infantry.move(u,self,dt)
 		if profiling:_lap("infantry_move",move_lap)
@@ -1738,6 +1742,24 @@ func update_objectives(dt: float) -> void:
 			result = "VICTORY"
 	else:
 		score_hold = 0
+
+# A section whose survivors are all down (Infantry.publish) is no mobile unit:
+# it takes no orders (issue), drops any it had, and its anchor stays with its
+# men: the centroid of the living, who crawl toward their slots round it.
+const DOWNED_NOTE:="Section down · wounded cannot move"
+func hold_downed(u:Dictionary)->void:
+	if not u.orders.is_empty() or not u.maneuver.is_empty() or not u.path.is_empty():
+		# Orders go; the intent stays as the record of its last command.
+		u.orders.clear();u.path.clear();u.maneuver={}
+		u.erase("route_pending")
+		u.blocked_time=0.0
+		u.reason=DOWNED_NOTE
+	if Garrison.inside(u) or Garrison.transit(u)!="":return
+	var sum:=Vector2.ZERO
+	var count:=0
+	for member in u.members:
+		if member.get("wound","")!=Infantry.KIA:sum+=member.pos;count+=1
+	if count>0:u.pos=sum/count
 
 func collision_layer(u: Dictionary) -> String:
 	# Non-solid field works (wire, trenches, nets) apply terrain zones, not bodies.

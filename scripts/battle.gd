@@ -723,6 +723,17 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		notify("Field structures are fixed • select a section to move")
 		attack_mode=false
 		return
+	# Sections whose survivors are all down cannot move or fight: say so and
+	# order the rest (they stay selectable).
+	var downed:Array=ids.filter(func(id):return sim.get_unit(id).get("combat_ineffective",false))
+	var downed_note:=""
+	if not downed.is_empty():
+		downed_note=sim.DOWNED_NOTE if downed.size()==1 else "%d sections down · wounded cannot move" % downed.size()
+		if downed.size()==ids.size():
+			notify(downed_note)
+			attack_mode=false
+			return
+		ids=ids.filter(func(id):return not downed.has(id))
 	# Right-click special actions (re-crew, clear, resume, garrison) and A-click
 	# shelling go to the sections able to do them; the rest of a mixed selection
 	# takes the normal order to the clicked point. Shift queues the action behind
@@ -781,6 +792,7 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		marker_time=1.0
 		notify(lead+("Nearest accessible position" if sim.order_adjusted else ("Queued" if queued else "Order confirmed"))+" • %d / %d sections" % [count,ids.size()]+release_note(before))
 		if stuck_note!="":notify(lead+stuck_note+" • %d / %d moving" % [count,ids.size()+stuck.size()])
+		if downed_note!="":notify(lead+downed_note+" • %d / %d moving" % [count,ids.size()+stuck.size()+downed.size()])
 		ping()
 	attack_mode=false
 
@@ -894,7 +906,8 @@ func refresh_cursor_hint() -> void:
 	hint_msec=Time.get_ticks_msec()
 	cursor_hint=""
 	if selected.is_empty() or show_help or sim.result!="" or build_mode!="" or strike_mode or dragging or pointer.x<0 or hud.action_at(pointer)!="":return
-	var ids:=orderable()
+	# Downed sections (survivors all down) take no actions.
+	var ids:=orderable().filter(func(id):return not sim.get_unit(id).get("combat_ineffective",false))
 	if ids.is_empty():return
 	cursor_hint=str(special_plan(pointer,pick(pointer,true),attack_mode,ids).get("label",""))
 
