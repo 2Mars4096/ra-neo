@@ -3,6 +3,9 @@ const Sim=preload("res://scripts/simulation.gd")
 const Actors=preload("res://scripts/infantry.gd")
 var failures:=0
 var checks:=0
+# Longest acceptable regroup: separated soldiers rejoin (spread < 2.8 u) within
+# this many seconds of the regroup starting. Measured 0.1-5.8 s in the mission.
+const REGROUP_BOUND:=12.0
 func check(ok:bool,label:String)->void:
 	checks+=1
 	if not ok:
@@ -17,6 +20,7 @@ func _init()->void:
 	var first_completion:Dictionary={}
 	var original_intents:Array=[]
 	var original_groups:Array=[]
+	var regroups:Dictionary={}
 	for id in [1,2,3]:
 		original_intents.append(sim.get_unit(id).intent.duplicate())
 		original_groups.append(sim.get_unit(id).command_group)
@@ -24,6 +28,7 @@ func _init()->void:
 		sim.tick(1.0/30.0)
 		sim.events.clear()
 		check_actors(sim,previous)
+		track_regroups(sim,[1,2,3],regroups)
 		record_completions(sim,first_completion)
 		if frame in [1799]:
 			for id in [1,2,3]:
@@ -38,14 +43,21 @@ func _init()->void:
 		var u:Dictionary=sim.get_unit(id)
 		check(u.hp>0,"mission section survives recovery: %s"%id)
 		check(u.members.all(func(m):return reunited(sim,m,u)),"all live section members reunite after contact: %s"%id)
-		check(u.get("regroup_count",0)>0,"section completed a bounded regroup: %s"%id)
+		# Whether a section separates in the mission depends on how the seeded
+		# fight unfolds; every separation must start a regroup and finish in time.
+		check(not regroups[id].separated or u.get("regroup_count",0)>0,"separated section completed a bounded regroup: %s"%id)
+		check(regroups[id].missed<0.5,"separated section starts a regroup: %s"%id)
+		check(regroups[id].longest<=REGROUP_BOUND,"section regroup is bounded: %s"%id)
+	check([1,2,3].filter(func(id):return sim.get_unit(id).get("regroup_count",0)>0).size()>=2,"mission exercises regroup recovery")
 	check(sim.get_unit(1).orders.is_empty(),"first section completes its village order without reissue")
 	check(sim.get_unit(3).pos.x>30,"AT section escapes villa and advances toward village")
 	for frame in 900:
 		sim.tick(1.0/30.0);sim.events.clear()
 		check_actors(sim,previous)
+		track_regroups(sim,[1,2,3],regroups)
 		record_completions(sim,first_completion)
 	for id in [1,2,3]:
+		check(regroups[id].missed<0.5 and regroups[id].longest<=REGROUP_BOUND,"late regroups start and stay bounded: %s"%id)
 		check(completed_attack_move(sim,sim.get_unit(id)),"all sections complete single attack-move: %s"%id)
 		check(sim.get_unit(id).blocked_time<1,"no residual group congestion: %s"%id)
 	check([sim.get_unit(1).command_group,sim.get_unit(2).command_group,sim.get_unit(3).command_group]==original_groups,"no player command reissue during recovery")
@@ -53,6 +65,7 @@ func _init()->void:
 	print("FIRST ORDER COMPLETIONS: ",first_completion)
 	print("VILLAGE owner=",sim.objectives[0].owner," progress=",sim.objectives[0].progress)
 	run_wall_recovery()
+	run_contact_regroup()
 	run_standoff_cover()
 	var evidence:=FileAccess.open("res://artifacts/regroup-owner-evidence.json",FileAccess.WRITE)
 	if evidence!=null:evidence.store_string(JSON.stringify({"checks":checks,"failures":failures,"seconds":90,"snapshots_at_60":snapshots,"first_order_completions":first_completion,"orders_at_90":[sim.get_unit(1).orders,sim.get_unit(2).orders,sim.get_unit(3).orders],"village_owner":sim.objectives[0].owner,"native_render_review":false},"  "))
@@ -90,6 +103,59 @@ func run_wall_recovery()->void:
 			check(routed and reunion,"actor routes around villa and reunites under "+command)
 			check(u.pos.distance_to(goal)<6,"section progresses after reunion under "+command)
 			if command in ["move","retreat"]:check(u.maneuver.is_empty(),"explicit command is not replaced by autonomy")
+
+# Section 1's mission regroup used to come from a fresh enemy rifle section at
+# the villa (unit 7's post) pinning it on the north road; seeded fights elsewhere
+# can now thin that section first. Rebuild that contact on its own: a soldier's
+# shelter run under fire splits the section, which must regroup within the bound,
+# keep its single order and still complete it.
+func run_contact_regroup()->void:
+	var sim=Sim.new(false,3)
+	var u=sim.spawn("rifle",0,Vector2(23.4,6.8))
+	var threat=sim.spawn("rifle",1,Vector2(34.41422,24.41421))
+	check(sim.issue([u.id],sim.objectives[0].pos,"attack_move")==1,"contact fixture order accepted")
+	var group:int=u.command_group
+	var intent:Dictionary=u.intent.duplicate()
+	var previous:Dictionary={}
+	var regroups:Dictionary={}
+	var contact_starts:=0
+	var was_active:=false
+	for frame in 1800:
+		sim.tick(1.0/30.0);sim.events.clear()
+		check_actors(sim,previous)
+		track_regroups(sim,[u.id],regroups)
+		var active:bool=u.get("regroup_active",false)
+		if active and not was_active and in_contact(sim,u):contact_starts+=1
+		if not active and was_active:check(u.members.all(func(m):return m.hp<=0 or m.pos.distance_to(u.pos)<2.8),"contact regroup ends with the section together")
+		was_active=active
+		if u.orders.is_empty() and not active:break
+	check(threat.hp<threat.max_hp,"contact fixture fights the villa section")
+	check(contact_starts>0,"a regroup starts under real contact")
+	check(u.get("regroup_count",0)>0,"section completed a bounded regroup under contact")
+	check(regroups[u.id].missed<0.5,"contact separation starts a regroup")
+	check(regroups[u.id].longest<=REGROUP_BOUND,"contact regroup is bounded")
+	check(u.hp>0 and completed_attack_move(sim,u),"section completes its attack-move after regrouping")
+	check(u.command_group==group and u.intent==intent,"contact regroup keeps the original order")
+
+# Per section: `separated` once spread passes the regroup threshold under orders
+# (the sim's trigger, outside a valid shelter trip); `missed` is the longest such
+# separation without a regroup and `longest` the longest regroup, in seconds.
+func track_regroups(sim,ids:Array,regroups:Dictionary)->void:
+	for id in ids:
+		var u:Dictionary=sim.get_unit(id)
+		if not regroups.has(id):regroups[id]={"separated":false,"streak":0.0,"missed":0.0,"since":-1.0,"longest":0.0}
+		var r:Dictionary=regroups[id]
+		var spread:=0.0
+		for m in u.members:
+			if m.hp>0:spread=maxf(spread,m.pos.distance_to(u.pos))
+		var active:bool=u.get("regroup_active",false)
+		var split:bool=spread>7.5 and not u.hold_command and (not u.orders.is_empty() or not u.maneuver.is_empty()) and not Actors.Cover.seeking(u)
+		r.separated=r.separated or split
+		r.streak=r.streak+1.0/30.0 if split and not active else 0.0
+		r.missed=maxf(r.missed,r.streak)
+		if active and r.since<0:r.since=sim.time
+		if r.since>=0:r.longest=maxf(r.longest,sim.time-r.since)
+		if not active:r.since=-1.0
 
 func check_actors(sim,previous:Dictionary)->void:
 	var bodies:Array=[]
