@@ -1257,9 +1257,24 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			u["stall_pos"]=u.pos;u["stall_at"]=time
 		u["stall_seen"]=time
 		stalled=time-float(u.stall_at)>2.0
+		# Jam clock: no 2 u of headway, kept across re-plans (which restart the
+		# stall clock), so a friendly jam escalates instead of re-planning forever.
+		if time-float(u.get("jam_seen",-1.0))>0.5 or u.pos.distance_to(u.get("jam_pos",u.pos))>2.0:
+			u["jam_pos"]=u.pos;u["jam_at"]=time
+		u["jam_seen"]=time
+		var jam:float=time-float(u.jam_at)
+		if u.blocked_time>1.5 or stalled:
+			if crowded_arrival(u,order,jam):
+				u.path.clear()
+				finish_order(u)
+				return
+			if jam>JAM_GIVE_WAY and time>=float(u.get("give_way_at",0.0)):
+				u["give_way_at"]=time+1.0
+				if not make_way(u,true) and jam>JAM_BACK_OFF:back_off(u)
 	if (u.blocked_time>1.5 or stalled) and u.repath<=0 and take_route_budget(u.pos,order.pos,true):
 		var avoid:Array=[]
 		var keep_right:Array=[]
+		var friend_ahead:=false
 		for other in movement_neighbors(u):
 			if other.id!=u.id and alive(other) and collision_layer(other)==collision_layer(u):
 				# Detours avoid real bodies at their real size: soldiers, not squad
@@ -1275,6 +1290,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 				else:
 					var clearance:float=own+float(definitions[other.kind].radius)+0.08
 					avoid.append({"pos":other.pos,"radius":clearance})
+					if hull and other.team==u.team and not other.orders.is_empty() and other.pos.distance_to(u.pos)<clearance+1.0 and (other.pos-u.pos).dot(u.path[0]-u.pos)>0.0:friend_ahead=true
 					# Oncoming hulls each pass on their own right instead of
 					# mirroring each other's swerve.
 					# Final destinations, not next waypoints (which may already be swerves).
@@ -1308,6 +1324,9 @@ func move_unit(u: Dictionary, dt: float) -> void:
 						detour=terrain.path(u.pos,arrival,d.domain,float(d.radius),avoid,terrain.mobility_profile(u.kind))
 						if not detour.is_empty():break
 					if not detour.is_empty():break
+		# Nose to nose with a moving friend, a hull waits for right of way
+		# rather than driving round the block (the friend is gone by then).
+		if friend_ahead and not detour.is_empty() and _route_length(u.pos,detour)>_route_length(u.pos,u.path)*1.5+12.0:detour=[]
 		if not detour.is_empty():u.path=detour
 		else:make_way(u)
 		u.repath=3.0
@@ -1350,7 +1369,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			finish_order(u)
 			return
 		var heading:Vector2=(u.path[0]-u.pos).normalized()
-		u.reversing=order.mode=="retreat" and u.facing.dot(heading)<-0.35
+		u.reversing=(order.mode=="retreat" or order.get("give_way",false)) and u.facing.dot(heading)<-0.35
 		var desired_heading:Vector2=-heading if u.reversing else heading
 		# A blocked hull steers toward its chosen clear heading for a moment.
 		if time<float(u.get("avoid_until",0.0)):desired_heading=u.avoid_heading
@@ -1800,37 +1819,122 @@ func standing_bodies(u:Dictionary,from:Vector2,to:Vector2,ignore:Array=[])->Arra
 # A parked friend holding the only way through steps aside (RA2-style), so an
 # idle unit never shuts a lane. It moves to the nearest clear spot off the
 # blocked unit's next legs, then idles there; held, garrisoned and building
-# units stay put. Bounded: at most six short path queries per call.
-func make_way(u:Dictionary)->void:
-	if u.path.is_empty() or not scenario.get("autonomy",false):return
+# units stay put. Bounded: at most six short path queries per friend.
+# With `movers` (a hull jammed among friendly vehicles), moving friendly
+# vehicles of lower priority (higher id: deterministic right of way) give way
+# too: they back or turn off to such a spot, then resume their own orders.
+# Returns true when a friend was asked to give way.
+const JAM_GIVE_WAY:=2.5
+const JAM_BACK_OFF:=4.0
+func make_way(u:Dictionary,movers:bool=false)->bool:
+	if u.path.is_empty() or not scenario.get("autonomy",false):return false
 	var legs:Array=[u.pos]+u.path.slice(0,2)
+	var asked:=false
 	for other in movement_neighbors(u):
 		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=collision_layer(u):continue
 		var od:Dictionary=definitions[other.kind]
-		if not other.orders.is_empty() or not other.maneuver.is_empty() or other.hold_command or od.get("structure",false) or other.has("building_id") or time<float(other.get("yield_until",0.0)):continue
+		if not other.maneuver.is_empty() or other.hold_command or od.get("structure",false) or other.has("building_id") or time<float(other.get("yield_until",0.0)):continue
+		if not other.orders.is_empty():
+			if not movers or other.id<u.id or not u.members.is_empty() or not other.members.is_empty() or other.orders[0].get("give_way",false):continue
+			# Only a mover ahead holds the way (one behind is just following).
+			if (other.pos-u.pos).dot(u.path[0]-u.pos)<=0.0:continue
 		var clearance:float=crowd_radius(u.kind)+crowd_radius(other.kind)+0.5
 		if not _near_legs(other.pos,legs,clearance):continue
 		other["yield_until"]=time+6.0
 		# Never step aside through the unit being let past.
 		var keep_off:Array=[{"pos":u.pos,"radius":minf(clearance,other.pos.distance_to(u.pos)-0.05)}]
-		var queries:=0
-		for ring in [6.0,8.0,10.0,12.0]:
-			for i in 16:
-				var spot:Vector2=other.pos+Vector2.from_angle(i*TAU/16)*ring
-				if _near_legs(spot,legs,clearance) or not terrain.avoids_bodies(other.pos,spot,keep_off) or not location_clear(spot,other.kind,other.id):continue
-				var route:=terrain.path(other.pos,spot,od.domain,float(od.radius),keep_off,terrain.mobility_profile(other.kind))
-				queries+=1
-				var length:=0.0
-				var previous:Vector2=other.pos
-				for point in route:length+=previous.distance_to(point);previous=point
-				if not route.is_empty() and length<=ring*1.6+2.0:
-					other.orders=[{"mode":"move","pos":spot,"target":-1}]
-					other.path=route
-					other.state="MOVING"
-					other.reason="Making way"
-					return
-				if queries>=6:return
-		return
+		var found:Array=_give_way_spot(other,legs,keep_off,clearance)
+		if found.is_empty():
+			if movers:continue
+			return false
+		if other.orders.is_empty():
+			other.orders=[{"mode":"move","pos":found[0],"target":-1}]
+			other.state="MOVING"
+		else:give_way(other,found)
+		other.path=found[1]
+		other.reason="Making way"
+		asked=true
+		if not movers:return true
+	return asked
+
+# A jammed hull with no lower-priority friend to ask backs (or turns) off to
+# the nearest clear spot off the next legs of the friendly vehicles pressing
+# it, lets them pass, then resumes its order.
+func back_off(u:Dictionary)->void:
+	if not u.maneuver.is_empty() or u.orders.is_empty() or u.orders[0].get("give_way",false):return
+	var own:float=crowd_radius(u.kind)
+	var legs:Array=[]
+	var keep_off:Array=[]
+	for other in movement_neighbors(u):
+		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=collision_layer(u) or not other.members.is_empty():continue
+		var clearance:float=own+crowd_radius(other.kind)+0.5
+		if other.pos.distance_to(u.pos)>clearance+1.0:continue
+		keep_off.append({"pos":other.pos,"radius":minf(clearance,other.pos.distance_to(u.pos)-0.05)})
+		if not other.path.is_empty():legs.append([other.pos]+other.path.slice(0,2))
+	if keep_off.is_empty():return
+	var found:Array=_give_way_spot(u,legs,keep_off,own*2.0+0.5,true)
+	if found.is_empty():return
+	u["yield_until"]=time+6.0
+	give_way(u,found)
+	u.reason="Making way"
+
+# A moving vehicle pulls over to `found` [spot, route] ahead of its own orders
+# (resumed on arrival), starting its blocked and jam clocks afresh.
+func give_way(u:Dictionary,found:Array)->void:
+	u.orders.push_front({"mode":"move","pos":found[0],"target":-1,"give_way":true})
+	u.path=found[1]
+	u.blocked_time=0.0
+	u.erase("jam_at")
+	u.erase("jam_seen")
+
+func _route_length(from:Vector2,route:Array)->float:
+	var length:=0.0
+	for point in route:length+=from.distance_to(point);from=point
+	return length
+
+# Nearest clear spot 6-12 u (a mover: 3-12 u) from `other` off `legs` (one leg list, or several
+# when `many`), reached by a short route clear of `keep_off`: [spot, route] or [].
+func _give_way_spot(other:Dictionary,legs:Array,keep_off:Array,clearance:float,many:bool=false)->Array:
+	var od:Dictionary=definitions[other.kind]
+	var queries:=0
+	# A moving friend just pulls over, to its own right first (as oncoming
+	# hulls keep right), so it does not cut across the lane it leaves open.
+	var moving:bool=not other.path.is_empty() and not other.orders.is_empty()
+	var base:=0.0
+	if moving:
+		var travel:Vector2=other.path.back()-other.pos
+		base=Vector2(-travel.y,travel.x).angle()
+	for ring in ([3.0,4.5,6.0,8.0,10.0,12.0] if moving else [6.0,8.0,10.0,12.0]):
+		for i in 16:
+			var turn:int=i if not moving else (i+1)/2*(1 if i%2==1 else -1)
+			var spot:Vector2=other.pos+Vector2.from_angle(base+turn*TAU/16)*ring
+			var on_legs:=false
+			for list in (legs if many else [legs]):
+				if _near_legs(spot,list,clearance):on_legs=true;break
+			if on_legs or not terrain.avoids_bodies(other.pos,spot,keep_off) or not location_clear(spot,other.kind,other.id):continue
+			var route:=terrain.path(other.pos,spot,od.domain,float(od.radius),keep_off,terrain.mobility_profile(other.kind))
+			queries+=1
+			if not route.is_empty() and _route_length(other.pos,route)<=ring*1.6+2.0:return [spot,route]
+			if queries>=6:return []
+	return []
+
+# Near its goal, a hull that cannot close in takes the clear spot it is on:
+# its final waypoint is a hand's width away, a friendly vehicle holds the spot,
+# or friendly vehicles have pressed round it for a while.
+const ARRIVE_CROWDED:=6.5
+func crowded_arrival(u:Dictionary,order:Dictionary,jam:float)->bool:
+	if u.path.size()==1 and u.pos.distance_to(u.path[0])<0.75:return true
+	# Pulling over for a friend is no arrival (the spot is the point) until it
+	# has pulled over as far as it can.
+	if order.get("give_way",false):return jam>JAM_BACK_OFF
+	var goal:Vector2=order.pos
+	if u.pos.distance_to(goal)>ARRIVE_CROWDED:return false
+	var own:float=crowd_radius(u.kind)
+	for other in movement_neighbors(u):
+		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=collision_layer(u) or not other.members.is_empty():continue
+		var contact:float=own+crowd_radius(other.kind)+0.6
+		if other.pos.distance_to(goal)<contact or (jam>JAM_GIVE_WAY and other.pos.distance_to(u.pos)<contact):return true
+	return false
 
 func _near_legs(point:Vector2,legs:Array,clearance:float)->bool:
 	for k in range(1,legs.size()):
