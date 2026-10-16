@@ -906,7 +906,10 @@ func _path_smooth(job:Dictionary,work:int)->void:
 			if segment_travel_cost(origin,raw[next],domain,profile)<=raw_costs[next-index]*1.025:
 				furthest=next
 				break
-		result.append(raw[furthest])
+		# Section envelopes are not rigid (soldiers step individually): only
+		# hulls and default-profile routes are made exact.
+		if profile!="infantry":spent+=_publish(result,origin,raw,index,furthest,domain,radius,avoid)
+		else:result.append(raw[furthest])
 		origin=raw[furthest]
 		index=furthest+1
 	if job.direct_roomy:
@@ -917,6 +920,70 @@ func _path_smooth(job:Dictionary,work:int)->void:
 		if segment_travel_cost(from,to,domain,profile)<=route_cost:
 			result.clear();result.append(to)
 	job.done=true;job.work+=spent
+
+# Planning keeps the sampled clearance the nav grid is built with (an exact
+# test there rejects cell chains the grid reports as connected and drops the
+# route). Published edges are then made exact: a shortcut whose swept footprint
+# clips a corner between samples bends at the skipped grid nodes instead (grid
+# nodes carry +0.15 m clearance, so adjacent ones never clip). Never rejects:
+# if no node helps, the sampled edge stands. Appends to result; returns checks.
+func _publish(result:Array[Vector2],origin:Vector2,raw:Array[Vector2],first:int,last:int,domain:String,radius:float,avoid:Array)->int:
+	var checks:=1
+	var start:=origin
+	while not _sweep_clear(start,raw[last],domain,radius):
+		var pick:=-1
+		for j in range(last-1,first-1,-1):
+			checks+=1
+			if segment_clear(start,raw[j],domain,radius) and _sweep_clear(start,raw[j],domain,radius) and avoids_bodies(start,raw[j],avoid):
+				pick=j;break
+		if pick<0:break
+		result.append(raw[pick])
+		start=raw[pick];first=pick+1
+	result.append(raw[last])
+	return checks
+
+# Corner/point sweep for a segment whose samples already clear (see
+# _corners_clear); skipped when the waist between samples is under 1 cm.
+func _sweep_clear(a:Vector2,b:Vector2,domain:String,radius:float)->bool:
+	if domain=="air":return true
+	var steps:=maxi(1,ceili(a.distance_to(b)/maxf(0.35,radius*0.9)))
+	var half:=a.distance_to(b)/steps*0.5
+	if half*half<radius*radius-(radius-0.01)*(radius-0.01):return true
+	return _corners_clear(a,b,domain,radius)
+
+# Between segment_clear samples the footprint circles leave a waist where an
+# obstacle corner, tree or pole can slip up to r-sqrt(r^2-(step/2)^2) inside
+# the swept radius (26 cm for a 2.45 m hull). Samples (closer than any margin)
+# catch every crossing, so testing corners and points against the whole segment
+# makes the sweep exact. Obstacles the start footprint already touches keep
+# sampled semantics, so a unit pressed against one can leave it.
+func _corners_clear(a:Vector2,b:Vector2,domain:String,radius:float)->bool:
+	var box:=Rect2(a,Vector2.ZERO).expand(b)
+	var middle:=(a+b)*0.5
+	var reach:=a.distance_to(b)*0.5
+	var rects:Array=[]
+	if domain=="sea":
+		rects.append([_static_candidates("water",middle,reach+radius),radius])
+	else:
+		rects.append([_static_candidates("solid",middle,reach+radius+0.12),radius+0.12])
+		rects.append([dynamic_blocks,radius+0.12])
+		if port:rects.append([[Rect2(76.5,57.3,3,9.4)],radius])
+	if port:rects.append([DOCKS,radius])
+	for group in rects:
+		var margin:float=group[1]
+		var limit:=margin*margin
+		for rect in group[0]:
+			if not rect.grow(margin).intersects(box,true) or circle_rect(a,margin,rect):continue
+			if crush_pass and crushables.has(rect):continue
+			for corner in [rect.position,Vector2(rect.end.x,rect.position.y),rect.end,Vector2(rect.position.x,rect.end.y)]:
+				if Geometry2D.get_closest_point_to_segment(corner,a,b).distance_squared_to(corner)<limit:return false
+	if domain=="sea":return true
+	for points in [[_static_candidates("tree",middle,reach+radius+1.2),radius+1.2],[poles,radius+0.15]]:
+		var limit:float=points[1]*points[1]
+		for point in points[0]:
+			if a.distance_squared_to(point)<limit:continue
+			if Geometry2D.get_closest_point_to_segment(point,a,b).distance_squared_to(point)<limit:return false
+	return true
 
 # First raw node at or up to `skip` nodes after index reachable from origin
 # with a clear footprint, or -1. `edges` memoises results for one query.
