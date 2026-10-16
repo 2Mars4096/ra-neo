@@ -64,6 +64,10 @@
 - [ ] Testing economy: restore normal supply (1600, 3/s) when testing ends.
 - [ ] Deferred by player: wounded marker / bleed-out countdown, rescue of stranded wounded.
 
+- [x] Enemy uses buildings and mortar; open-ground prone; air clearance over tall structures; HARVEST LINE fixed; ~11% cheaper tick (2026-10-16).
+- [ ] Classic playthrough DEFEAT ~344 s: balance decision needed (see bugs.md 2026-10-16).
+- [ ] Roadside-props corner clips (~1 cm): exact sweep rejected; needs a nav-grid-consistent approach.
+- [ ] engage_idle pulls sections out of wall cover when the lone shooter loses its target.
 - [x] Smarter contact tactics: contact drill, fire-from-cover corner slots, shelter re-evaluation, crossfire prone, crouch in cover, one-at-a-time rushes.
 
 ## Next development priorities

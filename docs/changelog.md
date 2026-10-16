@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-16 — Enemy buildings, mortar, open-ground prone, frame time, air clearance
+
+- Enemy defenders garrison buildings near objectives; the enemy fires mortar salvos with a warning toast (`test_enemy_garrison` 38/0). Mortar rounds have their own whistle (0.62 s before impact), dirt-fountain burst and 1.4 m crater. A building collapse is no longer also voiced as a tank kill.
+- Garrison transit: during the walked entry/exit, spotting, concealment and blast shelter apply per soldier (`test_garrison` 32/0).
+- Spatial targeting matches the brute-force reference for sections whose soldiers are spread out (`test_spatial_targeting` passes again). The parcel test skips the authored harbor builder.
+- Soldiers under fire with no reachable cover go prone within ~0.5 s and keep firing (open street: 4.4 s -> 0.53 s). Cover searches plan with the standing body, so going prone never blocks a move to cover. Sections stay by a bleeding squadmate instead of walking off to man works.
+- Simulation tick ~11% cheaper on the harbor combat profile (mean 8.85 -> 7.86 ms, p95 11.6 -> 10.5 ms, tick-297 spike gone); seeded results bit-identical (`tests/profile_harbor_combat.gd --fingerprint`).
+- HARVEST LINE resolves (victory 141.5 s): downed all-severe sections no longer block movement. Attack re-plans skip stalled hulls; detours treat wrecks as obstacles.
+- Aircraft climb over harbor structures taller than their cruise altitude (air ceiling from authored buildings and props; `test_scene_air_clearance` 16/0).
+
 ## 2026-10-15 — Realistic damage, world destruction, audio, hitch removal
 
 - Infantry wounds (`infantry.gd`). Soldiers go HEALTHY/LIGHT/SEVERE/KIA with per-weapon outcome rolls. HE fragments wound nearby soldiers. SEVERE casualties bleed out unless given buddy aid, and bodies persist. A section whose survivors are all SEVERE stays selectable but is combat-ineffective and is not auto-targeted (`test_wounds`).
