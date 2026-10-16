@@ -1197,14 +1197,20 @@ func move_unit(u: Dictionary, dt: float) -> void:
 	dt*=mobility
 	var d: Dictionary = definitions[u.kind]
 	var order: Dictionary = u.maneuver if not u.maneuver.is_empty() else u.orders[0]
-	if order.mode == "attack" and u.repath <= 0 and u.blocked_time<=1.5:
+	# A hull with no headway (see `stalled` below) leaves re-planning to the
+	# detour, which knows the bodies and wrecks a plain chase route ignores.
+	var jammed:bool=u.has("stall_at") and time-float(u.stall_seen)<=0.5 and u.pos.distance_to(u.stall_pos)<=1.5 and time-float(u.stall_at)>2.0
+	if order.mode == "attack" and u.repath <= 0 and u.blocked_time<=1.5 and not jammed:
 		var target := get_unit(order.target)
 		if not alive(target):
 			finish_order(u)
 			return
 		if contact_known(u,target) and terrain.traversable(target.pos, d.domain,float(d.radius)):
+			# Chase a target that moved; a standing one keeps the current route
+			# (re-planning it would discard detours round bodies and wrecks).
+			if order.pos.distance_to(target.pos)<=1.0 and not u.path.is_empty():u.repath = 1.0
 			# Over budget: keep the current route and retry next tick.
-			if take_route_budget(u.pos,target.pos,true):
+			elif take_route_budget(u.pos,target.pos,true):
 				order.pos = target.pos
 				u.path = terrain.path(u.pos, order.pos, d.domain,float(d.radius),[],terrain.mobility_profile(u.kind))
 				u.repath = 1.0
@@ -1250,6 +1256,11 @@ func move_unit(u: Dictionary, dt: float) -> void:
 					if hull and not other.path.is_empty() and (other.path.back()-other.pos).normalized().dot(travel)<-0.5 and (other.pos-u.pos).dot(travel)>0.0:
 						var left:Vector2=Vector2(travel.y,-travel.x)
 						keep_right.append({"pos":other.pos+left*clearance*1.5,"radius":clearance*1.5})
+		# Wrecks are solid for vehicles: a detour round a live body must not
+		# squeeze past one (the wreck re-route ignores live bodies in turn).
+		if u.members.is_empty() and d.domain=="land":
+			for wreck in VehicleDamage.wrecks(self):
+				if wreck.pos.distance_to(u.pos)<60.0:avoid.append({"pos":wreck.pos,"radius":float(d.radius)+float(wreck.radius)+(0.4 if hull else 0.0)})
 		# A hull already inside a body's margin may still plan away from it.
 		if hull:
 			for body in avoid+keep_right:body.radius=minf(body.radius,u.pos.distance_to(body.pos)-0.05)
@@ -1484,6 +1495,9 @@ func update_objectives(dt: float) -> void:
 func collision_layer(u: Dictionary) -> String:
 	# Non-solid field works (wire, trenches, nets) apply terrain zones, not bodies.
 	if not definitions[u.kind].get("solid",true):return "field_zone"
+	# A section whose survivors are all down lies on the ground: others step
+	# past it (as they pass its downed soldiers individually under autonomy).
+	if u.get("combat_ineffective",false):return "downed"
 	return str(u.kind) if definitions[u.kind].domain=="air" else str(definitions[u.kind].domain)
 
 # Footprint used against OTHER units. A squad's definition radius (2.65) is a
