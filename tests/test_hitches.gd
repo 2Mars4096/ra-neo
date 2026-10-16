@@ -189,8 +189,9 @@ func routes()->void:
 			budget_low=minf(budget_low,sim.route_budget)
 			if routed_at<0 and sim.route_queue.is_empty():routed_at=i+1
 		check(routed_at>0 and routed_at<=60,"queue drains within two seconds (%d ticks)" % routed_at)
-		# Queue work is capped per tick: one route's search and a string-pull step past the cap at most.
-		check(budget_low>=Sim.ROUTE_BUDGET-float(Sim.ROUTE_QUEUE_WORK+2*Sim.ROUTE_SEARCH_WORK+17)/Sim.ROUTE_WORK_PER_UNIT-0.01,"queued planning stays within its per-tick work cap")
+		# Queue work is capped per tick: a grid search only starts with room for it
+		# (one per tick), so at most one string-pull step runs past the cap.
+		check(budget_low>=Sim.ROUTE_BUDGET-float(Sim.ROUTE_QUEUE_WORK+17)/Sim.ROUTE_WORK_PER_UNIT-0.01,"queued planning stays within its per-tick work cap")
 		var progressed:=group.filter(func(id):var u=sim.get_unit(id);return u.pos.distance_to(u.home)>8.0 and not u.orders.is_empty() and not u.path.is_empty()).size()
 		check(progressed==group.size(),"every queued unit departs on its planned route (%d/%d)" % [progressed,group.size()])
 		print("HITCH group order: issue=%.1fms queued=%d drained_after=%d ticks worst_tick=%.1fms" % [issue_ms,queued,routed_at,worst])

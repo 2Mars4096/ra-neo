@@ -73,6 +73,9 @@ static func populate(sim)->void:
 	for record in enemy:sim.spawn(record.kind,1,record.pos)
 	spawn_prepared_works(sim,config.get("enemy_works",[]),1)
 	sim.field_ops.started=true
+	# One-off garrison site scoring (building index, doorways, window rays) at
+	# load rather than in the first battle tick. Terrain is final here.
+	if not sim.objectives.is_empty() and not sim.scenario.get("architecture",[]).is_empty():garrison_sites(sim)
 
 # Authored prepared positions (trenches, wire, bunkers, gun pits, command posts)
 # start complete for their side; they are ordinary destructible field works.
@@ -210,10 +213,14 @@ const GARRISON_REACH:=50.0        # a section walks at most this far to a buildi
 const GARRISON_PER_BUILDING:=2
 const GARRISON_SHARE:=0.5
 const GARRISON_SIGHT:=25.0        # field-of-fire rays from the approach-facing windows
+const GARRISON_ORDERS:=2          # entry orders (routes) per decision; the rest follow next tick
 
 static func enemy_garrisons(sim)->void:
 	if sim.objectives.is_empty() or sim.time<float(sim.field_ops.get("garrison_next",0.0)):return
 	sim.field_ops["garrison_next"]=sim.time+GARRISON_INTERVAL
+	# Each entry order plans a route: in play a decision sends a few, and when
+	# more are due it runs again next tick instead of planning them all at once.
+	var orders_left:=GARRISON_ORDERS if sim.ticking else 1<<30
 	var sites:Array=garrison_sites(sim)
 	var excluded:Array=sim.field_ops.get("waves",{}).get("active",[])+sim.counterattack_ids
 	# Sections per building: enemy claims (inside, entering, bound for) and player presence.
@@ -242,6 +249,10 @@ static func enemy_garrisons(sim)->void:
 		# Role sections outside and idle (evicted by a collapse, or entry failed) re-garrison or rejoin the QRF.
 		for u in role:
 			if Garrison.inside(u) or Garrison.transit(u)!="" or u.has("garrison_target") or not u.orders.is_empty():continue
+			if orders_left<=0:
+				sim.field_ops.garrison_next=sim.time
+				return
+			orders_left-=1
 			var b:=nearest_site(sim,u,sites[i],open)
 			if b<0 or Garrison.order(sim,[u.id],b)==0:
 				u.erase("garrison_role");held-=1
@@ -258,6 +269,10 @@ static func enemy_garrisons(sim)->void:
 					var score:float=float(site.score)-walk/GARRISON_REACH
 					if score>best_score:best_score=score;best_u=u;best_b=site.id
 			if best_b<0:break
+			if orders_left<=0:
+				sim.field_ops.garrison_next=sim.time
+				return
+			orders_left-=1
 			idle.erase(best_u)
 			if Garrison.order(sim,[best_u.id],best_b)==0:
 				best_u["garrison_fail"]=sim.time

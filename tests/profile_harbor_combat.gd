@@ -15,7 +15,9 @@ func summary(label:String,costs:Array)->String:
 	var sorted:=costs.duplicate();sorted.sort()
 	var total:=0.0
 	for c in sorted:total+=c
-	return "%s ticks=%d mean=%.2fms p50=%.2fms p95=%.2fms max=%.2fms over%.0fms=%d" % [label,sorted.size(),total/sorted.size(),sorted[sorted.size()/2],sorted[int(sorted.size()*0.95)],sorted.back(),BUDGET_MS,sorted.filter(func(c):return c>BUDGET_MS).size()]
+	return "%s ticks=%d tick0=%.2fms mean=%.2fms p50=%.2fms p95=%.2fms max=%.2fms over%.0fms=%d" % [label,sorted.size(),costs[0],total/sorted.size(),sorted[sorted.size()/2],sorted[int(sorted.size()*0.95)],sorted.back(),BUDGET_MS,sorted.filter(func(c):return c>BUDGET_MS).size()]
+# Per-tick phase costs of every run (phase -> one entry per tick).
+var phase_ticks:Array=[]
 # Seeded state digest (`-- --fingerprint`): optimisations must leave it unchanged.
 func digest(sim)->String:
 	var state:Array=[sim.combat_rng.state,sim.time,sim.kills,sim.losses]
@@ -37,6 +39,8 @@ func fight(report:bool)->Array:
 	var grids_before:Array=sim.terrain.navigation.keys()
 	sim.profiling=true
 	var costs:Array=[]
+	var phases:Dictionary={}
+	phase_ticks.append(phases)
 	for i in 900:
 		var before:Dictionary=sim.profile.duplicate()
 		var wet:float=sim.terrain.wetness
@@ -46,6 +50,10 @@ func fight(report:bool)->Array:
 		sim.tick(1.0/30)
 		var cost:=(Time.get_ticks_usec()-t)/1000.0
 		costs.append(cost)
+		for key in sim.profile:
+			if not phases.has(key):
+				phases[key]=PackedFloat64Array();phases[key].resize(900)
+			phases[key][i]=sim.profile[key]-before.get(key,0.0)
 		if fingerprinting and i%100==99:fingerprints.append(digest(sim))
 		if report and cost>BUDGET_MS:
 			var parts:Array=[]
@@ -75,6 +83,25 @@ func _init()->void:
 		var costs:Array=fight(false)
 		print(summary("HARBOR COMBAT RUN %d:" % (run+1),costs))
 		for i in best.size():best[i]=minf(best[i],costs[i])
+	# Worst tick per phase, on the per-tick minimum over runs (filters noise).
+	for key in phase_ticks[0]:
+		var worst:=0.0;var at:=-1
+		for i in 900:
+			var low:=INF
+			for phases in phase_ticks:low=minf(low,phases[key][i] if phases.has(key) else 0.0)
+			if low>worst:worst=low;at=i
+		print("PHASE-MAX %-16s %.2fms at tick %d (per-tick min of %d)" % [key,worst,at,repeat])
+	# `-- --ticks=MS`: every tick whose per-tick minimum exceeds MS, with its top phases.
+	for arg in OS.get_cmdline_user_args():
+		if not arg.begins_with("--ticks="):continue
+		for i in 900:
+			if best[i]<=float(arg.get_slice("=",1)):continue
+			var parts:Array=[]
+			for key in phase_ticks[0]:
+				var low:=INF
+				for phases in phase_ticks:low=minf(low,phases[key][i] if phases.has(key) else 0.0)
+				if low>=1.0 and key!="unit_loop":parts.append("%s=%.1f" % [key,low])
+			print("TICK %d min=%.1fms %s" % [i,best[i],parts])
 	if repeat>1:
 		print(summary("HARBOR COMBAT PER-TICK MIN OF %d:" % repeat,best))
 		for i in best.size():

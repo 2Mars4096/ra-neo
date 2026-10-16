@@ -350,8 +350,36 @@ static func work_slots(u:Dictionary,sim,threat_dir:Vector2) -> Array:
 			else:slots.append(middle+across*side*((rect.size.y if long_x else rect.size.x)/2+0.85))
 	return slots
 
+# Sections do not all settle in at the same instant: the first search waits a
+# per-section reaction (id slots one tick apart), which also spreads the
+# costly searches of a freshly deployed force over the first ticks.
+const REACT_SLOTS:=20
+const REACT_STEP:=1.0/30.0
+# Halt searches per tick across all sections, in planned routes (a soldier's
+# search plans up to six, ~1.5 ms each): one starts while at most HALT_ROUTES
+# were planned this tick; the other soldiers take cover on following ticks.
+const HALT_ROUTES:=2
+
+# Routes planned by halt searches this tick (sim meta: [tick serial, routes]).
+static func _halt_routes(sim) -> int:
+	var spent:Vector2i=sim.get_meta("cover_halt_routes",Vector2i(-1,0))
+	return spent.y if spent.x==sim.spatial_serial else 0
+
+static func _halt_budget(sim) -> bool:
+	return not sim.ticking or _halt_routes(sim)<=HALT_ROUTES
+
 static func occupy_works(u:Dictionary,sim,threat:Dictionary) -> bool:
+	if not u.has("occupy_check"):
+		u["occupy_check"]=sim.time+REACT_STEP*float(u.id%REACT_SLOTS)
+		# Look again at that moment rather than at the next 0.3 s threat scan.
+		if u.occupy_check>sim.time:u["cover_next"]=minf(float(u.get("cover_next",0.0)),u.occupy_check)
 	if sim.time<u.get("occupy_check",0.0):return u.members.any(func(m):return m.get("occupying",false))
+	# The rest of a halt cut short by the per-tick search budget (same bearing).
+	var resume:Variant=u.get("halt_resume",null)
+	u.erase("halt_resume")
+	if resume!=null and sim.time-float(resume[0])<=1.0:
+		u["occupy_check"]=float(resume[2])
+		return halt_in_cover(u,sim,resume[1],int(resume[3])) or u.members.any(func(m):return m.hp>0 and m.get("occupying",false))
 	# Searching is costly: a failed search backs off ~10 s (staggered per unit) so
 	# idle defenders across the map do not re-run it every few ticks.
 	u["occupy_check"]=sim.time+9.0+float(u.id%7)*0.4
@@ -382,12 +410,20 @@ static func occupy_works(u:Dictionary,sim,threat:Dictionary) -> bool:
 # No field works nearby: each soldier takes the nearest real cover within a few
 # metres (building corner, yard wall, car, rubble) that screens the enemy side,
 # using a far synthetic threat along the expected direction of contact.
-static func halt_in_cover(u:Dictionary,sim,threat_dir:Vector2) -> bool:
+static func halt_in_cover(u:Dictionary,sim,threat_dir:Vector2,first:int=0) -> bool:
 	var phantom:={"pos":u.pos+threat_dir*35.0,"members":[]}
 	var any:=false
-	for member in u.members:
+	for i in range(first,u.members.size()):
+		var member:Dictionary=u.members[i]
 		if member.hp<=0 or member.get("occupying",false):continue
+		if not _halt_budget(sim):
+			# Out of searches this tick: the others look at the next threat scan.
+			u["halt_resume"]=[sim.time,threat_dir,u.occupy_check,i]
+			u["occupy_check"]=sim.time
+			break
+		var planned:int=sim.terrain.path_calls
 		var result:=find_slot(u,member,sim,phantom,[phantom])
+		if sim.ticking:sim.set_meta("cover_halt_routes",Vector2i(sim.spatial_serial,_halt_routes(sim)+sim.terrain.path_calls-planned))
 		if result.is_empty() or result.pos.distance_to(member.pos)>8.0:continue
 		member.cover_goal=result.pos;member.cover_path=result.path;member.cover_phase="SEEKING";member.cover_blocked=0.0
 		member["cover_screened"]=false;member["occupying"]=true;member["hold_facing"]=threat_dir

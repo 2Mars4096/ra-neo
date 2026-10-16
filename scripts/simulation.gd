@@ -247,8 +247,12 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 # still take the first route of a tick. Short tactical hops are never deferred.
 const ROUTE_BUDGET:=14.0
 const ROUTE_FREE_DISTANCE:=16.0
-const ROUTE_QUEUE_WORK:=180
+# Queued routes per tick: string-pull checks (~0.08-0.12 ms each on long
+# routes) and at most one grid search, which runs whole (not resumable) and
+# only starts with room left for it, so routing stays ~10-20 ms per tick.
+const ROUTE_QUEUE_WORK:=100
 const ROUTE_SEARCH_WORK:=40 # a queued route's grid search, in check units
+const ROUTE_SEARCHES_PER_TICK:=1
 const ROUTE_WORK_PER_UNIT:=14 # string-pull checks per budget unit
 var route_budget:=ROUTE_BUDGET
 var route_queue:Array=[]
@@ -285,6 +289,7 @@ func route_waiting(u:Dictionary)->bool:
 
 func plan_queued_routes()->void:
 	var work:=ROUTE_QUEUE_WORK
+	var searches:=ROUTE_SEARCHES_PER_TICK
 	while not route_queue.is_empty() and work>0:
 		var u:=get_unit(int(route_queue[0]))
 		if not alive(u) or not route_waiting(u):
@@ -295,7 +300,9 @@ func plan_queued_routes()->void:
 		var d:Dictionary=definitions[u.kind]
 		var goal:Vector2=u.orders[0].pos
 		if not pending.has("job"):
-			var bodies:Array=standing_bodies(u,u.pos,goal) if pending.mode=="order" else []
+			if searches<=0 or work<ROUTE_SEARCH_WORK:break
+			searches-=1
+			var bodies:Array=standing_bodies(u,u.pos,goal) if pending.mode=="order" and not pending.get("terrain_only",false) else []
 			pending.around=not bodies.is_empty()
 			pending.job=terrain.path_job(u.pos,goal,d.domain,float(d.radius),bodies,terrain.mobility_profile(u.kind))
 			work-=ROUTE_SEARCH_WORK
@@ -305,10 +312,10 @@ func plan_queued_routes()->void:
 		work-=job.work-before
 		if not done:break
 		if job.result.is_empty() and pending.around:
-			# As issue(): without a way around standing friendlies, plan on terrain.
-			pending.around=false
-			pending.job=terrain.path_job(u.pos,goal,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind))
-			work-=ROUTE_SEARCH_WORK
+			# As issue(): without a way around standing friendlies, plan on
+			# terrain (a fresh search, so it takes the next search slot).
+			pending.erase("job")
+			pending["terrain_only"]=true
 			continue
 		route_queue.pop_front()
 		u.erase("route_pending")
@@ -943,7 +950,9 @@ func tick(dt: float) -> void:
 	terrain.wetness=weather.wetness
 	terrain.advance_navigation_weights(NAV_WEIGHT_CELLS_PER_TICK)
 	route_budget=ROUTE_BUDGET
+	if profiling:lap=_lap("setup+spatial",lap)
 	plan_queued_routes()
+	if profiling:lap=_lap("route_queue",lap)
 	recruit_clock = maxf(0, recruit_clock-dt)
 	sensor_clock -= dt
 	if profiling:lap=_lap("setup+spatial",lap)
