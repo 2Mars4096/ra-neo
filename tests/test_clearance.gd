@@ -21,6 +21,10 @@ func assert_clear(sim) -> void:
 		check(sim.terrain.traversable(u.pos,d.domain,float(d.radius)),"static clearance "+str(u.id))
 		for other in sim.units:
 			if not sim.alive(other) or other.id<=u.id or sim.collision_layer(u)!=sim.collision_layer(other): continue
+			# A section whose survivors are all down is no body: its men lie where
+			# they fell and others step past (Simulation.collision_layer). A live
+			# section can cross that spot and go down on it in turn.
+			if sim.collision_layer(u)=="downed": continue
 			var margin:float=u.pos.distance_to(other.pos)-float(d.radius)-float(sim.definitions[other.kind].radius)
 			minimum_margin=minf(minimum_margin,margin)
 			check(margin>=-0.001,"model overlap %d/%d" % [u.id,other.id])
