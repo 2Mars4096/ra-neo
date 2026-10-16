@@ -1372,14 +1372,16 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			u["jam_pos"]=u.pos;u["jam_at"]=time
 		u["jam_seen"]=time
 		var jam:float=time-float(u.jam_at)
-		if u.blocked_time>1.5 or stalled:
+		# In a fight the crew holds and fights; it sorts the jam out once the
+		# threat passes, or after JAM_UNDER_FIRE regardless (never a permanent stall).
+		if (u.blocked_time>1.5 or stalled) and jam>1.5 and (jam>JAM_UNDER_FIRE or not under_threat(u)):
 			if crowded_arrival(u,order,jam):
 				u.path.clear()
 				finish_order(u)
 				return
 			if jam>JAM_GIVE_WAY and time>=float(u.get("give_way_at",0.0)):
 				u["give_way_at"]=time+1.0
-				if not make_way(u,true) and jam>JAM_BACK_OFF:back_off(u)
+				if not make_way(u,true,jam>JAM_UNDER_FIRE) and jam>JAM_BACK_OFF:back_off(u)
 	if (u.blocked_time>1.5 or stalled) and u.repath<=0 and take_route_budget(u.pos,order.pos,true):
 		var avoid:Array=[]
 		var keep_right:Array=[]
@@ -1696,7 +1698,17 @@ func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary], op
 	var radius:=float(d.radius)
 	var layer:=collision_layer(u)
 	var crowd:=crowd_radius(u.kind)
-	var known:Dictionary=open.get_or_add("terrain:%s:%s" % [domain,radius],{})
+	# A vehicle cannot stop in a wreck's margin: a spot on or beside a wreck
+	# becomes the clear spot beside it on the near side, and the rings below
+	# skip wreck margins too, so a group spreads its slots round the wreck.
+	# Only wrecks the rings can reach are checked (none: terrain-only memo).
+	var nearby:Array=[]
+	if has_meta(VehicleDamage.WRECKS) and VehicleDamage.wreck_bound(self,u):
+		var beside:=VehicleDamage.clear_goal(self,u,origin,u.pos)
+		if beside.x>=0:origin=beside
+		nearby=VehicleDamage.wrecks_near(self,origin,radius,18.0)
+	var wrecked:=not nearby.is_empty()
+	var known:Dictionary=open.get_or_add("terrain:%s:%s:%s" % [domain,radius,wrecked],{})
 	var taken:Dictionary=open.get_or_add("slots:%s:%s" % [layer,crowd],{})
 	var profile:String=terrain.mobility_profile(u.kind)
 	# Probing from open ground, reachable() runs the straight-line check first.
@@ -1715,7 +1727,7 @@ func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary], op
 				continue
 			var free=known.get(p)
 			if free==null:
-				free=terrain.traversable(p,domain,radius)
+				free=terrain.traversable(p,domain,radius) and not (wrecked and not VehicleDamage.wreck_at(self,p,radius,nearby).is_empty())
 				known[p]=free
 			if not free: continue
 			if probe:
@@ -1939,10 +1951,13 @@ func standing_bodies(u:Dictionary,from:Vector2,to:Vector2,ignore:Array=[])->Arra
 # With `movers` (a hull jammed among friendly vehicles), moving friendly
 # vehicles of lower priority (higher id: deterministic right of way) give way
 # too: they back or turn off to such a spot, then resume their own orders.
-# Returns true when a friend was asked to give way.
+# A mover in a fight is not asked (one under threat but not firing is, by an
+# `insistent` hull jammed past JAM_UNDER_FIRE). Returns true when a friend was
+# asked to give way.
 const JAM_GIVE_WAY:=2.5
 const JAM_BACK_OFF:=4.0
-func make_way(u:Dictionary,movers:bool=false)->bool:
+const JAM_UNDER_FIRE:=12.0
+func make_way(u:Dictionary,movers:bool=false,insistent:bool=false)->bool:
 	if u.path.is_empty() or not scenario.get("autonomy",false):return false
 	var legs:Array=[u.pos]+u.path.slice(0,2)
 	var asked:=false
@@ -1951,12 +1966,13 @@ func make_way(u:Dictionary,movers:bool=false)->bool:
 		var od:Dictionary=definitions[other.kind]
 		if not other.maneuver.is_empty() or other.hold_command or od.get("structure",false) or other.has("building_id") or time<float(other.get("yield_until",0.0)):continue
 		if not other.orders.is_empty():
-			if not movers or other.id<u.id or not u.members.is_empty() or not other.members.is_empty() or other.orders[0].get("give_way",false):continue
+			if not movers or other.id<u.id or not u.members.is_empty() or not other.members.is_empty() or other.orders[0].get("give_way",false) or engaged(other) or (not insistent and under_threat(other)):continue
 			# Only a mover ahead holds the way (one behind is just following).
 			if (other.pos-u.pos).dot(u.path[0]-u.pos)<=0.0:continue
 		var clearance:float=crowd_radius(u.kind)+crowd_radius(other.kind)+0.5
 		if not _near_legs(other.pos,legs,clearance):continue
-		other["yield_until"]=time+6.0
+		# A mover asked once is not asked again soon (no shuffling back and forth).
+		other["yield_until"]=time+(6.0 if other.orders.is_empty() else 20.0)
 		# Never step aside through the unit being let past.
 		var keep_off:Array=[{"pos":u.pos,"radius":minf(clearance,other.pos.distance_to(u.pos)-0.05)}]
 		var found:Array=_give_way_spot(other,legs,keep_off,clearance)
@@ -1993,6 +2009,28 @@ func back_off(u:Dictionary)->void:
 	u["yield_until"]=time+6.0
 	give_way(u,found)
 	u.reason="Making way"
+
+# A crew in a fight (a target, or firing in the last few seconds) holds its
+# ground: it neither gives way nor backs off.
+func engaged(u:Dictionary)->bool:
+	return int(u.target)>=0 or time-float(u.last_shot)<3.0
+
+# A known enemy combatant that can hurt the unit is within 25 u (the tactical
+# director's danger test): the crew fights rather than shuffling for friends.
+# Enemy buildings do not count, so a pile-up on a structure still resolves.
+# Re-checked at most every 0.5 s per unit.
+func under_threat(u:Dictionary)->bool:
+	if engaged(u):return true
+	if time<float(u.get("threat_until",-1.0)):return u.threat
+	var threat:=false
+	for other in units:
+		if other.team==u.team or not alive(other) or definitions[other.kind].get("structure",false):continue
+		if u.pos.distance_squared_to(other.pos)<625.0 and contact_known(u,other) and effective_unit(other,u.kind):
+			threat=true
+			break
+	u["threat"]=threat
+	u["threat_until"]=time+0.5
+	return threat
 
 # A moving vehicle pulls over to `found` [spot, route] ahead of its own orders
 # (resumed on arrival), starting its blocked and jam clocks afresh.
@@ -2043,13 +2081,18 @@ func crowded_arrival(u:Dictionary,order:Dictionary,jam:float)->bool:
 	# Pulling over for a friend is no arrival (the spot is the point) until it
 	# has pulled over as far as it can.
 	if order.get("give_way",false):return jam>JAM_BACK_OFF
+	# An attack holds while its target lives: the crowd never calls it off.
+	if order.mode=="attack" and alive(get_unit(int(order.get("target",-1)))):return false
 	var goal:Vector2=order.pos
 	if u.pos.distance_to(goal)>ARRIVE_CROWDED:return false
 	var own:float=crowd_radius(u.kind)
 	for other in movement_neighbors(u):
 		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=collision_layer(u) or not other.members.is_empty():continue
 		var contact:float=own+crowd_radius(other.kind)+0.6
-		if other.pos.distance_to(goal)<contact or (jam>JAM_GIVE_WAY and other.pos.distance_to(u.pos)<contact):return true
+		# A friend parked on the spot holds it; pressed for long, the hull stops.
+		var held:bool=other.orders.is_empty() and other.maneuver.is_empty() and other.pos.distance_to(goal)<contact
+		if held or (jam>JAM_GIVE_WAY and other.pos.distance_to(u.pos)<contact):
+			return true
 	return false
 
 func _near_legs(point:Vector2,legs:Array,clearance:float)->bool:

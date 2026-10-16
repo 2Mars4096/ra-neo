@@ -8,6 +8,7 @@ const Sim=preload("res://scripts/simulation.gd")
 const CONTACT:=2.45*2.0+0.08 # two tank hulls touching (movement clearance)
 const YIELD_LIMIT:=8.0
 const NEAR_GOAL:=8.0 # "a clear spot near it"
+const UNDER_FIRE_LIMIT:=20.0
 var failures:=0
 var checks:=0
 func check(ok:bool,label:String)->void:
@@ -68,13 +69,25 @@ func _init()->void:
 	for i in 4:column.append([open+Vector2(-12-i*CONTACT,0),open+Vector2(12,0),Vector2.RIGHT])
 	run_case("pressed_same_goal",column,60.0)
 	run_case("pressed_same_goal_dt0.1",column,60.0,"attack_move",0.1)
+	# 8. The same-goal jam within sight of an enemy tank: the crews fight first
+	# (no shuffling under fire) but still sort the jam out within a bound.
+	var fired:Array=[]
+	for corner in [Vector2(-1,-1),Vector2(1,-1),Vector2(1,1),Vector2(-1,1)]:
+		fired.append([yard+corner*12.0,yard,(-corner).normalized()])
+	run_case("same_goal_under_fire",fired,60.0,"move",1.0/30.0,yard+Vector2(0,-24))
 	if checks==0:failures+=1;printerr("FAIL: no cases ran")
 	print("VEHICLE JAM: %d checks, %d failures" % [checks,failures])
 	quit(0 if failures==0 else 1)
 
 # Each entry: [start, goal, facing]. Tanks get individual orders (exact goals).
-func run_case(label:String,entries:Array,limit:float,mode:String="move",dt:float=1.0/30.0)->void:
+# `enemy_at`: an enemy tank there, seen and fired at but harmless (never
+# reloads, never hurt), so the tanks fight under threat while they sort the jam.
+func run_case(label:String,entries:Array,limit:float,mode:String="move",dt:float=1.0/30.0,enemy_at:Vector2=Vector2.INF)->void:
 	var sim=Sim.new(false,scenario_index("black_sea_harbor"))
+	var enemy:Dictionary={}
+	if enemy_at!=Vector2.INF:
+		enemy=sim.spawn("tank",1,enemy_at)
+		enemy.hold_command=true
 	var tanks:Array=[]
 	var goals:Array=[]
 	for entry in entries:
@@ -96,8 +109,17 @@ func run_case(label:String,entries:Array,limit:float,mode:String="move",dt:float
 	var trace:bool=label in OS.get_cmdline_user_args()
 	var steps:=int(limit/dt)
 	var start_ms:=Time.get_ticks_usec()
+	var under_fire:=0.0
 	for step in steps:
+		if not enemy.is_empty():
+			enemy.hp=enemy.max_hp
+			enemy.cooldown=999.0
+			enemy.visible=true
+			enemy.seen_by=[true,true]
 		sim.tick(dt)
+		if not enemy.is_empty():
+			for tank in tanks:
+				if sim.under_threat(tank):under_fire+=dt/tanks.size();break
 		var done:=true
 		for i in tanks.size():
 			var tank:Dictionary=tanks[i]
@@ -119,6 +141,11 @@ func run_case(label:String,entries:Array,limit:float,mode:String="move",dt:float
 		var tank:Dictionary=tanks[i]
 		line+=" [%d arrive=%.1f gap=%.1f yield=%.1f stall=%.1f %s]" % [i,arrived[i],tank.pos.distance_to(goals[i]),worst[i],worst_stall[i],tank.state]
 		check(arrived[i]>=0.0,"%s: tank %d reaches its goal or a clear spot near it within %.0f s (gap %.1f, state %s)" % [label,i,limit,tank.pos.distance_to(goals[i]),tank.state])
-		check(worst[i]<=YIELD_LIMIT,"%s: tank %d yields at most %.0f s at a stretch (%.1f s)" % [label,i,YIELD_LIMIT,worst[i]])
-		check(worst_stall[i]<=YIELD_LIMIT,"%s: tank %d is never stuck without headway over %.0f s (%.1f s)" % [label,i,YIELD_LIMIT,worst_stall[i]])
+		# Under fire the jam waits for the fight first (JAM_UNDER_FIRE).
+		var bound:float=YIELD_LIMIT if enemy.is_empty() else UNDER_FIRE_LIMIT
+		check(worst[i]<=bound,"%s: tank %d yields at most %.0f s at a stretch (%.1f s)" % [label,i,bound,worst[i]])
+		check(worst_stall[i]<=bound,"%s: tank %d is never stuck without headway over %.0f s (%.1f s)" % [label,i,bound,worst_stall[i]])
+	if not enemy.is_empty():
+		check(under_fire>1.0,"%s: the tanks are under threat (%.1f s)" % [label,under_fire])
+		line+=" under_fire=%.1f" % under_fire
 	print(line," wall=%.0f ms" % elapsed)

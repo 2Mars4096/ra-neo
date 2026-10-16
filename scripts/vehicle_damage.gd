@@ -474,17 +474,74 @@ static func _route_round_wrecks(sim,u:Dictionary)->void:
 		# A hull already touching a wreck may still plan away from it.
 		bodies.append({"pos":wreck.pos,"radius":minf(clearance+0.3,gap-0.05)})
 	# A goal inside a wreck's margin can never be routed to (path() publishes no
-	# edge ending inside an avoided body): skip the doomed search, which tanks
-	# holding a post beside a wreck otherwise repeat every 0.5 s.
-	if not sim.terrain.avoids_bodies(u.path.back(),u.path.back(),bodies):return
-	var detour:Array[Vector2]=sim.terrain.path(u.pos,u.path.back(),d.domain,float(d.radius),bodies,sim.terrain.mobility_profile(u.kind))
-	if detour.is_empty():return
+	# edge ending inside an avoided body): the wreck came down on it after the
+	# order, so the driver stops beside the wreck instead (an attack keeps its
+	# target and closes on the target's side). No clear spot: skip the doomed
+	# search, which tanks holding a post beside a wreck otherwise repeat.
+	var goal:Vector2=u.path.back()
+	var order:Dictionary=u.maneuver if not u.maneuver.is_empty() else (u.orders[0] if not u.orders.is_empty() else {})
+	var attack:bool=order.get("mode","")=="attack"
+	if not sim.terrain.avoids_bodies(goal,goal,bodies):
+		goal=clear_goal(sim,u,goal,u.pos,not attack)
+		if goal.x<0 or not sim.terrain.avoids_bodies(goal,goal,bodies):
+			u["wreck_route_at"]=sim.time+3.0
+			return
+	var detour:Array[Vector2]=sim.terrain.path(u.pos,goal,d.domain,float(d.radius),bodies,sim.terrain.mobility_profile(u.kind))
+	if detour.is_empty():
+		# No way to the spot beside the wreck: retry later, not every 0.5 s.
+		if goal!=u.path.back():u["wreck_route_at"]=sim.time+3.0
+		return
+	if goal!=u.path.back() and not attack and order.has("pos") and order.pos.distance_to(u.path.back())<1.0:
+		if u.intent.get("pos")==order.pos:u.intent.pos=goal
+		order.pos=goal
 	u.path=detour
 	# The hull's look-ahead cannot see wrecks: keep it from cutting the detour.
 	u["look_ahead_at"]=sim.time+3.0
 
 static func wrecks(sim)->Array:
 	return sim.get_meta(WRECKS) if sim.has_meta(WRECKS) else []
+
+# Land vehicles (not infantry, not structures) cannot stop in a wreck's margin.
+static func wreck_bound(sim,u:Dictionary)->bool:
+	var d:Dictionary=sim.definitions[u.kind]
+	return u.members.is_empty() and d.domain=="land" and not d.get("structure",false)
+
+# The wreck whose margin (hull radius + wreck radius) holds `p`, else {};
+# `list` narrows the search (e.g. to wrecks_near).
+static func wreck_at(sim,p:Vector2,radius:float,list:Variant=null)->Dictionary:
+	for wreck in (wrecks(sim) if list==null else list):
+		var clearance:float=radius+float(wreck.radius)
+		if p.distance_squared_to(wreck.pos)<clearance*clearance:return wreck
+	return {}
+
+# Wrecks whose margin reaches within `reach` of `p`.
+static func wrecks_near(sim,p:Vector2,radius:float,reach:float)->Array:
+	return wrecks(sim).filter(func(wreck):return p.distance_to(wreck.pos)<reach+radius+float(wreck.radius))
+
+# A goal inside a wreck's margin resolves to the nearest clear spot round the
+# wreck, as a driver pulls up beside a burnt-out hull: straight out from the
+# wreck through the goal, leaning toward `from` (the near side) when `near`,
+# then turning round the wreck and stepping out until a spot is clear of every
+# wreck and drivable. Returns `goal` when already clear, (-1,-1) when no spot.
+const WRECK_STOP_SLACK:=0.35
+static func clear_goal(sim,u:Dictionary,goal:Vector2,from:Vector2,near:bool=true)->Vector2:
+	if not sim.has_meta(WRECKS) or not wreck_bound(sim,u):return goal
+	var radius:float=float(sim.definitions[u.kind].radius)
+	var wreck:Dictionary=wreck_at(sim,goal,radius)
+	if wreck.is_empty():return goal
+	var clearance:float=radius+float(wreck.radius)
+	var away:Vector2=(goal-wreck.pos)/clearance
+	if near:away+=(from-wreck.pos).normalized()*0.5
+	if away.length_squared()<0.0001:away=(from-wreck.pos).normalized() if from!=wreck.pos else Vector2.RIGHT
+	var heading:float=away.angle()
+	for ring in 4:
+		var reach:float=clearance+WRECK_STOP_SLACK+ring*1.5
+		for k in 16:
+			# 0, +1, -1, +2, -2, ... sixteenths of a turn round the wreck.
+			var turn:int=(k+1)/2*(1 if k%2==1 else -1)
+			var p:Vector2=wreck.pos+Vector2.from_angle(heading+turn*TAU/16.0)*reach
+			if wreck_at(sim,p,radius).is_empty() and sim.terrain.traversable(p,"land",radius):return p
+	return Vector2(-1,-1)
 
 # movement_clear: wrecks are solid for land vehicles. A move that opens
 # distance from a wreck is always allowed, so nothing is trapped against one.
