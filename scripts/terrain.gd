@@ -56,6 +56,7 @@ var field_zone_buckets:Dictionary={}
 const FIELD_ZONE_CELL:=8.0
 var roadside_props:Array[Dictionary]=[]
 var roadside_blocks:Array[Rect2]=[]
+var architecture:Array=[]
 var rubble:=Rect2(8,28,18,8)
 var mud:=Rect2(48,55,18,9)
 var trees: Array[Vector2] = []
@@ -77,8 +78,11 @@ func _init(preset:int=0, config_override:Dictionary={}) -> void:
 	nav_size=Vector2i((world_size/nav_cell_size).ceil())
 	field_mode=config.get("mode","")=="field_ops"
 	map_props=config.get("map_props",[]).duplicate(true)
+	architecture=config.get("architecture",[])
 	for r in config.get("prop_blocks",[]):prop_blocks.append(Rect2(r[0],r[1],r[2],r[3]))
 	_index_crushables()
+	# Built at load (~20 ms on the harbor), not on an aircraft's first tick.
+	if not architecture.is_empty() or not map_props.is_empty():_build_air_ceiling()
 	for r in config.get("water_blocks",[]):water_blocks.append(Rect2(r[0],r[1],r[2],r[3]))
 	for r in config.get("static_cover",[]):static_cover.append(Rect2(r[0],r[1],r[2],r[3]))
 	for polygon in config.get("water_polygons",[]):
@@ -1214,3 +1218,99 @@ func fell_trees(center:Vector2,radius:float,heading:Vector2=Vector2.ZERO)->Array
 		tree_felled.emit(index,fall)
 	if not cleared.is_empty():_refresh_land_cells(cleared)
 	return records
+
+# Air ceiling: top height of authored tall structures (buildings by family and
+# floors, registry props by asset height), so aircraft can climb over a skyline
+# that no single cruise altitude clears. Each footprint is grown by the largest
+# overhang (crane jib, tree crowns) plus one cell, so bilinear samples anywhere
+# over a structure read at least its top; past that the ceiling falls off as a
+# cone (AIR_SLOPE m per m) so flight altitude stays continuous. Built at load;
+# maps with nothing above AIR_MIN_TOP pay one empty check per query.
+const AIR_CELL:=4.0
+const AIR_MIN_TOP:=6.0
+const AIR_OVERHANG:=7.0
+const AIR_SLOPE:=0.7
+var _air_ceiling:=PackedFloat32Array()
+var _air_size:=Vector2i.ZERO
+var _air_built:=false
+
+func air_ceiling(p:Vector2)->float:
+	if not _air_built:_build_air_ceiling()
+	if _air_ceiling.is_empty():return 0.0
+	var g:Vector2=p/AIR_CELL-Vector2(0.5,0.5)
+	var x0:=clampi(floori(g.x),0,_air_size.x-1);var y0:=clampi(floori(g.y),0,_air_size.y-1)
+	var x1:=mini(x0+1,_air_size.x-1);var y1:=mini(y0+1,_air_size.y-1)
+	var fx:=clampf(g.x-x0,0.0,1.0);var fy:=clampf(g.y-y0,0.0,1.0)
+	var top:=lerpf(_air_ceiling[y0*_air_size.x+x0],_air_ceiling[y0*_air_size.x+x1],fx)
+	var bottom:=lerpf(_air_ceiling[y1*_air_size.x+x0],_air_ceiling[y1*_air_size.x+x1],fx)
+	return lerpf(top,bottom,fy)
+
+# [footprint, top] for every authored structure at least AIR_MIN_TOP tall.
+func air_obstacles()->Array:
+	var result:Array=[]
+	var City=preload("res://scripts/city_buildings.gd")
+	for spec in architecture:
+		var design:String=str(spec.get("design",""))
+		var floors:int=int(spec.get("floors",1))
+		var top:float=City.height_cap(design,floors) if City.handles(design) else (4.0 if design=="rock" else floors*3.2+1.5)
+		if top<AIR_MIN_TOP or not spec.has("source_size"):continue
+		var size:=Vector2(float(spec.source_size[0]),float(spec.source_size[1]))
+		var yaw:=deg_to_rad(float(spec.get("rotation_degrees",0.0)))
+		var extent:=Vector2(absf(size.x*cos(yaw))+absf(size.y*sin(yaw)),absf(size.x*sin(yaw))+absf(size.y*cos(yaw)))
+		result.append([Rect2(Vector2(float(spec.position[0]),float(spec.position[1]))-extent/2,extent),top])
+	if not map_props.is_empty():
+		var Library=preload("res://scripts/asset_library.gd")
+		# One library read: footprint()/find() deep-copy every entry per call.
+		var specs:Dictionary={}
+		for entry in Library.entries():specs[entry.id]=entry
+		for prop in map_props:
+			var spec:Dictionary=specs.get(str(prop.get("id",prop.get("asset_id",""))),{})
+			if spec.is_empty():continue
+			var top:float=float(spec.get("height",0.0))+float(prop.get("elevation",0.0))
+			if top<AIR_MIN_TOP:continue
+			var point=prop.get("position",prop.get("pos",[0,0]))
+			var pos:Vector2=point if point is Vector2 else Vector2(point[0],point[1])
+			var yaw:float=float(prop.get("yaw",deg_to_rad(float(prop.get("rotation_degrees",0.0)))))
+			var f:Array=spec.footprint
+			var bounds:=Rect2(pos+Vector2(float(f[0]),float(f[1])).rotated(-yaw),Vector2.ZERO)
+			for corner in [Vector2(f[0],f[1]),Vector2(float(f[0])+float(f[2]),f[1]),Vector2(float(f[0])+float(f[2]),float(f[1])+float(f[3])),Vector2(f[0],float(f[1])+float(f[3]))]:
+				bounds=bounds.expand(pos+corner.rotated(-yaw))
+			result.append([bounds,top])
+	return result
+
+func _build_air_ceiling()->void:
+	_air_built=true
+	var obstacles:=air_obstacles()
+	if obstacles.is_empty():return
+	_air_size=Vector2i((world_size/AIR_CELL).ceil())
+	_air_ceiling.resize(_air_size.x*_air_size.y)
+	_air_ceiling.fill(0.0)
+	for obstacle in obstacles:
+		var area:Rect2=obstacle[0].grow(AIR_OVERHANG+AIR_CELL)
+		var low:=Vector2i((area.position/AIR_CELL-Vector2(0.5,0.5)).ceil()).max(Vector2i.ZERO)
+		var high:=Vector2i((area.end/AIR_CELL-Vector2(0.5,0.5)).floor()).min(_air_size-Vector2i.ONE)
+		for y in range(low.y,high.y+1):
+			for x in range(low.x,high.x+1):
+				var i:=y*_air_size.x+x
+				_air_ceiling[i]=maxf(_air_ceiling[i],obstacle[1])
+	# Two-pass chamfer cone: each cell keeps max(own, neighbour - slope*distance).
+	var step:=AIR_SLOPE*AIR_CELL;var diagonal:=step*sqrt(2.0)
+	var w:=_air_size.x
+	for y in _air_size.y:
+		for x in w:
+			var i:=y*w+x;var v:=_air_ceiling[i]
+			if x>0:v=maxf(v,_air_ceiling[i-1]-step)
+			if y>0:
+				v=maxf(v,_air_ceiling[i-w]-step)
+				if x>0:v=maxf(v,_air_ceiling[i-w-1]-diagonal)
+				if x<w-1:v=maxf(v,_air_ceiling[i-w+1]-diagonal)
+			_air_ceiling[i]=v
+	for y in range(_air_size.y-1,-1,-1):
+		for x in range(w-1,-1,-1):
+			var i:=y*w+x;var v:=_air_ceiling[i]
+			if x<w-1:v=maxf(v,_air_ceiling[i+1]-step)
+			if y<_air_size.y-1:
+				v=maxf(v,_air_ceiling[i+w]-step)
+				if x<w-1:v=maxf(v,_air_ceiling[i+w+1]-diagonal)
+				if x>0:v=maxf(v,_air_ceiling[i+w-1]-diagonal)
+			_air_ceiling[i]=v

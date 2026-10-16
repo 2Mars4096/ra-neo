@@ -633,6 +633,22 @@ func weapon_range(weapon:String,td:Dictionary) -> float:
 	if td.domain=="air" and AIR_REACH.has(weapon):return AIR_REACH[weapon]
 	return float(definitions[weapon].range)
 
+# Aircraft hold their cruise altitude but climb over authored structures taller
+# than it (terrain.air_ceiling falls off as a cone, so the climb is continuous).
+# A strike drone only follows while cruising; it owns its altitude once lining up.
+const AIR_GAP:=2.5
+func follow_skyline(u:Dictionary,d:Dictionary)->void:
+	var strike:bool=d.get("strike",false)
+	if strike and u.state!="MOVING":return
+	var cruise:float=float(d.altitude)
+	var altitude:float=maxf(minf(float(u.get("altitude",cruise)),cruise),terrain.air_ceiling(u.pos)+AIR_GAP)
+	if strike or altitude!=cruise:u["altitude"]=altitude
+	elif u.has("altitude"):u.erase("altitude")
+
+# Flight altitude of an aircraft at its cruise over `pos`.
+func flight_altitude(d:Dictionary,pos:Vector2)->float:
+	return maxf(float(d.altitude),terrain.air_ceiling(pos)+AIR_GAP)
+
 # Per-unit altitude: FPV drones descend during their terminal dive.
 func unit_altitude(u:Dictionary) -> float:
 	return float(u.get("altitude",definitions[u.kind].altitude))
@@ -949,6 +965,7 @@ func tick(dt: float) -> void:
 		if d.get("structure",false):
 			if d.get("armed",false) and u.get("build_left",0.0)<=0:emplacement_fire(u,d,dt)
 			continue
+		if d.domain=="air" and not u.has("crash"):follow_skyline(u,d)
 		if d.get("strike",false):fpv_strike(u,d,dt);continue
 		u.cooldown -= dt
 		u.repath -= dt
