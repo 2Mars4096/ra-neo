@@ -1178,7 +1178,7 @@ func tick(dt: float) -> void:
 
 func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 	if candidates==null:candidates=target_candidates(u)
-	Infantry.tick_wounds(u,time,dt)
+	Infantry.tick_wounds(u,time,dt,self)
 	# Carrying a SEVERE casualty slows the section's advance (Infantry.move
 	# records the anchor before move_unit; shortening a cleared step is safe).
 	if u.has("carry_from"):
@@ -1197,11 +1197,15 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			member.aim=0.0
 			continue
 		if member.get("aiding",-1)>=0:
-			# Buddy aid: the soldier stops fighting while treating a casualty.
-			member.state="AIDING" if Garrison.inside(u) or member.pos.distance_to(u.members[member.aiding].pos)<=Infantry.AID_REACH else "TO CASUALTY"
+			# Buddy aid: the soldier stops fighting while treating a casualty, or
+			# dragging it to shelter under fire (Infantry.tick_wounds).
+			var casualty:Dictionary=u.members[member.aiding]
+			var reach:float=member.pos.distance_to(casualty.pos)
+			if casualty.has("drag_to") and reach<=Infantry.AID_REACH+0.6:member.state="DRAGGING"
+			else:member.state="AIDING" if Garrison.inside(u) or reach<=Infantry.AID_REACH else "TO CASUALTY"
 			member.target=-1
 			member.aim=0.0
-			if member.state=="AIDING":member.posture="CROUCHED"
+			if member.state in ["AIDING","DRAGGING"]:member.posture="CROUCHED"
 			continue
 		if member.get("cover_phase","") in ["SEEKING","SETTLING"]:
 			member.state="RUNNING TO COVER" if member.cover_phase=="SEEKING" else "SETTLING IN COVER"

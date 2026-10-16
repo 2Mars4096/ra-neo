@@ -50,6 +50,7 @@ static func update(sim) -> void:
 	if not sim.scenario.get("autonomy",false):return
 	for u in sim.units:
 		if not sim.alive(u) or sim.definitions[u.kind].get("structure",false) or u.has("building_id") or u.kind=="harvester" or sim.definitions[u.kind].domain!="land" or u.hold_command:continue
+		if not u.members.is_empty() and contact_drill(sim,u):continue
 		var intent:Dictionary=u.intent if u.orders.is_empty() else u.orders[0]
 		if u.orders.is_empty() and (intent.is_empty() or intent.mode in ["move","retreat"] or u.maneuver.get("phase","")=="ENGAGE"):
 			engage_idle(sim,u)
@@ -81,6 +82,8 @@ static func update(sim) -> void:
 				continue
 		if not u.maneuver.is_empty():
 			var phase:String=u.maneuver.phase
+			# Held by contact_drill; only a withdrawal (above) overrides it here.
+			if phase in HOLDS:continue
 			var lost_support:=false
 			if phase=="FLANK" and not u.maneuver.get("support_ids",[]).is_empty():
 				lost_support=true
@@ -139,6 +142,104 @@ static func update(sim) -> void:
 			var choice:=flank_choice(sim,u,intent.pos,contacts)
 			if not choice.is_empty() and plan(sim,u,choice.pos,"FLANK","Repositioning around obstruction" if support_ids.is_empty() else "Flanking with supporting fire",6,choice.path):
 				u.maneuver["support_ids"]=support_ids
+
+# Section reaction to contact (infantry). Casualties under fire stop an
+# attack-move: the section consolidates on cover where it stands (the anchor
+# holds, Cover stays active) until the fire dies down. A section with no cover
+# in reach that stays under fire bounds to the nearest real cover within
+# BOUND_REACH; prone and firing remains the first response. Explicit move,
+# retreat, assault (attack) and hold orders are obeyed as given.
+const HOLDS:=["CONSOLIDATE","BOUND"]
+const CONSOLIDATE_QUIET:=6.0  # seconds without incoming fire before resuming
+const CONSOLIDATE_HOLD:=18.0  # commit; the maneuver deadline adds 12 s
+const BOUND_AFTER:=7.0        # sustained incoming fire before a bound
+const BOUND_REACH:=20.0
+const BOUND_HOLD:=6.0
+static func contact_drill(sim,u:Dictionary) -> bool:
+	if sim.time<float(u.get("contact_review",0.0)):return u.maneuver.get("phase","") in HOLDS
+	u["contact_review"]=sim.time+0.25+float(u.id%4)*0.02
+	var able:=0
+	for m in u.members:
+		if m.hp>0:able+=1
+	if able<int(u.get("able_seen",able)):u["casualty_at"]=sim.time
+	u["able_seen"]=able
+	var fired:bool=sim.Infantry.in_contact(u,sim.time)
+	if not fired:u.erase("fire_since")
+	elif not u.has("fire_since"):u["fire_since"]=sim.time
+	var phase:String=u.maneuver.get("phase","")
+	if phase=="WITHDRAW":return false
+	if able==0:
+		# Nobody left on their feet to hold cover: the hold ends.
+		if phase in HOLDS:
+			if u.orders.is_empty():u.maneuver={}
+			else:resume(sim,u,"Section down · resuming objective")
+		return false
+	if phase in HOLDS:
+		var quiet:bool=sim.time-float(u.get("fired_on",-100.0))>=CONSOLIDATE_QUIET and u.suppression<=0.2
+		if sim.time>float(u.maneuver.deadline) or (u.maneuver.arrived and quiet and sim.time-float(u.get("hold_since",0.0))>=2.0):
+			if u.orders.is_empty():u.maneuver={};u.reason="Contact over · holding"
+			else:resume(sim,u,"Contact over · resuming objective")
+			return true
+		# A weakened section under threat may still withdraw (update's rule).
+		return u.hp>=sim.Infantry.capacity(u)*0.33
+	# A section standing where the player moved it (an explicit move, even one
+	# completed) keeps that position; only attack-move pauses.
+	var mode:String=u.orders[0].mode if not u.orders.is_empty() else str(u.intent.get("mode",""))
+	if mode in ["move","retreat","attack"]:return false
+	if u.orders.is_empty():mode=""
+	if phase in ["","FLANK","CLEARWAY","SUPPORT"] and mode=="attack_move" and fired and sim.time-float(u.get("casualty_at",-100.0))<3.0 and float(u.get("consolidated_at",-100.0))<float(u.casualty_at):
+		if plan(sim,u,u.pos,"CONSOLIDATE","Contact · casualties · consolidating on cover",CONSOLIDATE_HOLD):
+			u["consolidated_at"]=sim.time
+			u["hold_since"]=sim.time
+			return true
+	if phase in ["","SUPPORT","ENGAGE"] and fired and sim.time-float(u.fire_since)>=BOUND_AFTER and sim.time>=float(u.get("bound_check",0.0)) and caught_open(sim,u):
+		u["bound_check"]=sim.time+2.0
+		var cover:=bound_destination(sim,u)
+		if not cover.is_empty() and plan(sim,u,cover.pos,"BOUND","No cover here · bounding to cover",BOUND_HOLD,cover.path):
+			if u.orders.is_empty():u["post"]=cover.pos;u["post_group"]=u.command_group
+			u["hold_since"]=sim.time
+			return true
+	return false
+
+# Cover found no shelter inside the leash for any living soldier (each is
+# EXPOSED, or overwatching just after), and the section is not regrouping.
+static func caught_open(sim,u:Dictionary) -> bool:
+	if u.get("regroup_active",false):return false
+	for m in u.members:
+		if m.hp>0 and (m.get("in_trench",false) or not sim.Infantry.caught_open(m,sim.time)):return false
+	return true
+
+# Nearest real cover beyond the leash (rated against the observed threats like
+# a soldier's shelter) and not toward the main threat; the anchor stops a few
+# metres short so the soldiers take the cover from there.
+static func bound_destination(sim,u:Dictionary) -> Dictionary:
+	var threats:Array=[]
+	var threat:Dictionary={}
+	for other in (sim.range_candidates(u.pos,25) if sim.ticking else sim.units):
+		if not sim.alive(other) or other.team==u.team or not sim.contact_known(u,other) or not sim.effective_unit(other,u.kind):continue
+		if u.pos.distance_to(other.pos)>=25:continue
+		threats.append(other)
+		if threat.is_empty() or u.pos.distance_to(other.pos)<u.pos.distance_to(threat.pos):threat=other
+	var d:Dictionary=sim.definitions[u.kind]
+	var weapon:String="atgm" if u.kind=="atgm" else "rifle"
+	for ring in [10.5,12.0,13.5,15.0,16.5,18.0,BOUND_REACH]:
+		var found:Array=[]
+		for i in 24:
+			var point:Vector2=u.pos+Vector2.from_angle(i*TAU/24)*ring
+			if not sim.terrain.cover(point) or not sim.terrain.traversable(point,"land",0.8):continue
+			if not threat.is_empty() and point.distance_to(threat.pos)<u.pos.distance_to(threat.pos)-2.0:continue
+			if not threat.is_empty() and not sim.Infantry.Cover.rate(sim,point,threat,threats,weapon).ok:continue
+			var anchor:Vector2=point+(u.pos-point).normalized()*2.5
+			if not sim.terrain.traversable(anchor,d.domain,d.radius):continue
+			found.append(anchor)
+		found.sort_custom(func(a,b):return u.pos.distance_squared_to(a)<u.pos.distance_squared_to(b))
+		for anchor in found.slice(0,3):
+			var route:Array=sim.terrain.path(u.pos,anchor,d.domain,d.radius,[],sim.terrain.mobility_profile(u.kind))
+			if route.is_empty() or sim.Infantry.Cover.route_length(u.pos,route)>BOUND_REACH*1.4:continue
+			# The rush must not close on the main threat on its way.
+			if not threat.is_empty() and route.any(func(point):return point.distance_to(threat.pos)<u.pos.distance_to(threat.pos)-2.0):continue
+			return {"pos":anchor,"path":route}
+	return {}
 
 # Idle units (no orders, not holding) that see an enemy they can hurt but cannot
 # reach close to firing range, leashed to where they were left. Units manning

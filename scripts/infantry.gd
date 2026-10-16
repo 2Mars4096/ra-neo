@@ -187,9 +187,16 @@ static func strike(u:Dictionary,kind:String,lethality:float,source:Vector2,now:f
 			elif member.state!="DOWN":member.state="BRACING"
 	publish(u)
 
-# Bleed-out and buddy aid (called once per tick for a living section).
-static func tick_wounds(u:Dictionary,now:float,dt:float) -> void:
-	var quiet:bool=now-float(u.last_hit)>=AID_QUIET and u.suppression<=AID_SUPPRESSION and (u.orders.is_empty() or u.orders[0].mode!="retreat")
+# Bleed-out and buddy aid (called once per tick for a living section). Aid is
+# given in the open only once incoming fire (hits or near misses) has stopped;
+# under fire a casualty is treated only in cover, and one lying in the open is
+# first dragged to the nearest shelter within DRAG_REACH, in a lull between
+# hits and while the section is not pinned. With no shelter in reach the
+# section fights on until the fire dies down.
+const DRAG_LULL:=1.0
+static func tick_wounds(u:Dictionary,now:float,dt:float,sim=null) -> void:
+	var calm:bool=(u.orders.is_empty() or u.orders[0].mode!="retreat") and now-float(u.last_hit)>=DRAG_LULL and u.suppression<=AID_SUPPRESSION
+	var quiet:bool=calm and now-float(u.last_hit)>=AID_QUIET and now-float(u.get("fired_on",-100.0))>=AID_QUIET and u.suppression<=AID_SUPPRESSION
 	var garrisoned:bool=u.get("garrison",-1)>=0
 	for casualty in u.members:
 		if casualty.get("wound",HEALTHY)!=SEVERE:continue
@@ -198,14 +205,22 @@ static func tick_wounds(u:Dictionary,now:float,dt:float) -> void:
 			casualty.wound=KIA
 			casualty.state="KIA"
 			casualty.bleed_at=INF
+			casualty.erase("drag_to")
 			release(u,casualty)
 			continue
 		if casualty.stable:continue
+		var covered:bool=garrisoned or (sim!=null and (sim.terrain.cover(casualty.pos) or sim.terrain.dug_in(casualty.pos)))
+		if quiet or covered or not calm:casualty.erase("drag_to")
+		elif sim!=null and not casualty.has("drag_to") and now>=float(casualty.get("drag_check",0.0)):
+			casualty["drag_check"]=now+1.0
+			var spot:=drag_spot(u,casualty,sim)
+			if spot!=Vector2.INF:casualty["drag_to"]=spot
+		var treat:bool=quiet or (calm and covered)
 		var medic:Dictionary=u.members[casualty.medic] if casualty.medic>=0 else {}
-		if not medic.is_empty() and (medic.hp<=0 or not quiet or medic.suppression>AID_SUPPRESSION):
+		if not medic.is_empty() and (medic.hp<=0 or not (treat or casualty.has("drag_to")) or medic.suppression>AID_SUPPRESSION):
 			release(u,casualty)
 			medic={}
-		if not quiet:continue
+		if not treat and not casualty.has("drag_to"):continue
 		if medic.is_empty():
 			var best:=INF
 			for member in u.members:
@@ -216,7 +231,7 @@ static func tick_wounds(u:Dictionary,now:float,dt:float) -> void:
 			if medic.is_empty():continue
 			casualty.medic=medic.index
 			medic.aiding=casualty.index
-		if garrisoned or medic.pos.distance_to(casualty.pos)<=AID_REACH:
+		if treat and (garrisoned or medic.pos.distance_to(casualty.pos)<=AID_REACH):
 			casualty.aid+=dt
 			medic.state="AIDING"
 			if casualty.aid>=AID_SECONDS:
@@ -224,6 +239,20 @@ static func tick_wounds(u:Dictionary,now:float,dt:float) -> void:
 				casualty.stable=true
 				casualty.bleed_at=INF
 				release(u,casualty)
+
+# Nearest shelter (inside the section leash) a casualty can be dragged to in a
+# straight line; Vector2.INF when none lies within DRAG_REACH.
+const DRAG_REACH:=8.0
+const DRAG_SPEED:=1.2
+static func drag_spot(u:Dictionary,casualty:Dictionary,sim) -> Vector2:
+	var best:=Vector2.INF
+	var nearest:=DRAG_REACH
+	for point in Cover._shelter_points(u,sim):
+		var gap:float=casualty.pos.distance_to(point)
+		if gap>=nearest or not sim.terrain.segment_clear(casualty.pos,point,"land",0.42):continue
+		if u.members.any(func(m):return m.hp>0 and m.index!=casualty.index and m.get("aiding",-1)!=casualty.index and m.pos.distance_to(point)<1.0):continue
+		best=point;nearest=gap
+	return best
 
 static func move(u:Dictionary,sim,dt:float) -> void:
 	if not u.members.is_empty() and sim.scenario.get("autonomy",false):update_regroup(u,sim)
@@ -264,6 +293,9 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 			var away:Vector2=member.pos-casualty.pos
 			desired=casualty.pos+(away.normalized() if away.length()>0.01 else Vector2.RIGHT)*0.8
 			if member.pos.distance_to(casualty.pos)<=AID_REACH:desired=member.pos
+			# Dragging to shelter: lead the casualty, pulling it toward the spot.
+			if casualty.has("drag_to") and casualty.pos.distance_to(casualty.drag_to)>0.2:
+				desired=casualty.pos+(casualty.drag_to-casualty.pos).normalized()*0.75
 		elif sim.scenario.get("autonomy",false):
 			var phase:String=member.get("cover_phase","")
 			if u.hold_command:desired=member.pos
@@ -351,6 +383,21 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 # crawling slowly back toward its slot; otherwise it lies still. KIA never move.
 static func move_casualty(u:Dictionary,member:Dictionary,sim,dt:float) -> void:
 	var old:Vector2=member.pos
+	if member.has("drag_to"):
+		# Dragged to shelter by the medic beside it; it does not move on its own.
+		member.travel=0.0
+		var medic:Dictionary=u.members[member.medic] if member.get("medic",-1)>=0 else {}
+		if medic.is_empty() or medic.hp<=0 or medic.pos.distance_to(old)>AID_REACH+0.6:
+			member.state="DOWN"
+			return
+		var step:Vector2=old.move_toward(member.drag_to,DRAG_SPEED*dt)
+		if not sim.terrain.segment_clear(old,step,"land",0.42):
+			member.erase("drag_to")
+			return
+		member.pos=step
+		member.travel=old.distance_to(step)
+		member.state="DRAGGED"
+		return
 	var desired:Vector2=u.pos+member.offset
 	var gap:float=old.distance_to(desired)
 	member.travel=0.0

@@ -15,6 +15,12 @@ const RATED_VALID:=8
 # soldier who had gone flat in the open found no route to reachable cover.
 const STRIDE:=0.8
 
+# Maneuvers that leave the soldiers free to take cover: covering a partner,
+# consolidating after casualties, and a cover bound once it has arrived.
+static func holds_cover(maneuver:Dictionary) -> bool:
+	var phase:String=maneuver.get("phase","")
+	return phase=="SUPPORT" or phase=="CONSOLIDATE" or (phase=="BOUND" and maneuver.get("arrived",false))
+
 static func clear(member:Dictionary) -> void:
 	member["occupying"]=false
 	member.cover_goal=Vector2.ZERO
@@ -40,7 +46,7 @@ static func update(u:Dictionary,sim) -> void:
 	if sim.profiling:sim._lap("cover_update",t0)
 
 static func _update(u:Dictionary,sim) -> void:
-	var constrained:bool=u.has("building_id") or u.hold_command or u.get("regroup_active",false) or sim.time<u.get("cover_resume_after",0.0) or (not u.orders.is_empty() and u.orders[0].mode in ["move","retreat"]) or (not u.maneuver.is_empty() and u.maneuver.get("phase","")!="SUPPORT")
+	var constrained:bool=u.has("building_id") or u.hold_command or u.get("regroup_active",false) or sim.time<u.get("cover_resume_after",0.0) or (not u.orders.is_empty() and u.orders[0].mode in ["move","retreat"]) or (not u.maneuver.is_empty() and not holds_cover(u.maneuver))
 	# First incoming fire after a quiet spell: drop and return fire before
 	# anyone rushes (DRILL). Fire taken while under orders is not a fresh contact.
 	var fired:float=float(u.get("fired_on",-100.0))
