@@ -1,6 +1,8 @@
 class_name TacticalDirector
 extends RefCounted
 
+const ARRIVED_SHORT:=1.0  # an arrival farther than this from the maneuver spot stopped short
+
 static func cancel(u:Dictionary) -> void:
 	u.maneuver={}
 	u.reason="Following orders"
@@ -94,6 +96,10 @@ static func update(sim) -> void:
 			if u.pos.distance_to(u.maneuver.get("progress_pos",u.pos))>0.5:
 				u.maneuver.progress_pos=u.pos;u.maneuver.progress_at=sim.time
 			var stalled:bool=not u.maneuver.arrived and sim.time-u.maneuver.get("progress_at",sim.time)>4.0
+			# A crowded arrival (Simulation.crowded_arrival) halts a hull short of a
+			# spot a friend holds: it never got there. A withdrawal near the rally
+			# point has arrived; any other maneuver is blocked, not complete.
+			if u.maneuver.arrived and phase!="WITHDRAW" and u.pos.distance_to(u.maneuver.pos)>ARRIVED_SHORT:stalled=true
 			if sim.time>u.maneuver.deadline:
 				resume(sim,u,"Maneuver timed out · resuming objective")
 			elif lost_support:
