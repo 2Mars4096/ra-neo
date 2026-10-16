@@ -233,11 +233,15 @@ static func _pick_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 	candidates.sort_custom(func(a,b):return a.score<b.score)
 	var radius:=STRIDE
 	for candidate in candidates.slice(0,6):
-		# A clear straight line is the route path() would return: reject it
-		# without planning when a holding squadmate stands across it.
-		if _squadmate_blocks(u,member,[candidate.pos]) and sim.terrain.segment_clear(member.pos,candidate.pos,"land",radius):continue
-		var route:Array=sim.terrain.path(member.pos,candidate.pos,"land",radius,[],"infantry")
-		if route.is_empty() or _squadmate_blocks(u,member,route):continue
+		# A clear straight line is the route path() would return: when a holding
+		# squadmate stands across it, step round them instead of planning.
+		var route:Array
+		if _squadmate_blocks(u,member,[candidate.pos]) and sim.terrain.segment_clear(member.pos,candidate.pos,"land",radius):
+			route=_detour(u,member,sim,candidate.pos)
+		else:
+			route=sim.terrain.path(member.pos,candidate.pos,"land",radius,[],"infantry")
+			if not route.is_empty() and _squadmate_blocks(u,member,route):route=_detour(u,member,sim,candidate.pos)
+		if route.is_empty():continue
 		var bounded:=true
 		var length:=0.0
 		var previous:Vector2=member.pos
@@ -318,15 +322,41 @@ static func crossfire(u:Dictionary,threats:Array) -> bool:
 # not close within a shoulder's width of one, so a route brushing past one
 # stalls the seeker until it gives up. Moving squadmates are not obstacles.
 static func _squadmate_blocks(u:Dictionary,member:Dictionary,route:Array) -> bool:
+	return not _blocker(u,member,route).is_empty()
+
+static func _blocker(u:Dictionary,member:Dictionary,route:Array) -> Dictionary:
 	var radius:=STRIDE
 	for peer in u.members:
 		if peer.hp<=0 or peer.index==member.index or peer.get("cover_phase","")=="SEEKING":continue
 		var clearance:float=minf(radius+float(peer.get("body_radius",0.8))-0.05,member.pos.distance_to(peer.pos)-0.05)
 		var previous:Vector2=member.pos
 		for point in route:
-			if Geometry2D.get_closest_point_to_segment(peer.pos,previous,point).distance_to(peer.pos)<clearance:return true
+			if Geometry2D.get_closest_point_to_segment(peer.pos,previous,point).distance_to(peer.pos)<clearance:return peer
 			previous=point
-	return false
+	return {}
+
+# A squadmate holding the first slot along a wall would otherwise lock the rest
+# of the wall face: pass them a body's width to the side, or round them (out,
+# along, back in) when the slot hugs the same wall. Straight legs only, no extra
+# planning. Empty when no side is clear.
+static func _detour(u:Dictionary,member:Dictionary,sim,goal:Vector2) -> Array:
+	var peer:=_blocker(u,member,[goal])
+	if peer.is_empty():return []
+	var gap:float=STRIDE+float(peer.get("body_radius",0.8))+0.4
+	var along:Vector2=(goal-member.pos).normalized()
+	var best:Array=[]
+	var shortest:=INF
+	for side in [along.orthogonal()*gap,-along.orthogonal()*gap]:
+		for route in [[peer.pos+side,goal],[peer.pos+side-along*gap,peer.pos+side+along*gap,goal]]:
+			var length:=route_length(member.pos,route)
+			if length>=shortest or route.any(func(point):return point.distance_to(u.pos)>LEASH):continue
+			var from:Vector2=member.pos
+			var clear:=true
+			for point in route:
+				if not sim.terrain.segment_clear(from,point,"land",STRIDE):clear=false;break
+				from=point
+			if clear and not _squadmate_blocks(u,member,route):best=route;shortest=length
+	return best
 
 # Slots along nearby own sandbag lines (friendly side, away from the threat)
 # and inside own trenches, one per soldier, nearest first.

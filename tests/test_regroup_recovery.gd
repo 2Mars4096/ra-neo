@@ -129,7 +129,8 @@ func run_contact_regroup()->void:
 		if not active and was_active:check(u.members.all(func(m):return m.hp<=0 or m.pos.distance_to(u.pos)<2.8),"contact regroup ends with the section together")
 		was_active=active
 		if u.orders.is_empty() and not active:break
-	check(threat.hp<threat.max_hp,"contact fixture fights the villa section")
+	# A real exchange of fire (whether rounds land is up to the dice).
+	check(float(u.get("fired_on",-100.0))>0 and u.members.any(func(m):return float(m.last_shot)>0),"contact fixture exchanges fire with the villa section")
 	check(contact_starts>0,"a regroup starts under real contact")
 	check(u.get("regroup_count",0)>0,"section completed a bounded regroup under contact")
 	check(regroups[u.id].missed<0.5,"contact separation starts a regroup")
@@ -138,16 +139,18 @@ func run_contact_regroup()->void:
 	check(u.command_group==group and u.intent==intent,"contact regroup keeps the original order")
 
 # Per section: `separated` once spread passes the regroup threshold under orders
-# (the sim's trigger, outside a valid shelter trip); `missed` is the longest such
+# (the sim's trigger, outside a valid shelter trip or shelter held under fire); `missed` is the longest such
 # separation without a regroup and `longest` the longest regroup, in seconds.
 func track_regroups(sim,ids:Array,regroups:Dictionary)->void:
 	for id in ids:
 		var u:Dictionary=sim.get_unit(id)
 		if not regroups.has(id):regroups[id]={"separated":false,"streak":0.0,"missed":0.0,"since":-1.0,"longest":0.0}
 		var r:Dictionary=regroups[id]
+		# A soldier holding shelter inside the leash under fire is not separated.
+		var contact:bool=Actors.in_contact(u,sim.time)
 		var spread:=0.0
 		for m in u.members:
-			if m.hp>0:spread=maxf(spread,m.pos.distance_to(u.pos))
+			if m.hp>0 and not (contact and Actors.held_shelter(u,m)):spread=maxf(spread,m.pos.distance_to(u.pos))
 		var active:bool=u.get("regroup_active",false)
 		var split:bool=spread>7.5 and not u.hold_command and (not u.orders.is_empty() or not u.maneuver.is_empty()) and not Actors.Cover.seeking(u)
 		r.separated=r.separated or split
