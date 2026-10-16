@@ -1,0 +1,320 @@
+diff --git a/scripts/simulation.gd b/scripts/simulation.gd
+index c137096..0b72d8e 100644
+--- a/scripts/simulation.gd
++++ b/scripts/simulation.gd
+@@ -610,6 +610,22 @@ func weapon_range(weapon:String,td:Dictionary) -> float:
+ 	if td.domain=="air" and AIR_REACH.has(weapon):return AIR_REACH[weapon]
+ 	return float(definitions[weapon].range)
+ 
++# Aircraft hold their cruise altitude but climb over authored structures taller
++# than it (terrain.air_ceiling falls off as a cone, so the climb is continuous).
++# A strike drone only follows while cruising; it owns its altitude once lining up.
++const AIR_GAP:=2.5
++func follow_skyline(u:Dictionary,d:Dictionary)->void:
++	var strike:bool=d.get("strike",false)
++	if strike and u.state!="MOVING":return
++	var cruise:float=float(d.altitude)
++	var altitude:float=maxf(minf(float(u.get("altitude",cruise)),cruise),terrain.air_ceiling(u.pos)+AIR_GAP)
++	if strike or altitude!=cruise:u["altitude"]=altitude
++	elif u.has("altitude"):u.erase("altitude")
++
++# Flight altitude of an aircraft at its cruise over `pos`.
++func flight_altitude(d:Dictionary,pos:Vector2)->float:
++	return maxf(float(d.altitude),terrain.air_ceiling(pos)+AIR_GAP)
++
+ # Per-unit altitude: FPV drones descend during their terminal dive.
+ func unit_altitude(u:Dictionary) -> float:
+ 	return float(u.get("altitude",definitions[u.kind].altitude))
+@@ -923,6 +939,7 @@ func tick(dt: float) -> void:
+ 		if d.get("structure",false):
+ 			if d.get("armed",false) and u.get("build_left",0.0)<=0:emplacement_fire(u,d,dt)
+ 			continue
++		if d.domain=="air" and not u.has("crash"):follow_skyline(u,d)
+ 		if d.get("strike",false):fpv_strike(u,d,dt);continue
+ 		u.cooldown -= dt
+ 		u.repath -= dt
+diff --git a/scripts/terrain.gd b/scripts/terrain.gd
+index cfbe3af..b266b63 100644
+--- a/scripts/terrain.gd
++++ b/scripts/terrain.gd
+@@ -56,6 +56,7 @@ var field_zone_buckets:Dictionary={}
+ const FIELD_ZONE_CELL:=8.0
+ var roadside_props:Array[Dictionary]=[]
+ var roadside_blocks:Array[Rect2]=[]
++var architecture:Array=[]
+ var rubble:=Rect2(8,28,18,8)
+ var mud:=Rect2(48,55,18,9)
+ var trees: Array[Vector2] = []
+@@ -77,6 +78,7 @@ func _init(preset:int=0, config_override:Dictionary={}) -> void:
+ 	nav_size=Vector2i((world_size/nav_cell_size).ceil())
+ 	field_mode=config.get("mode","")=="field_ops"
+ 	map_props=config.get("map_props",[]).duplicate(true)
++	architecture=config.get("architecture",[])
+ 	for r in config.get("prop_blocks",[]):prop_blocks.append(Rect2(r[0],r[1],r[2],r[3]))
+ 	_index_crushables()
+ 	for r in config.get("water_blocks",[]):water_blocks.append(Rect2(r[0],r[1],r[2],r[3]))
+@@ -1214,3 +1216,92 @@ func fell_trees(center:Vector2,radius:float,heading:Vector2=Vector2.ZERO)->Array
+ 		tree_felled.emit(index,fall)
+ 	if not cleared.is_empty():_refresh_land_cells(cleared)
+ 	return records
++
++# Air ceiling: top height of authored tall structures (buildings by family and
++# floors, registry props by asset height), so aircraft can climb over a skyline
++# that no single cruise altitude clears. Each footprint is grown by the largest
++# overhang (crane jib, tree crowns) plus one cell, so bilinear samples anywhere
++# over a structure read at least its top; past that the ceiling falls off as a
++# cone (AIR_SLOPE m per m) so flight altitude stays continuous. Built lazily on
++# the first query; maps with nothing above AIR_MIN_TOP pay one empty check.
++const AIR_CELL:=4.0
++const AIR_MIN_TOP:=6.0
++const AIR_OVERHANG:=7.0
++const AIR_SLOPE:=0.7
++var _air_ceiling:=PackedFloat32Array()
++var _air_size:=Vector2i.ZERO
++var _air_built:=false
++
++func air_ceiling(p:Vector2)->float:
++	if not _air_built:_build_air_ceiling()
++	if _air_ceiling.is_empty():return 0.0
++	var g:Vector2=p/AIR_CELL-Vector2(0.5,0.5)
++	var x0:=clampi(floori(g.x),0,_air_size.x-1);var y0:=clampi(floori(g.y),0,_air_size.y-1)
++	var x1:=mini(x0+1,_air_size.x-1);var y1:=mini(y0+1,_air_size.y-1)
++	var fx:=clampf(g.x-x0,0.0,1.0);var fy:=clampf(g.y-y0,0.0,1.0)
++	var top:=lerpf(_air_ceiling[y0*_air_size.x+x0],_air_ceiling[y0*_air_size.x+x1],fx)
++	var bottom:=lerpf(_air_ceiling[y1*_air_size.x+x0],_air_ceiling[y1*_air_size.x+x1],fx)
++	return lerpf(top,bottom,fy)
++
++# [footprint, top] for every authored structure at least AIR_MIN_TOP tall.
++func air_obstacles()->Array:
++	var result:Array=[]
++	var City=preload("res://scripts/city_buildings.gd")
++	for spec in architecture:
++		var design:String=str(spec.get("design",""))
++		var floors:int=int(spec.get("floors",1))
++		var top:float=City.height_cap(design,floors) if City.handles(design) else (4.0 if design=="rock" else floors*3.2+1.5)
++		if top<AIR_MIN_TOP or not spec.has("source_size"):continue
++		var size:=Vector2(float(spec.source_size[0]),float(spec.source_size[1]))
++		var yaw:=deg_to_rad(float(spec.get("rotation_degrees",0.0)))
++		var extent:=Vector2(absf(size.x*cos(yaw))+absf(size.y*sin(yaw)),absf(size.x*sin(yaw))+absf(size.y*cos(yaw)))
++		result.append([Rect2(Vector2(float(spec.position[0]),float(spec.position[1]))-extent/2,extent),top])
++	if not map_props.is_empty():
++		var Library=preload("res://scripts/asset_library.gd")
++		var heights:Dictionary={}
++		for entry in Library.entries():heights[entry.id]=float(entry.get("height",0.0))
++		for prop in map_props:
++			var id:String=str(prop.get("id",prop.get("asset_id","")))
++			var top:float=heights.get(id,0.0)+float(prop.get("elevation",0.0))
++			if top<AIR_MIN_TOP:continue
++			var point=prop.get("position",prop.get("pos",[0,0]))
++			var pos:Vector2=point if point is Vector2 else Vector2(point[0],point[1])
++			result.append([Library.footprint(id,pos,float(prop.get("yaw",deg_to_rad(float(prop.get("rotation_degrees",0.0)))))),top])
++	return result
++
++func _build_air_ceiling()->void:
++	_air_built=true
++	var obstacles:=air_obstacles()
++	if obstacles.is_empty():return
++	_air_size=Vector2i((world_size/AIR_CELL).ceil())
++	_air_ceiling.resize(_air_size.x*_air_size.y)
++	_air_ceiling.fill(0.0)
++	for obstacle in obstacles:
++		var area:Rect2=obstacle[0].grow(AIR_OVERHANG+AIR_CELL)
++		var low:=Vector2i((area.position/AIR_CELL-Vector2(0.5,0.5)).ceil()).max(Vector2i.ZERO)
++		var high:=Vector2i((area.end/AIR_CELL-Vector2(0.5,0.5)).floor()).min(_air_size-Vector2i.ONE)
++		for y in range(low.y,high.y+1):
++			for x in range(low.x,high.x+1):
++				var i:=y*_air_size.x+x
++				_air_ceiling[i]=maxf(_air_ceiling[i],obstacle[1])
++	# Two-pass chamfer cone: each cell keeps max(own, neighbour - slope*distance).
++	var step:=AIR_SLOPE*AIR_CELL;var diagonal:=step*sqrt(2.0)
++	var w:=_air_size.x
++	for y in _air_size.y:
++		for x in w:
++			var i:=y*w+x;var v:=_air_ceiling[i]
++			if x>0:v=maxf(v,_air_ceiling[i-1]-step)
++			if y>0:
++				v=maxf(v,_air_ceiling[i-w]-step)
++				if x>0:v=maxf(v,_air_ceiling[i-w-1]-diagonal)
++				if x<w-1:v=maxf(v,_air_ceiling[i-w+1]-diagonal)
++			_air_ceiling[i]=v
++	for y in range(_air_size.y-1,-1,-1):
++		for x in range(w-1,-1,-1):
++			var i:=y*w+x;var v:=_air_ceiling[i]
++			if x<w-1:v=maxf(v,_air_ceiling[i+1]-step)
++			if y<_air_size.y-1:
++				v=maxf(v,_air_ceiling[i+w]-step)
++				if x<w-1:v=maxf(v,_air_ceiling[i+w+1]-diagonal)
++				if x>0:v=maxf(v,_air_ceiling[i+w-1]-diagonal)
++			_air_ceiling[i]=v
+diff --git a/tests/test_scene_air_clearance.gd b/tests/test_scene_air_clearance.gd
+index 81ca819..f8c30f7 100644
+--- a/tests/test_scene_air_clearance.gd
++++ b/tests/test_scene_air_clearance.gd
+@@ -24,6 +24,70 @@ func height_range(node:Node)->Vector2:
+ 		var current:=height_range(child)
+ 		result.x=minf(result.x,current.x);result.y=maxf(result.y,current.y)
+ 	return result
++# World AABB of every rendered structure. Harbor buildings are merged into
++# spatial tiles, so they are rebuilt one by one from the tile placements.
++var structure_cache:Dictionary={}
++func structures(art,world:Node3D)->Array:
++	if structure_cache.has(world):return structure_cache[world]
++	var result:Array=[]
++	collect(world,result)
++	var group:=world.find_child("HarborBuildings",true,false)
++	if group!=null:
++		var staging:=Node3D.new();root.add_child(staging)
++		for placement in group.get_meta("placements",[]):
++			var building:Node3D=art.make_authored_building(staging,placement.compiled_bounds,placement.architecture_index,placement.spec)
++			collect(building,result)
++			building.free()
++		staging.free()
++	structure_cache[world]=result
++	return result
++func collect(node:Node,result:Array)->void:
++	if node.name=="HarborBuildings":return
++	if node is MeshInstance3D and node.mesh!=null:result.append(node.global_transform*node.mesh.get_aabb())
++	elif node is MultiMeshInstance3D:
++		# Headless (dummy renderer) multimeshes read back identity transforms;
++		# harbor prop batches rebuild theirs from the placement metadata.
++		var placed:Array=node.get_parent().get_meta("placements",[]).filter(func(e):return e.get("asset_id","")==node.get_meta("asset_id","")) if node.has_meta("template_transform") else []
++		for i in node.multimesh.instance_count:
++			var instance:Transform3D=placed[i].transform*node.get_meta("template_transform") if i<placed.size() else node.multimesh.get_instance_transform(i)
++			result.append(node.global_transform*instance*node.multimesh.mesh.get_aabb())
++	for child in node.get_children():collect(child,result)
++# Lowest body clearance over every structure the cruise altitude does not clear,
++# sampled across its whole plan at the simulation's flight altitude.
++func local_clearance(sim,definition:Dictionary,low:float,boxes:Array)->float:
++	var worst:=INF
++	for box in boxes:
++		if float(definition.altitude)+low-box.end.y>=0.15:continue
++		var nx:=ceili(box.size.x);var nz:=ceili(box.size.z)
++		for ix in nx+1:
++			for iz in nz+1:
++				var p:=Vector2(box.position.x+box.size.x*ix/nx,box.position.z+box.size.z*iz/nz)
++				worst=minf(worst,sim.flight_altitude(definition,p)+low-box.end.y)
++	return worst
++# Live flight across the tallest structure: the ticking simulation must apply
++# the same climb (unit_altitude), not only the static query.
++func fly_over(sim,kind:String,low:float,boxes:Array)->void:
++	var tallest:AABB=boxes[0]
++	for box in boxes:if box.end.y>tallest.end.y:tallest=box
++	var center:=Vector2(tallest.get_center().x,tallest.get_center().z)
++	var start:=center+Vector2(-60,0)
++	var unit=sim.spawn(kind,0,start)
++	sim.issue([unit.id],center+Vector2(60,0))
++	var worst:=INF;var climbed:=0.0
++	for frame in 600:
++		sim.tick(1.0/30.0)
++		if not sim.alive(unit):break
++		climbed=maxf(climbed,sim.unit_altitude(unit))
++		var p:Vector2=unit.pos
++		if p.x>=tallest.position.x and p.x<=tallest.end.x and p.y>=tallest.position.z and p.y<=tallest.end.z:
++			worst=minf(worst,sim.unit_altitude(unit)+low-tallest.end.y)
++		if p.distance_to(center+Vector2(60,0))<1.0:break
++	checks+=1
++	if worst==INF or worst<0.15:
++		failures+=1;printerr("FAIL: ",kind," live flight over ",tallest," clearance=",worst)
++	evidence.append({"kind":kind,"live_overflight_top":tallest.end.y,"live_clearance":worst,"peak_altitude":climbed})
++	unit.hp=0.0
++
+ func run()->void:
+ 	for scenario in JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json")).size():
+ 		var sim=Sim.new(false,scenario)
+@@ -41,10 +105,14 @@ func run()->void:
+ 			var moving_body:=height_range(model)
+ 			body.x=minf(body.x-0.08,moving_body.x)
+ 			var clearance:float=float(definitions[kind].altitude)+body.x-scenery.y
++			# An authored skyline (harbor towers, cranes, poplars) taller than any
++			# usable cruise altitude: aircraft climb over each structure instead.
++			if clearance<0.15:clearance=local_clearance(sim,definitions[kind],body.x,structures(art,world))
+ 			evidence.append({"scenario":scenario,"kind":kind,"scenery_top":scenery.y,"altitude":definitions[kind].altitude,"clearance":clearance})
+ 			checks+=1
+ 			if clearance<0.15:
+ 				failures+=1;printerr("FAIL: scenario ",scenario," ",kind," air/scenery clearance=",clearance," top=",scenery.y)
++			if scenery.y>float(definitions[kind].altitude):fly_over(sim,kind,body.x,structures(art,world))
+ 			unit.free()
+ 		world.free()
+ 	var report:=FileAccess.open("res://artifacts/scene-air-clearance.json",FileAccess.WRITE)
+diff --git a/tests/zz_aed_probe_road.gd b/tests/zz_aed_probe_road.gd
+new file mode 100644
+index 0000000..08b26d0
+--- /dev/null
++++ b/tests/zz_aed_probe_road.gd
+@@ -0,0 +1,32 @@
++extends SceneTree
++const Terrain=preload("res://scripts/terrain.gd")
++func _init()->void:call_deferred("run")
++func first_bad(terrain,origin:Vector2,route:Array,radius:float):
++	if route.is_empty():return "EMPTY"
++	for point in route:
++		var count:=maxi(1,ceili(origin.distance_to(point)/0.05))
++		for step in range(count+1):
++			var q:Vector2=origin.lerp(point,float(step)/count)
++			if not terrain.traversable(q,"land",radius):return [q,origin,point]
++		origin=point
++	return null
++func run()->void:
++	for scenario in [3,4]:
++		var terrain=Terrain.new(scenario)
++		var baseline=Terrain.new(scenario);baseline.roadside_blocks.clear()
++		for edge in terrain.roads.segments:
++			for radius in [0.8,2.45,2.65]:
++				if not baseline.path(edge.a,edge.b,"land",radius).is_empty():
++					var route=terrain.path(edge.a,edge.b,"land",radius)
++					var bad=first_bad(terrain,edge.a,route,radius)
++					if bad!=null:print("ROUTE s=",scenario," ",edge.purpose," ",edge.a,"->",edge.b," r=",radius," bad=",bad," route=",route)
++		for building in terrain.blocks:
++			for side in [-1.0,1.0]:
++				var approach:Vector2=building.get_center()+Vector2(0,side*(building.size.y/2+3.5))
++				for radius in [0.8,2.65]:
++					var origin:=Vector2(40,26.5) if scenario==3 else Vector2(40,60)
++					if not baseline.path(origin,approach,"land",radius).is_empty():
++						var route=terrain.path(origin,approach,"land",radius)
++						var bad=first_bad(terrain,origin,route,radius)
++						if bad!=null:print("APPROACH s=",scenario," ",approach," r=",radius," bad=",bad," route=",route)
++	quit()
+diff --git a/tests/zz_aed_probe_tall.gd b/tests/zz_aed_probe_tall.gd
+new file mode 100644
+index 0000000..faa2adf
+--- /dev/null
++++ b/tests/zz_aed_probe_tall.gd
+@@ -0,0 +1,38 @@
++extends SceneTree
++const Visuals=preload("res://scripts/visuals.gd")
++const Library=preload("res://scripts/asset_library.gd")
++const City=preload("res://scripts/city_buildings.gd")
++func walk(node:Node,t:Transform3D,box:Array)->void:
++	var x:Transform3D=t*(node.transform if node is Node3D else Transform3D.IDENTITY)
++	if node is MeshInstance3D and node.mesh!=null:
++		var a:AABB=x*node.mesh.get_aabb()
++		box[0]=a if box[0]==null else box[0].merge(a)
++	for c in node.get_children():walk(c,x,box)
++func _init()->void:call_deferred("run")
++func run()->void:
++	var config:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))[6]
++	var art=Visuals.new()
++	var stage:=Node3D.new();root.add_child(stage)
++	var seen:={}
++	for p in config.map_props:
++		if seen.has(p.id):continue
++		seen[p.id]=true
++		var m:Node3D=Library.build(art,stage,p.id)
++		var box:=[null];walk(m,Transform3D.IDENTITY,box)
++		var spec:=Library.find(p.id)
++		var a:AABB=box[0]
++		print("PROP ",p.id," top=",snappedf(a.end.y,0.01)," reg=",spec.height," render_xz=",Rect2(a.position.x,a.position.z,a.size.x,a.size.z)," fp=",spec.footprint, " BAD" if a.end.y>float(spec.height)+0.01 else "")
++		m.free()
++	var worst:={}
++	for i in config.architecture.size():
++		var spec:Dictionary=config.architecture[i]
++		var size:=Vector2(spec.source_size[0],spec.source_size[1]);var c:=Vector2(spec.position[0],spec.position[1])
++		var b:Node3D=art.make_authored_building(stage,Rect2(c-size/2,size),i,spec)
++		var box:=[null];walk(b,Transform3D.IDENTITY,box)
++		var a:AABB=box[0]
++		var cap:float=City.height_cap(spec.design,int(spec.get("floors",1))) if City.handles(spec.design) else -1.0
++		var key:String=spec.design+"/"+str(spec.get("floors",1))
++		if not worst.has(key) or worst[key][0]<a.end.y:worst[key]=[snappedf(a.end.y,0.01),cap,a.position.x,a.end.x,a.position.z,a.end.z,c]
++		b.free()
++	for k in worst:print("BLD ",k," ",worst[k])
++	quit()

@@ -1,0 +1,112 @@
+diff --git a/scripts/simulation.gd b/scripts/simulation.gd
+index 0b2e916..6ce4801 100644
+--- a/scripts/simulation.gd
++++ b/scripts/simulation.gd
+@@ -1479,6 +1479,9 @@ func update_objectives(dt: float) -> void:
+ func collision_layer(u: Dictionary) -> String:
+ 	# Non-solid field works (wire, trenches, nets) apply terrain zones, not bodies.
+ 	if not definitions[u.kind].get("solid",true):return "field_zone"
++	# A section whose survivors are all down lies on the ground: others step
++	# past it (as they pass its downed soldiers individually under autonomy).
++	if u.get("combat_ineffective",false):return "downed"
+ 	return str(u.kind) if definitions[u.kind].domain=="air" else str(definitions[u.kind].domain)
+ 
+ # Footprint used against OTHER units. A squad's definition radius (2.65) is a
+diff --git a/tests/_w/probe_harvest.gd b/tests/_w/probe_harvest.gd
+new file mode 100644
+index 0000000..862f3ad
+--- /dev/null
++++ b/tests/_w/probe_harvest.gd
+@@ -0,0 +1,35 @@
++extends SceneTree
++const Sim=preload("res://scripts/simulation.gd")
++func _init() -> void:
++	var preset:=1
++	for a in OS.get_cmdline_user_args():
++		if a.begins_with("--preset="):preset=int(a.substr(9))
++	var sim=Sim.new(true,preset)
++	var next_order:=0.0
++	var next_print:=0.0
++	while sim.time<480 and sim.result=="":
++		if sim.time>=next_order:
++			next_order=sim.time+6
++			var objective:Vector2=sim.objectives[0].pos if sim.objectives[0].owner!=0 else sim.objectives[1].pos
++			var ids:Array=[]
++			for u in sim.living(0):
++				if u.kind=="drone":
++					sim.issue([u.id],objective+Vector2(-9,8))
++				elif u.kind=="boat":
++					sim.issue([u.id],Vector2(87,43),"attack_move")
++				else:
++					ids.append(u.id)
++			sim.issue(ids,objective,"attack_move")
++			if sim.credits>=220:
++				sim.recruit("tank")
++			elif sim.living(0).filter(func(u):return u.kind=="rifle").size()<2:
++				sim.recruit("rifle")
++		if sim.time>=next_print:
++			next_print=sim.time+30
++			print("T ",int(sim.time)," credits ",int(sim.credits)," obj ",sim.objectives.map(func(o):return [o.pos,snappedf(o.progress,0.1),o.owner,o.get("contested",false),o.get("enemy_present",false)])," hold ",sim.score_hold)
++			for u in sim.units:
++				if sim.alive(u):print("  ",u.team," ",u.id," ",u.kind," pos ",u.pos.snapped(Vector2(0.1,0.1))," hp ",snappedf(u.hp,0.1)," ord ",u.orders.map(func(o):return o.mode)," path ",u.path.size()," supp ",snappedf(u.suppression,0.01)," ci ",u.get("combat_ineffective",false)," ph ",u.maneuver.get("phase",""), " blk ",snappedf(u.get("blocked_time",0),0.1))
++		sim.tick(0.1)
++		sim.events.clear()
++	print("RESULT ",sim.result," ",sim.time," kills ",sim.kills," losses ",sim.losses, " capture_time ",sim.capture_time," hold ",sim.scenario.hold)
++	quit(0)
+diff --git a/tests/_w/probe_stuck.gd b/tests/_w/probe_stuck.gd
+new file mode 100644
+index 0000000..4d272da
+--- /dev/null
++++ b/tests/_w/probe_stuck.gd
+@@ -0,0 +1,51 @@
++extends SceneTree
++const Sim=preload("res://scripts/simulation.gd")
++func _init() -> void:
++	var preset:=1
++	var watch:=1
++	var t0:=22.0
++	var t1:=40.0
++	for a in OS.get_cmdline_user_args():
++		if a.begins_with("--preset="):preset=int(a.substr(9))
++		if a.begins_with("--watch="):watch=int(a.substr(8))
++		if a.begins_with("--t0="):t0=float(a.substr(5))
++		if a.begins_with("--t1="):t1=float(a.substr(5))
++	var sim=Sim.new(true,preset)
++	var next_order:=0.0
++	var next_print:=0.0
++	while sim.time<t1 and sim.result=="":
++		if sim.time>=next_order:
++			next_order=sim.time+6
++			var objective:Vector2=sim.objectives[0].pos if sim.objectives[0].owner!=0 else sim.objectives[1].pos
++			var ids:Array=[]
++			for u in sim.living(0):
++				if u.kind=="drone":
++					sim.issue([u.id],objective+Vector2(-9,8))
++				elif u.kind=="boat":
++					sim.issue([u.id],Vector2(87,43),"attack_move")
++				else:
++					ids.append(u.id)
++			sim.issue(ids,objective,"attack_move")
++			if sim.credits>=220:
++				sim.recruit("tank")
++			elif sim.living(0).filter(func(u):return u.kind=="rifle").size()<2:
++				sim.recruit("rifle")
++		if sim.time>=t0 and sim.time>=next_print:
++			next_print=sim.time+2
++			var u=sim.get_unit(watch)
++			if sim.alive(u):
++				print("T ",snappedf(sim.time,0.1)," pos ",u.pos," state ",u.state," reason ",u.get("reason","")," ord ",u.orders," man ",u.maneuver," path ",u.path," blk ",u.blocked_time," repath ",u.repath," hold ",u.get("hold_command",false), " stance ",u.get("stance",""))
++				for m in u.members:print("   m",m.index," pos ",m.pos," hp ",m.hp," w ",m.wound," st ",m.state," post ",m.posture," cg ",m.cover_goal, " d ",m.pos.distance_to(u.pos))
++				if not u.path.is_empty():
++					var nb=sim.movement_neighbors(u)
++					var desired:Vector2=(u.path[0]-u.pos).normalized()
++					var res:=[]
++					for ang in [0.0,0.55,-0.55,1.05,-1.05,1.5,-1.5]:
++						var c:Vector2=u.pos+desired.rotated(ang)*0.2
++						res.append([ang,sim.movement_clear(u,c,nb),sim.terrain.segment_clear(u.pos,c,"land",float(sim.definitions[u.kind].radius))])
++					print("   clear ",res)
++					for o in nb:
++						if o.id!=u.id and sim.alive(o) and o.pos.distance_to(u.pos)<6:print("   nb ",o.id," ",o.team," ",o.kind," ",o.pos," hp ",o.hp," layer ",sim.collision_layer(o)," r ",sim.definitions[o.kind].radius, " ci ",o.get("combat_ineffective",false))
++		sim.tick(0.1)
++		sim.events.clear()
++	quit(0)

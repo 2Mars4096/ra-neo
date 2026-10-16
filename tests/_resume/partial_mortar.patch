@@ -1,0 +1,250 @@
+diff --git a/scripts/audio_fx.gd b/scripts/audio_fx.gd
+index fb21708..c7ed5a8 100644
+--- a/scripts/audio_fx.gd
++++ b/scripts/audio_fx.gd
+@@ -41,6 +41,8 @@ const SOUNDS:={
+ 	"debris":{"cat":"impact","db":-9.0,"gap":0.35},
+ 	"rumble":{"cat":"explosion","db":-1.0,"gap":0.8},
+ 	"wire":{"cat":"misc","db":-10.0,"gap":0.15},
++	"mortar":{"cat":"explosion","db":-2.0,"gap":0.1},
++	"whistle":{"cat":"launch","db":-9.0,"gap":0.3},
+ }
+ # shot kind -> [sound, pitch, db offset]
+ const FIRE:={"rifle":["rifle",1.0,0.0],"drone":["rifle",1.3,-3.0],"bunker":["mg",1.0,0.0],"aa":["autocannon",1.0,0.0],
+@@ -90,7 +92,7 @@ var ui_players:Array[AudioStreamPlayer]=[]
+ var ui_next:=0
+ var was_silent:=false
+ var building_states:Dictionary={} # building id -> last heard damage state
+-var collapse_heard:Dictionary={} # collapse centre -> clock
++var whistled:Dictionary={} # mortar round impact time -> true once its whistle started
+ var counters:={"played":0,"throttled":0,"capped":0,"stolen":0,"culled":0,"distant":0,"ui":0}
+ 
+ func setup(simulation, effect_layer=null) -> void:
+@@ -171,6 +173,7 @@ func frame(dt:float, view_focus:Vector3, view:Basis, size:float, running:bool=tr
+ 	var wind:float=sim.weather.wind.length() if sim!=null else 0.0
+ 	ambience.volume_db=master_db-27.0+clampf(wind/8.0,0.0,1.0)*6.0+clampf((zoom-40.0)/120.0,0.0,1.0)*4.0
+ 	_run_pending()
++	_mortar_whistles()
+ 	_update_distant(dt)
+ 	loop_clock-=dt
+ 	if loop_clock<=0.0 and live:
+@@ -205,6 +208,7 @@ func event(e:Dictionary) -> void:
+ 		"reinforcement":ui("deploy")
+ 		"building_damage":_building_hit(e)
+ 		"building_collapse":_building_collapse(e)
++		"world_blast":_world_blast(e)
+ 
+ func _shot(e:Dictionary) -> void:
+ 	var kind:String=e.get("kind","rifle")
+@@ -278,7 +282,6 @@ func _building_hit(e:Dictionary) -> void:
+ func _building_collapse(e:Dictionary) -> void:
+ 	var p:Vector2=e.get("pos",Vector2.ZERO)
+ 	building_states[int(e.get("building",-1))]=3
+-	collapse_heard[p]=clock
+ 	var pos:=Vector3(p.x,1.5,p.y)
+ 	if _ground_distance(pos)>hear:
+ 		_distant(pos,3.0,true)
+@@ -303,12 +306,6 @@ func _destroyed(e:Dictionary) -> void:
+ 	var p:Vector2=e.get("pos",Vector2.ZERO)
+ 	var pos:=Vector3(p.x,0.7,p.y)
+ 	if kind in Effects.INFANTRY:return
+-	# The collapse blast is relayed as a vehicle kill (ruined_building.gd); the
+-	# collapse already has its own sound.
+-	if collapse_heard.has(p):
+-		var heard:float=collapse_heard[p]
+-		collapse_heard.erase(p)
+-		if heard==clock:return
+ 	if not bool(e.get("visible",true)) or _ground_distance(pos)>hear:
+ 		_distant(pos,2.0,true)
+ 		return
+@@ -348,6 +345,44 @@ func _destroyed(e:Dictionary) -> void:
+ 	if water and kind!="boat":_later(wait,"splash",pos,0.7,2.0)
+ 	elif kind=="boat":_later(wait+0.1,"splash",pos,0.6,4.0)
+ 
++# Blasts from StructureDamage.explosion that are not a unit kill. A collapse has
++# its building_collapse sound and a cook-off string is voiced by the depot's
++# destroyed event, so only the mortar bomb and a crashing airframe sound here.
++func _world_blast(e:Dictionary) -> void:
++	var kind:String=e.get("kind","")
++	if kind in ["collapse","cook_off"]:return
++	var p:Vector2=e.get("pos",Vector2.ZERO)
++	var pos:=Vector3(p.x,0.5,p.y)
++	if not bool(e.get("visible",true)) or _ground_distance(pos)>hear:
++		_distant(pos,1.5,true)
++		return
++	var water:bool=sim!=null and sim.terrain.is_water(p)
++	match kind:
++		"mortar":
++			play_at("mortar",pos,rng.randf_range(0.95,1.08),0.0)
++			if water:_later(0.05,"splash",pos,0.8,3.0)
++			else:_later(rng.randf_range(0.25,0.4),"dirt",pos,0.7,4.0)
++		"crash":
++			play_at("boom_l",pos,rng.randf_range(0.95,1.05),0.0)
++			_later(rng.randf_range(0.35,0.55),"boom_s",pos,1.2,-4.0)
++			if water:_later(0.1,"splash",pos,0.6,4.0)
++		_:play_at("boom_m",pos,1.0,0.0)
++
++# Each queued enemy mortar round (FieldOps.enemy_mortar) whistles down for the
++# last WHISTLE_LEAD s of its flight, so the bomb is heard before it lands.
++const WHISTLE_LEAD:=0.62
++func _mortar_whistles() -> void:
++	if sim==null:return
++	var ops=sim.get("field_ops")
++	if not (ops is Dictionary) or not ops.has("mortar"):return
++	var now:float=float(sim.time)
++	for at in whistled.keys():if float(at)<now-1.0:whistled.erase(at)
++	for shell in ops.mortar.get("rounds",[]):
++		var lead:float=float(shell.at)-now
++		if lead>WHISTLE_LEAD or lead<0.15 or whistled.has(shell.at):continue
++		whistled[shell.at]=true
++		play_at("whistle",Vector3(shell.pos.x,6.0,shell.pos.y),WHISTLE_LEAD/lead if lead<WHISTLE_LEAD*0.8 else 1.0,0.0)
++
+ func _later(delay:float, sound:String, pos:Vector3, pitch:float, db:float, impact:bool=false) -> void:
+ 	if delay<=0.004:
+ 		play_at(sound,pos,pitch,db)
+@@ -664,6 +699,14 @@ func build_library() -> void:
+ 	_mix(deploy,_ring(hi,0.15,[[520.0,1.0,0.05]],0.2),hi,0.0,1.0)
+ 	_mix(deploy,_ring(hi,0.18,[[780.0,1.0,0.07]],0.2),hi,0.08,1.0)
+ 	streams.ui_deploy=_wav(deploy,hi,false,0.5)
++	# Mortar (built last so the sounds above keep their noise): a sharp crump with soil raining back down, and
++	# the incoming whistle.
++	var crump:=_burst(lo,1.1,{"crack":1.0,"crack_tau":0.005,"body":1.0,"body_tau":0.07,"lp":0.6,"lp_end":0.04,"tone":1.0,"f0":140.0,"f1":42.0,"tone_tau":0.1,"sweep_tau":0.03,"rumble":0.6,"rumble_tau":0.3,"crackle":0.5,"crackle_rate":0.003,"attack":0.002})
++	for n in 6:
++		var at:=rng.randf_range(0.25,0.85)
++		_mix(crump,_burst(lo,0.15,{"body":1.0,"body_tau":0.025,"lp":0.3,"lp_end":0.08,"crackle":1.0,"crackle_rate":0.01}),lo,at,0.35*exp(-(at-0.25)/0.5))
++	streams.mortar=_wav(crump,lo)
++	streams.whistle=_wav(_whistle(mid,WHISTLE_LEAD),mid)
+ 
+ func _silence(rate:int, seconds:float) -> PackedFloat32Array:
+ 	var out:=PackedFloat32Array()
+@@ -759,6 +802,24 @@ func _debris(rate:int, seconds:float) -> PackedFloat32Array:
+ 		_mix(out,_burst(rate,0.18,{"body":1.0,"body_tau":0.03,"lp":0.25,"lp_end":0.06,"tone":0.6,"f0":120.0,"f1":60.0,"tone_tau":0.03}),rate,at,0.7*exp(-at/1.2))
+ 	return out
+ 
++# Incoming bomb: a falling (Doppler) whistle with a little flutter and air rush that swells as it nears and
++# cuts off at impact.
++func _whistle(rate:int, seconds:float) -> PackedFloat32Array:
++	var out:=_silence(rate,seconds)
++	var dt:=1.0/rate
++	var phase:=0.0
++	var lp:=0.0
++	var band:=0.0
++	for i in out.size():
++		var t:=i*dt
++		var u:=t/seconds
++		phase+=TAU*lerpf(1350.0,620.0,u*u)*dt*(1.0+0.012*sin(t*TAU*23.0))
++		var w:=rng.randf()*2.0-1.0
++		lp+=(w-lp)*0.25
++		band+=(lp-band)*0.08
++		out[i]=(sin(phase)*0.8+(lp-band)*0.9)*(0.12+0.88*u*u)*minf(1.0,(seconds-t)/0.012)
++	return out
++
+ # Collapse: sub-bass groan that swells briefly and rolls away with slow surges.
+ func _rumble(rate:int, seconds:float) -> PackedFloat32Array:
+ 	var out:=_burst(rate,seconds,{"crack":0.3,"crack_tau":0.01,"body":0.7,"body_tau":0.45,"lp":0.12,"lp_end":0.02,"tone":0.8,"f0":60.0,"f1":24.0,"tone_tau":0.9,"sweep_tau":0.4,"rumble":1.0,"rumble_tau":1.3,"crackle":0.4,"crackle_rate":0.003,"attack":0.12})
+diff --git a/scripts/effects.gd b/scripts/effects.gd
+index 14a5739..add3abd 100644
+--- a/scripts/effects.gd
++++ b/scripts/effects.gd
+@@ -876,6 +876,10 @@ func he_burst(pos:Vector3, direction:Vector3, scale:float) -> void:
+ 	mark(g,0.7*r,Remains.CRATER)
+ 	shake(c,0.35*scale)
+ 
++# Enemy mortar round landing (world_blast kind "mortar"); recipe in effects_explosions.gd.
++func mortar_burst(pos:Vector3, water:bool=false) -> void:
++	Explosions.mortar_burst(self,pos,water)
++
+ # Armour strike: hard white flash and a spark fan rebounding off the plate; heavy hits leave a dark puff.
+ func armor_hit(pos:Vector3, direction:Vector3, scale:float) -> void:
+ 	flash(pos,0.7*scale+0.2,0.05,Color(1.0,0.92,0.72))
+diff --git a/scripts/effects_explosions.gd b/scripts/effects_explosions.gd
+index 2c05142..7e8d4a5 100644
+--- a/scripts/effects_explosions.gd
++++ b/scripts/effects_explosions.gd
+@@ -230,6 +230,42 @@ static func drone_strike(fx, pos:Vector3, water:bool, armor:bool) -> void:
+ 	for n in 3:
+ 		fx.debris(c,fx._jitter(2.8,0.0)+Vector3(0,rng.randf_range(2.5,4.5),0),rng.randf_range(0.1,0.16),rng.randf_range(0.9,1.4),BattleEffects.METAL,true,false,BattleEffects.OPTIONAL)
+ 
++# Mortar bomb on soil (R = 1.6 m, against tank HE 2.5 and a vehicle kill 5): a sharp white snap and a small,
++# short fireball under an earth fountain that stands far taller than the fire (dark soil puffs thrown straight
++# up that stall and hang, clods flung in a wide cone), a fast flat ring of fragments, a low dust skirt and a
++# tan haze. Leaves a crater with a dirt spray. On water: a splash column.
++const MORTAR_R:=1.6
++const MORTAR_CRATER:=1.4
++const MORTAR_SPRAY:=2.2
++static func mortar_burst(fx, pos:Vector3, water:bool) -> void:
++	var rng:RandomNumberGenerator=fx.rng
++	var r:=MORTAR_R
++	var g:=Vector3(pos.x,BattleEffects.FLOOR,pos.z)
++	var c:=g+Vector3(0,0.35*r,0)
++	fx.flash(c,2.6*r,0.03,HOT_WHITE)
++	fx.shake(c,0.28)
++	if water:
++		fx.water_strike(g,0.9)
++		return
++	fx.bloom(c,1.8*r,0.08,CORE,BattleEffects.ESSENTIAL)
++	fx.bloom(g+Vector3(0,0.3,0),2.6*r,0.3,GROUND_GLOW)
++	fx.fireball(c,Vector3(0,0.6*r,0),0.8*r,2.2*r,0.3,0.0,BattleEffects.ESSENTIAL,2.2,0.6*r,ball_tint(rng))
++	for n in 4:
++		var col:=Color(BattleEffects.SOIL.lerp(BattleEffects.DUST,0.2+0.1*n),0.9)
++		fx.smoke(g+Vector3(0,0.3+n*0.35*r,0)+fx._jitter(0.15*r,0.0),Vector3(0,rng.randf_range(3.0,4.4)*r,0)+fx._jitter(0.3*r,0.0),0.45*r,rng.randf_range(1.1,1.5)*r,rng.randf_range(2.0,2.8),col,2.1,0.0,n*0.02,BattleEffects.ESSENTIAL if n==0 else (BattleEffects.NORMAL if n<3 else BattleEffects.OPTIONAL))
++	for n in 10:
++		var out:=Vector3.FORWARD.rotated(Vector3.UP,rng.randf()*TAU)
++		var up:=rng.randf_range(6.0,9.0)
++		fx.debris(g+Vector3(0,0.15,0),out*rng.randf_range(1.0,3.2)+Vector3(0,up,0),rng.randf_range(0.1,0.2),2.0*up/9.8+rng.randf_range(0.1,0.4),BattleEffects.SOIL if n%3 else BattleEffects.SOIL.darkened(0.3),false,false,BattleEffects.NORMAL if n<5 else BattleEffects.OPTIONAL)
++	for n in 10:
++		var v:=Vector3.FORWARD.rotated(Vector3.UP,n*TAU/10+rng.randf_range(-0.3,0.3))*rng.randf_range(11.0,18.0)+Vector3(0,rng.randf_range(0.5,2.5),0)
++		fx.streak(c,v,rng.randf_range(0.3,0.5),0.05,rng.randf_range(0.14,0.26),BattleEffects.SPARK,v,9.8,BattleEffects.NORMAL if n%2==0 else BattleEffects.OPTIONAL)
++	shockwave(fx,g,r,BattleEffects.DUST,6)
++	column(fx,g,r,2,Color(TAN_DUST,0.72),4.0)
++	scorch(fx,g,r,4.0,0.5,BattleEffects.OPTIONAL)
++	fx.mark(g,MORTAR_SPRAY,Remains.SCORCH)
++	fx.mark(g,MORTAR_CRATER,Remains.CRATER)
++
+ # ---------------------------------------------------------------- kills
+ # Fallback for any destroyed kind the effects do not know (new units arrive before their recipe): a smaller,
+ # complete explosion with no lingering emitter. R = 2.2 m.
+diff --git a/scripts/effects_remains.gd b/scripts/effects_remains.gd
+index f38547c..c54df0b 100644
+--- a/scripts/effects_remains.gd
++++ b/scripts/effects_remains.gd
+@@ -46,8 +46,9 @@ const OIL_EDGE:=Color(0.08,0.07,0.06)
+ const ANGLES:=128 # samples of a brush's angular outline and streak profiles
+ const MIN_R:=2 # brush radius limits in texels (0.8-14 m)
+ const MAX_R:=35
+-# Brush radii (texels) built at mission setup per style: every crater (0.45-1.75 m) and scorch (1.3-3.6 m) in
+-# play, and the tank-kill burn (5 m). Other sizes (harvester and depot burns) are built on first use (< 1 ms).
++# Brush radii (texels) built at mission setup per style: every crater (0.45-1.75 m; mortar 1.4 m) and scorch
++# (1.3-3.6 m; mortar spray 2.2 m) in play, and the tank-kill burn (5 m). Other sizes (harvester and depot
++# burns) are built on first use (< 1 ms).
+ const PREBUILT:=[[2,5],[2,9],[13,13]]
+ 
+ # Brushes are generated once per process and shared by every instance (tests create many).
+diff --git a/scripts/field_ops.gd b/scripts/field_ops.gd
+index fb7cc84..42a567f 100644
+--- a/scripts/field_ops.gd
++++ b/scripts/field_ops.gd
+@@ -301,7 +301,7 @@ static func enemy_mortar(sim)->void:
+ 		sim.field_ops["mortar"]=state
+ 	while not state.rounds.is_empty() and sim.time>=float(state.rounds[0].at):
+ 		var shell:Dictionary=state.rounds.pop_front()
+-		StructureDamage.explosion(sim,shell.pos,MORTAR_RADIUS,MORTAR_DAMAGE,MORTAR_STRUCTURE,"crash")
++		StructureDamage.explosion(sim,shell.pos,MORTAR_RADIUS,MORTAR_DAMAGE,MORTAR_STRUCTURE,"mortar")
+ 	if sim.time<float(state.next):return
+ 	state.next=sim.time+MORTAR_INTERVAL*0.25
+ 	var tubes:Array=sim.units.filter(func(u):return sim.alive(u) and u.team==1 and u.kind in ["command_post","ammo_depot"] and u.get("build_left",0.0)<=0)
+diff --git a/scripts/ruined_building.gd b/scripts/ruined_building.gd
+index b83dcb8..1e7fb6b 100644
+--- a/scripts/ruined_building.gd
++++ b/scripts/ruined_building.gd
+@@ -285,9 +285,8 @@ static func show_damage(art,root:Node3D,sim,event:Dictionary)->void:
+ 				match str(event.kind):
+ 					"collapse":effects.structure_collapse(pos)
+ 					"crash":effects.vehicle_explosion(pos,1.0,sim.terrain.is_water(event.pos),false)
++					"mortar":effects.mortar_burst(pos,sim.terrain.is_water(event.pos))
+ 					"cook_off":effects.destroyed("ammo_depot",pos,false)
+-			var audio=root.get("audio")
+-			if audio!=null and str(event.kind)!="cook_off":audio.event({"type":"destroyed","kind":"tank","pos":event.pos,"visible":true})
+ 
+ static func _marks(root:Node3D)->MultiMeshInstance3D:
+ 	var node:=root.get_node_or_null("WorldDamageMarks") as MultiMeshInstance3D

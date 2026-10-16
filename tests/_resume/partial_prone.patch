@@ -1,0 +1,160 @@
+diff --git a/scripts/infantry.gd b/scripts/infantry.gd
+index f330018..11e55cb 100644
+--- a/scripts/infantry.gd
++++ b/scripts/infantry.gd	
+@@ -236,6 +236,9 @@ static func move(u:Dictionary,sim,dt:float) -> void:
+ 		u["cover_next"]=sim.time+0.3+float(u.id%5)*0.02
+ 		Cover.update(u,sim)
+ 	u["carry_from"]=u.pos
++	# Caught in the open (crossfire, or under fire with no shelter in reach):
++	# spread to prone spacing.
++	var open_spread:bool=u.get("crossfire",false) or in_contact(u,sim.time)
+ 	for member in u.members:
+ 		if member.hp<=0:
+ 			if member.get("wound","")==SEVERE:move_casualty(u,member,sim,dt)
+@@ -243,8 +246,12 @@ static func move(u:Dictionary,sim,dt:float) -> void:
+ 		member.cooldown-=dt
+ 		member.suppression=maxf(0,member.suppression-dt*0.12)
+ 		var offset:Vector2=member.offset
+-		# Caught in the open by crossfire: spread to prone spacing.
+-		if member.get("cover_phase","")=="EXPOSED" and u.get("crossfire",false):offset*=1.5
++		# Once spread, a soldier keeps the wider slot while still in the open
++		# (the contact window may lapse between bursts): shrinking it back would
++		# stand him up and walk him off his firing position mid-fight.
++		var spread:bool=caught_open(member,sim.time) and (open_spread or member.get("spread",false))
++		member["spread"]=spread
++		if spread:offset*=1.5
+ 		var desired:Vector2=u.pos+offset
+ 		if member.get("aiding",-1)>=0:
+ 			# Buddy aid: kneel beside the casualty; no shelter moves meanwhile.
+@@ -619,18 +626,29 @@ static func note_fire(u:Dictionary,now:float) -> void:
+ 	u["pressure_seen"]=u.suppression
+ 	u["hit_seen"]=u.last_hit
+ 
+-# A soldier holding still goes flat under heavy suppression, or in crossfire
++# A soldier holding still goes flat under heavy suppression, or in contact when
++# caught in the open (no shelter within the leash: EXPOSED) or in crossfire
+ # while not (yet) sheltered, where there is room. Callers pre-check the cheap
+ # conditions; the room check scans every soldier, so a failed one is retried
+ # twice a second.
+ static func goes_flat(u:Dictionary,member:Dictionary,sim,contact:bool,phase:String) -> bool:
+-	if not (maxf(member.suppression,u.suppression)>0.65 or (contact and u.get("crossfire",false) and phase!="SETTLING" and phase!="SHELTERED" and not member.get("in_trench",false))):return false
++	if not (maxf(member.suppression,u.suppression)>0.65 or (contact and not member.get("in_trench",false) and (caught_open(member,sim.time) or (u.get("crossfire",false) and phase!="SETTLING" and phase!="SHELTERED")))):return false
+ 	if member.posture=="PRONE":return true
+ 	if sim.time<float(member.get("prone_retry",0.0)):return false
+ 	if prone_clear(u,member,sim):return true
+ 	member["prone_retry"]=sim.time+0.5
+ 	return false
+ 
++# No shelter within the leash (Cover marks EXPOSED). The contact drill and
++# bounding turn such soldiers to OVERWATCH; they stay in the open meanwhile.
++const OPEN_MEMORY:=2.5
++static func caught_open(member:Dictionary,now:float) -> bool:
++	var phase:String=member.get("cover_phase","")
++	if phase=="EXPOSED":
++		member["open_at"]=now
++		return true
++	return phase=="OVERWATCH" and now-float(member.get("open_at",-100.0))<OPEN_MEMORY
++
+ # Recent incoming fire or lingering suppression: the section is in contact.
+ static func in_contact(u:Dictionary,now:float) -> bool:
+ 	return now-float(u.get("fired_on",-100.0))<CONTACT_LOW or u.suppression>0.2
+diff --git a/scripts/cover_behavior.gd b/scripts/cover_behavior.gd
+index 0bf1e2a..1f173f5 100644
+--- a/scripts/cover_behavior.gd
++++ b/scripts/cover_behavior.gd	
+@@ -65,7 +65,10 @@ static func _update(u:Dictionary,sim) -> void:
+ 			if member.get("occupying",false):continue
+ 			if sim.time>=maxf(member.cover_until,member.get("cover_deadline",0.0)):clear(member)
+ 		var building:bool=u.has("building_id") or u.has("clearing_id") or (u.kind=="engineer" and sim.units.any(func(s):return s.get("queued_for",-1)==u.id and float(s.get("build_left",0.0))>0))
+-		if u.orders.is_empty() and not building:occupy_works(u,sim,threat)
++		# A bleeding squadmate comes first: stay beside the casualty for buddy aid instead of
++		# walking off to man works (aid would only call the soldier back).
++		var bleeding:bool=u.members.any(func(m):return m.get("wound","")=="SEVERE" and not m.get("stable",false))
++		if u.orders.is_empty() and not building and not bleeding:occupy_works(u,sim,threat)
+ 		return
+ 	var moving:=0
+ 	for member in u.members:
+diff --git a/scripts/simulation.gd b/scripts/simulation.gd
+index 0b2e916..540a7bd 100644
+--- a/scripts/simulation.gd
++++ b/scripts/simulation.gd	
+@@ -1123,12 +1123,13 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
+ 			member.aim=0.0
+ 			# In a trench or any shelter soldiers stay down behind the parapet;
+ 			# holding still in contact or alert (any cover phase) they keep low
+-			# too (contact drill), flat when pinned or caught in crossfire.
++			# too (contact drill), flat when pinned, caught in crossfire, or under
++			# fire in the open with no shelter in reach.
+ 			var phase:String=member.get("cover_phase","")
+ 			var sheltered:bool=member.in_trench or phase=="SETTLING" or phase=="SHELTERED"
+ 			var still:bool=autonomy and member.travel<=0.003
+ 			var rest:String="CROUCHED" if sheltered or (still and (contact or phase!="")) else "STANDING"
+-			if still and (maxf(member.suppression,u.suppression)>0.65 or (contact and u.get("crossfire",false))) and Infantry.goes_flat(u,member,self,contact,phase):rest="PRONE"
++			if still and (contact or maxf(member.suppression,u.suppression)>0.65) and Infantry.goes_flat(u,member,self,contact,phase):rest="PRONE"
+ 			if member.posture=="PRONE" and rest!="PRONE":
+ 				member.posture="RISING"
+ 				member.posture_until=time+0.45
+@@ -1142,14 +1143,14 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
+ 				member.aim=0.0;member.state="RISING";continue
+ 			var pressure:float=maxf(member.suppression,u.suppression)
+ 			var desired_posture:="STANDING" if member.travel>0.003 else "CROUCHED"
+-			if member.travel<=0.003 and (pressure>0.65 or (contact and u.get("crossfire",false))) and Infantry.goes_flat(u,member,self,contact,member.get("cover_phase","")):desired_posture="PRONE"
++			if member.travel<=0.003 and (pressure>0.65 or contact) and Infantry.goes_flat(u,member,self,contact,member.get("cover_phase","")):desired_posture="PRONE"
+ 			if desired_posture!=member.posture:
+ 				member.posture=desired_posture
+ 				member.posture_until=time+0.35
+ 				member.aim=0.0
+ 			if member.posture=="PRONE":member.body_radius=1.15
+ 			elif time>=member.posture_until:member.body_radius=0.8
+-			# Pinned soldiers stay flat; one prone by choice (crossfire) still fires.
++			# Pinned soldiers stay flat; one prone by choice (crossfire, open ground) still fires.
+ 			if member.posture=="PRONE" and pressure>0.65:member.state="PINNED";member.aim=0.0;continue
+ 			if member.travel>0.003 or time<member.posture_until:
+ 				member.state="SETTLING";member.aim=0.0;continue
+diff --git a/tests/probe_contact.gd b/tests/probe_contact.gd
+index d958a29..dccbc88 100644
+--- a/tests/probe_contact.gd
++++ b/tests/probe_contact.gd	
+@@ -3,10 +3,14 @@ extends SceneTree
+ # (attack_move into contact). Where real cover lies within the cover leash, at
+ # least 2 of 3 attackers must reach it (SETTLING/SHELTERED) or go prone within
+ # REACT seconds. On an open stretch (nearest cover beyond the leash) the
+-# soldiers must instead report EXPOSED, not chase a shelter they cannot reach.
++# soldiers must instead report EXPOSED, not chase a shelter they cannot reach,
++# and drop prone within OPEN_REACT of the first incoming fire.
+ const Sim=preload("res://scripts/simulation.gd")
+ const Cover=preload("res://scripts/cover_behavior.gd")
+ const REACT:=6.0
++# Caught in the open, soldiers go prone (and keep firing) this soon after the
++# first incoming round (they spread to prone spacing, then drop).
++const OPEN_REACT:=1.0
+ # [our spawn, enemy spawn, open street]: the audited open street (nearest cover
+ # ~14.5 m from the spawn, ~18 m from where contact halts it), then streets with
+ # cover 3-6 m away.
+@@ -37,8 +41,10 @@ func fight(index:int,a:Vector2,b:Vector2,open:bool)->void:
+ 	var reach:float=nearest_cover(sim.terrain,a)
+ 	var reacted:={}
+ 	var exposed:={}
++	var fired:=INF
+ 	for frame in int(12*30):
+ 		sim.tick(1.0/30)
++		if ours.has("fired_on"):fired=minf(fired,float(ours.fired_on))
+ 		for m in ours.members:
+ 			if m.hp<=0:continue
+ 			var phase:String=m.get("cover_phase","")
+@@ -55,10 +61,13 @@ func fight(index:int,a:Vector2,b:Vector2,open:bool)->void:
+ 	var on_time:int=reacted.values().filter(func(t):return t<=REACT).size()
+ 	var flagged:int=exposed.values().filter(func(t):return t<=REACT).size()
+ 	var dead:int=ours.members.filter(func(m):return m.hp<=0).size()
+-	var summary:="%s->%s nearest cover %.1f m, covered/prone by %.0fs: %d %s, exposed: %d, ours dead %d" % [a,b,reach,REACT,on_time,reacted,flagged,dead]
++	var flat:int=reacted.values().filter(func(t):return t-fired<=OPEN_REACT).size()
++	var summary:="%s->%s nearest cover %.1f m, covered/prone by %.0fs: %d %s, exposed: %d, first fire on us %.2fs, ours dead %d" % [a,b,reach,REACT,on_time,reacted,flagged,fired,dead]
+ 	if open:
+ 		check(reach>Cover.LEASH,"open street has no cover within the %.0f m leash: %s" % [Cover.LEASH,summary])
+ 		check(flagged>=2,"open street reported EXPOSED: "+summary)
++		check(flat>=2,"open street: soldiers prone within %.1fs of first incoming fire: %s" % [OPEN_REACT,summary])
++		check(dead<=1,"open street: prone soldiers hold out 12 s (at most one down): "+summary)
+ 	else:
+ 		check(reach<=Cover.LEASH-2.0,"street has cover within the leash: "+summary)
+ 		check(on_time>=2,"cover within leash used: "+summary)
