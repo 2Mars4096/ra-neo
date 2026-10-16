@@ -2,6 +2,7 @@ extends RefCounted
 
 const PRODUCER={"rifle":"barracks","atgm":"barracks","tank":"factory","aa":"factory","drone":"factory","harvester":"hq"}
 const BUILDINGS=["power","refinery","barracks","factory"]
+const VehicleDamage=preload("res://scripts/vehicle_damage.gd")
 
 static func setup(sim) -> void:
 	var extra:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://resources/classic_units.json"))
@@ -125,45 +126,145 @@ static func harvest(sim,u:Dictionary,dt:float) -> void:
 	if u.haul=="RETURN":
 		if u.pos.distance_to(refinery.pos)<8:
 			spend(sim,u.team,-float(u.cargo));u.cargo=0.0;u.haul="COLLECT";sim.stop([u.id])
-		elif u.orders.is_empty() or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and u.orders[0].pos==u.get("haul_destination",Vector2.INF)):
+		elif (u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0))) or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and not u.orders.is_empty() and u.orders[0].pos==u.get("haul_destination",Vector2.INF)):
 			var excluded:Vector2=u.get("haul_destination",Vector2.INF) if not u.orders.is_empty() else Vector2.INF
 			var dock:=delivery_route(sim,u,refinery,excluded)
+			if dock.is_empty():dock=delivery_route(sim,u,refinery,excluded,7.0,true)
 			u["haul_repath_at"]=sim.time+5.0
 			if not dock.is_empty() and sim.issue([u.id],dock.pos)>0:
 				u.path=dock.path;u["haul_destination"]=dock.pos
+			else:u["haul_retry_at"]=sim.time+1.0
 		u.reason="Returning cargo: %d" % u.cargo
 		return
-	var field:Dictionary={}
-	for f in sim.classic.fields:
-		if f.remaining>0 and (field.is_empty() or u.pos.distance_to(f.pos)<u.pos.distance_to(field.pos)):field=f
+	var field:=ore_field(sim,u)
 	if field.is_empty():
 		if u.cargo>0:u.haul="RETURN"
-		else:u.reason="Resource deposits exhausted"
+		else:u.reason="Resource deposits exhausted" if sim.classic.fields.all(func(f):return f.remaining<=0) else "No reachable deposit"
 		return
-	if u.pos.distance_to(field.pos)<4:
+	if u.pos.distance_to(field.pos)<4 or (u.pos.distance_to(u.get("ore_cell",Vector2.INF))<ORE_SCOOP and field.pos.distance_to(u.ore_cell)<ORE_RINGS[-1][0]+0.5):
 		sim.stop([u.id])
 		var amount:float=minf(18*dt,minf(120-u.cargo,field.remaining))
 		u.cargo+=amount;field.remaining-=amount
 		u.reason="Harvesting: %d / 120" % u.cargo
 		if u.cargo>=119.9 or field.remaining<=0:u.haul="RETURN"
-	elif u.orders.is_empty() or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and u.orders[0].pos==u.get("haul_destination",Vector2.INF)):
+	elif (u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0))) or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and not u.orders.is_empty() and u.orders[0].pos==u.get("haul_destination",Vector2.INF)):
 		var excluded:Vector2=u.get("haul_destination",Vector2.INF) if not u.orders.is_empty() else Vector2.INF
-		var approach:=delivery_route(sim,u,field,excluded,3.0)
 		u["haul_repath_at"]=sim.time+5.0
+		clear_deposit(sim,u,field)
+		var approach:=ore_route(sim,u,field,excluded)
+		# Units that can move (idle crowds, the blockers just asked to make
+		# way) are not walls: plan round fixed obstacles only and let local
+		# movement and the blocked re-plan handle them.
+		if approach.is_empty():approach=ore_route(sim,u,field,excluded,true)
 		if not approach.is_empty() and sim.issue([u.id],approach.pos)>0:
-			u.path=approach.path;u["haul_destination"]=approach.pos
+			u.path=approach.path;u["haul_destination"]=approach.pos;u["ore_cell"]=approach.pos
+		else:
+			# Walled off by wrecks or immobilised hulls: try another deposit.
+			if not u.has("ore_skip"):u["ore_skip"]={}
+			u.ore_skip[sim.classic.fields.find(field)]=sim.time+ORE_SKIP
+			u["haul_retry_at"]=sim.time+1.0;u.reason="Deposit blocked · rerouting"
 
-# Choose a reachable unloading side rather than the first terrain-legal side.
-# This runs only when the economy needs a new trip; existing orders stay intact.
-static func delivery_route(sim,u:Dictionary,refinery:Dictionary,excluded:Vector2=Vector2.INF,approach_radius:float=7.0) -> Dictionary:
+# Ore deposits. The marker ring is 3.3 m across the ore; a harvester collects
+# from stand points on and round it (its scoop reaches the edge from 5.5 m),
+# so a hull or wreck on the centre does not close the whole deposit.
+const ORE_RINGS:=[[0.0,1],[2.0,6],[3.8,12],[5.5,16]]
+const ORE_FOOTPRINT:=3.3
+const ORE_SCOOP:=1.5 # collects within this of its chosen stand point
+const ORE_ROUTES:=2 # path queries per stand-point ring when planning a trip
+const ORE_SKIP:=30.0 # seconds before an unreachable deposit is retried
+
+# Nearest deposit with ore that has not recently proved unreachable.
+static func ore_field(sim,u:Dictionary)->Dictionary:
+	var skip:Dictionary=u.get("ore_skip",{})
+	var field:Dictionary={}
+	for i in sim.classic.fields.size():
+		var f:Dictionary=sim.classic.fields[i]
+		if f.remaining<=0 or sim.time<float(skip.get(i,-1.0)):continue
+		if field.is_empty() or u.pos.distance_to(f.pos)<u.pos.distance_to(field.pos):field=f
+	return field
+
+# Bodies a harvester plans round: known land units (immobilised hulls among
+# them) and vehicle wrecks; `fixed` keeps only what cannot move off.
+static func haul_bodies(sim,u:Dictionary,fixed:bool=false)->Array:
 	var radius:float=sim.definitions[u.kind].radius
 	var avoid:Array=[]
 	for other in sim.units:
 		if other.id==u.id or not sim.alive(other) or sim.definitions[other.kind].domain!="land":continue
 		if other.team!=u.team and not sim.contact_known(u,other):continue
+		if fixed and float(sim.definitions[other.kind].speed)>0 and not other.get("mobility_kill",false) and not other.get("abandoned",false):continue
 		avoid.append({"pos":other.pos,"radius":radius+float(sim.definitions[other.kind].radius)+0.08})
 		for member in other.members:
 			if member.hp>0:avoid.append({"pos":member.pos,"radius":radius+float(member.get("body_radius",0.8))+0.02})
+	for wreck in VehicleDamage.wrecks(sim):
+		avoid.append({"pos":wreck.pos,"radius":radius+float(wreck.radius)+0.1})
+	# A body already touching the harvester shrinks to its gap, so a route
+	# can still lead away from it.
+	for body in avoid:body.radius=minf(body.radius,u.pos.distance_to(body.pos)-0.05)
+	return avoid
+
+# Route to the innermost clear, reachable stand point of the deposit (outer
+# rings only when the ore nearer the centre is blocked). Per ring only the
+# ORE_ROUTES clear points nearest the harvester are path-checked, so an open
+# deposit costs one query and a closed one at most seven (per body set).
+static func ore_route(sim,u:Dictionary,field:Dictionary,excluded:Vector2=Vector2.INF,fixed:bool=false)->Dictionary:
+	var radius:float=sim.definitions[u.kind].radius
+	var avoid:=haul_bodies(sim,u,fixed)
+	for ring in ORE_RINGS:
+		var cells:Array=[]
+		for i in ring[1]:
+			var point:Vector2=field.pos+Vector2.from_angle(i*TAU/ring[1])*ring[0]
+			if excluded.is_finite() and point.distance_to(excluded)<1.0:continue
+			if not sim.terrain.traversable(point,"land",radius):continue
+			# Half a nav cell of slack: a point grazing a body has no grid route.
+			var clear:=true
+			for body in avoid:
+				if point.distance_squared_to(body.pos)<(body.radius+0.5)*(body.radius+0.5):clear=false;break
+			if clear:cells.append(point)
+		cells.sort_custom(func(a,b):return a.distance_squared_to(u.pos)<b.distance_squared_to(u.pos))
+		var best:Dictionary={}
+		var best_length:=INF
+		for point in cells.slice(0,ORE_ROUTES):
+			var route:Array=sim.terrain.path(u.pos,point,"land",radius,avoid,"wheeled")
+			if route.is_empty() or route.back().distance_to(point)>1.0:continue
+			var length:=0.0
+			var previous:Vector2=u.pos
+			for waypoint in route:length+=previous.distance_to(waypoint);previous=waypoint
+			if length<best_length:best_length=length;best={"pos":point,"path":route}
+		if not best.is_empty():return best
+	return {}
+
+# Idle friendly units parked on the deposit pull off it (immobilised, held and
+# garrisoned ones cannot). Returns how many were asked.
+static func clear_deposit(sim,u:Dictionary,field:Dictionary)->int:
+	var asked:=0
+	for other in sim.living(u.team):
+		var d:Dictionary=sim.definitions[other.kind]
+		if other.id==u.id or other.kind=="harvester" or d.domain!="land" or d.get("structure",false) or float(d.speed)<=0:continue
+		if not other.orders.is_empty() or not other.maneuver.is_empty() or other.hold_command or other.has("building_id") or other.get("mobility_kill",false):continue
+		if sim.time<float(other.get("ore_yield_until",-1.0)):continue
+		var on_ore:bool=other.pos.distance_to(field.pos)<ORE_FOOTPRINT+float(d.radius)
+		if not other.members.is_empty():
+			on_ore=false
+			for member in other.members:
+				if member.hp>0 and member.pos.distance_to(field.pos)<ORE_FOOTPRINT+float(member.get("body_radius",0.8)):on_ore=true
+		if not on_ore:continue
+		var away:Vector2=other.pos-field.pos
+		if away.length()<0.5:away=field.pos-u.pos
+		var reach:float=ORE_RINGS[-1][0]+float(sim.definitions[u.kind].radius)+float(d.radius)+0.5
+		for k in 8:
+			var spot:Vector2=field.pos+away.normalized().rotated(((k+1)>>1)*(1 if k%2==0 else -1)*TAU/8)*reach
+			if not sim.location_clear(spot,other.kind,other.id) or sim.issue([other.id],spot)==0:continue
+			other["ore_yield_until"]=sim.time+20.0
+			other.reason="Making way for harvester"
+			asked+=1
+			break
+	return asked
+
+# Choose a reachable unloading side rather than the first terrain-legal side.
+# This runs only when the economy needs a new trip; existing orders stay intact.
+static func delivery_route(sim,u:Dictionary,refinery:Dictionary,excluded:Vector2=Vector2.INF,approach_radius:float=7.0,fixed:bool=false) -> Dictionary:
+	var radius:float=sim.definitions[u.kind].radius
+	var avoid:=haul_bodies(sim,u,fixed)
 	var best:Dictionary={}
 	var best_length:=INF
 	for i in 8:
