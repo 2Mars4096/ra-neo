@@ -876,6 +876,10 @@ func he_burst(pos:Vector3, direction:Vector3, scale:float) -> void:
 	mark(g,0.7*r,Remains.CRATER)
 	shake(c,0.35*scale)
 
+# Enemy mortar round landing (world_blast kind "mortar"); recipe in effects_explosions.gd.
+func mortar_burst(pos:Vector3, water:bool=false) -> void:
+	Explosions.mortar_burst(self,pos,water)
+
 # Armour strike: hard white flash and a spark fan rebounding off the plate; heavy hits leave a dark puff.
 func armor_hit(pos:Vector3, direction:Vector3, scale:float) -> void:
 	flash(pos,0.7*scale+0.2,0.05,Color(1.0,0.92,0.72))

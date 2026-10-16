@@ -35,6 +35,7 @@ func run() -> void:
 	cost_checks(audio,focus)
 	mute_checks(audio,focus)
 	audio.free()
+	world_blast_checks(sim)
 	await battle_checks()
 	print("AUDIO: ",checks," checks, ",errors," failures")
 	quit(1 if errors else 0)
@@ -238,6 +239,73 @@ func mute_checks(audio, focus:Vector3) -> void:
 	audio.last_start.clear()
 	check(audio.play_at("boom_l",focus),"unmuted layer plays again")
 
+# World blasts (StructureDamage.explosion): the enemy mortar has its own whistle and crump, a collapse is voiced
+# only by its building_collapse rumble, a cook-off string by the depot.
+const FieldOps=preload("res://scripts/field_ops.gd")
+func world_blast_checks(sim) -> void:
+	var audio=AudioFX.new()
+	audio.setup(sim,null)
+	root.add_child(audio)
+	for name in ["mortar","whistle"]:
+		var stream:AudioStreamWAV=audio.streams.get(name)
+		check(stream!=null and stream.data.size()>200,"sound %s synthesized" % name)
+	check(absf(audio.streams.whistle.get_length()-AudioFX.WHISTLE_LEAD)<0.02,"whistle lasts the %.2f s lead" % AudioFX.WHISTLE_LEAD)
+	var focus:=Vector3(300,0,640)
+	var centre:=Vector2(focus.x,focus.z)
+	var step:=func(dt:float, running:bool=true):audio.frame(dt,focus,Basis(),72.0,running)
+	step.call(1.0/60)
+	# A real salvo: rounds queued by FieldOps.enemy_mortar whistle down, then burst as world_blast "mortar".
+	var rng:=RandomNumberGenerator.new();rng.seed=1
+	sim.events.clear()
+	var land:=centre
+	for k in 40:
+		if not sim.terrain.is_water(land):break
+		land=centre+Vector2(rng.randf_range(-30,30),rng.randf_range(-30,30))
+	sim.field_ops["mortar"]={"next":sim.time+1000.0,"rounds":[{"at":sim.time+2.0,"pos":land}],"rng":rng}
+	var impact:float=sim.time+2.0
+	step.call(1.0/60)
+	check(not audio.last_start.has("whistle"),"no whistle while the round is still high")
+	sim.time=impact-0.5
+	step.call(1.0/60,false)
+	check(not audio.last_start.has("whistle"),"no whistle while the game is paused")
+	step.call(1.0/60)
+	check(audio.last_start.has("whistle") and float(audio.last_start.whistle)==audio.clock,"incoming round whistles before impact")
+	var whistle_at:float=audio.clock
+	step.call(0.1)
+	check(float(audio.last_start.whistle)==whistle_at,"each round whistles once")
+	sim.time=impact
+	FieldOps.enemy_mortar(sim)
+	var blasts:Array=sim.events.filter(func(e):return e.type=="world_blast")
+	check(blasts.size()==1 and blasts[0].kind=="mortar","enemy mortar bursts as world_blast kind mortar")
+	var booms:={}
+	for name in ["boom_s","boom_m","boom_l"]:booms[name]=float(audio.last_start.get(name,-1.0))
+	for e in sim.events:audio.event(e)
+	sim.events.clear()
+	check(audio.last_start.has("mortar") and float(audio.last_start.mortar)>whistle_at,"the mortar crump follows its whistle")
+	check(booms.keys().all(func(n):return float(audio.last_start.get(n,-1.0))==booms[n]),"a mortar bomb is not voiced as a vehicle kill")
+	for i in 60:step.call(1.0/60)
+	check(float(audio.last_start.get("dirt",-1.0))>float(audio.last_start.mortar),"soil rains down after the crump")
+	sim.field_ops.erase("mortar")
+	# Collapse: exactly the events structure_damage.gd emits; only the rumble plays.
+	for i in 120:step.call(1.0/60)
+	audio.last_start.clear()
+	var played:int=audio.counters.played
+	audio.event({"type":"building_collapse","building":7,"pos":centre+Vector2(4,-4),"bounds":Rect2(centre+Vector2(-2,-8),Vector2(12,8)),"height":9.0,"killed":0,"survivors":0,"visible":true})
+	audio.event({"type":"world_blast","kind":"collapse","pos":centre+Vector2(4,-4),"radius":6.0,"visible":true})
+	for i in 30:step.call(1.0/60)
+	check(audio.last_start.has("rumble") and audio.counters.played>played,"a collapse rumbles")
+	check(not audio.last_start.has("boom_l") and not audio.last_start.has("boom_m") and not audio.last_start.has("mortar"),"a collapse plays no tank-kill or blast sound")
+	for i in 120:step.call(1.0/60)
+	audio.last_start.clear()
+	audio.event({"type":"world_blast","kind":"cook_off","pos":centre,"radius":4.0,"visible":true})
+	check(audio.last_start.is_empty(),"cook-off world blasts are voiced by the depot, not here")
+	audio.event({"type":"world_blast","kind":"crash","pos":centre,"radius":5.0,"visible":true})
+	check(audio.last_start.has("boom_l"),"an airframe crash booms")
+	var heat:float=audio.distant_heat
+	audio.event({"type":"world_blast","kind":"mortar","pos":centre+Vector2(200,0),"radius":3.0,"visible":true})
+	check(audio.distant_heat>heat,"a far mortar bomb is heard as distant combat")
+	audio.free()
+
 func battle_checks() -> void:
 	root.size=Vector2i(1280,720)
 	var battle=load("res://scenes/main.tscn").instantiate();root.add_child(battle);current_scene=battle
@@ -256,6 +324,16 @@ func battle_checks() -> void:
 	await process_frame
 	check(int(audio.stats().counters.played)>before,"battle events reach the audio layer")
 	check(int(audio.stats().counters.ui)>ui_before,"warnings chime")
+	# A collapse through battle (ruined_building.show_damage) relays no fake vehicle kill to the audio layer.
+	for i in 600:
+		if audio.pending.is_empty():break
+		audio.frame(1.0/60,focus,Basis(),72.0)
+	audio.frame(1.0,focus,Basis(),72.0)
+	audio.last_start.clear()
+	battle.sim.events.append({"type":"world_blast","kind":"collapse","pos":centre+Vector2(6,0),"radius":6.0,"visible":true})
+	battle.consume_events()
+	var booms:=["boom_s","boom_m","boom_l"]
+	check(not booms.any(func(n):return audio.last_start.has(n) or audio.pending.any(func(item):return item[1]==n)),"a collapse blast through battle is not voiced as a tank kill")
 	battle.ping()
 	check(int(audio.stats().counters.ui)>ui_before+1,"order ping goes through the audio layer")
 	var key:=InputEventKey.new();key.keycode=KEY_M;key.physical_keycode=KEY_M;key.pressed=true

@@ -46,8 +46,9 @@ const OIL_EDGE:=Color(0.08,0.07,0.06)
 const ANGLES:=128 # samples of a brush's angular outline and streak profiles
 const MIN_R:=2 # brush radius limits in texels (0.8-14 m)
 const MAX_R:=35
-# Brush radii (texels) built at mission setup per style: every crater (0.45-1.75 m) and scorch (1.3-3.6 m) in
-# play, and the tank-kill burn (5 m). Other sizes (harvester and depot burns) are built on first use (< 1 ms).
+# Brush radii (texels) built at mission setup per style: every crater (0.45-1.75 m; mortar 1.4 m) and scorch
+# (1.3-3.6 m; mortar spray 2.2 m) in play, and the tank-kill burn (5 m). Other sizes (harvester and depot
+# burns) are built on first use (< 1 ms).
 const PREBUILT:=[[2,5],[2,9],[13,13]]
 
 # Brushes are generated once per process and shared by every instance (tests create many).

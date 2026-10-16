@@ -285,9 +285,8 @@ static func show_damage(art,root:Node3D,sim,event:Dictionary)->void:
 				match str(event.kind):
 					"collapse":effects.structure_collapse(pos)
 					"crash":effects.vehicle_explosion(pos,1.0,sim.terrain.is_water(event.pos),false)
+					"mortar":effects.mortar_burst(pos,sim.terrain.is_water(event.pos))
 					"cook_off":effects.destroyed("ammo_depot",pos,false)
-			var audio=root.get("audio")
-			if audio!=null and str(event.kind)!="cook_off":audio.event({"type":"destroyed","kind":"tank","pos":event.pos,"visible":true})
 
 static func _marks(root:Node3D)->MultiMeshInstance3D:
 	var node:=root.get_node_or_null("WorldDamageMarks") as MultiMeshInstance3D

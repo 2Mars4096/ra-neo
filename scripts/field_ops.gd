@@ -301,7 +301,7 @@ static func enemy_mortar(sim)->void:
 		sim.field_ops["mortar"]=state
 	while not state.rounds.is_empty() and sim.time>=float(state.rounds[0].at):
 		var shell:Dictionary=state.rounds.pop_front()
-		StructureDamage.explosion(sim,shell.pos,MORTAR_RADIUS,MORTAR_DAMAGE,MORTAR_STRUCTURE,"crash")
+		StructureDamage.explosion(sim,shell.pos,MORTAR_RADIUS,MORTAR_DAMAGE,MORTAR_STRUCTURE,"mortar")
 	if sim.time<float(state.next):return
 	state.next=sim.time+MORTAR_INTERVAL*0.25
 	var tubes:Array=sim.units.filter(func(u):return sim.alive(u) and u.team==1 and u.kind in ["command_post","ammo_depot"] and u.get("build_left",0.0)<=0)

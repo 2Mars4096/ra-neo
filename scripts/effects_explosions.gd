@@ -230,6 +230,42 @@ static func drone_strike(fx, pos:Vector3, water:bool, armor:bool) -> void:
 	for n in 3:
 		fx.debris(c,fx._jitter(2.8,0.0)+Vector3(0,rng.randf_range(2.5,4.5),0),rng.randf_range(0.1,0.16),rng.randf_range(0.9,1.4),BattleEffects.METAL,true,false,BattleEffects.OPTIONAL)
 
+# Mortar bomb on soil (R = 1.6 m, against tank HE 2.5 and a vehicle kill 5): a sharp white snap and a small,
+# short fireball under an earth fountain that stands far taller than the fire (dark soil puffs thrown straight
+# up that stall and hang, clods flung in a wide cone), a fast flat ring of fragments, a low dust skirt and a
+# tan haze. Leaves a crater with a dirt spray. On water: a splash column.
+const MORTAR_R:=1.6
+const MORTAR_CRATER:=1.4
+const MORTAR_SPRAY:=2.2
+static func mortar_burst(fx, pos:Vector3, water:bool) -> void:
+	var rng:RandomNumberGenerator=fx.rng
+	var r:=MORTAR_R
+	var g:=Vector3(pos.x,BattleEffects.FLOOR,pos.z)
+	var c:=g+Vector3(0,0.35*r,0)
+	fx.flash(c,2.6*r,0.03,HOT_WHITE)
+	fx.shake(c,0.28)
+	if water:
+		fx.water_strike(g,0.9)
+		return
+	fx.bloom(c,1.8*r,0.08,CORE,BattleEffects.ESSENTIAL)
+	fx.bloom(g+Vector3(0,0.3,0),2.6*r,0.3,GROUND_GLOW)
+	fx.fireball(c,Vector3(0,0.6*r,0),0.8*r,2.2*r,0.3,0.0,BattleEffects.ESSENTIAL,2.2,0.6*r,ball_tint(rng))
+	for n in 4:
+		var col:=Color(BattleEffects.SOIL.lerp(BattleEffects.DUST,0.2+0.1*n),0.9)
+		fx.smoke(g+Vector3(0,0.3+n*0.35*r,0)+fx._jitter(0.15*r,0.0),Vector3(0,rng.randf_range(3.0,4.4)*r,0)+fx._jitter(0.3*r,0.0),0.45*r,rng.randf_range(1.1,1.5)*r,rng.randf_range(2.0,2.8),col,2.1,0.0,n*0.02,BattleEffects.ESSENTIAL if n==0 else (BattleEffects.NORMAL if n<3 else BattleEffects.OPTIONAL))
+	for n in 10:
+		var out:=Vector3.FORWARD.rotated(Vector3.UP,rng.randf()*TAU)
+		var up:=rng.randf_range(6.0,9.0)
+		fx.debris(g+Vector3(0,0.15,0),out*rng.randf_range(1.0,3.2)+Vector3(0,up,0),rng.randf_range(0.1,0.2),2.0*up/9.8+rng.randf_range(0.1,0.4),BattleEffects.SOIL if n%3 else BattleEffects.SOIL.darkened(0.3),false,false,BattleEffects.NORMAL if n<5 else BattleEffects.OPTIONAL)
+	for n in 10:
+		var v:=Vector3.FORWARD.rotated(Vector3.UP,n*TAU/10+rng.randf_range(-0.3,0.3))*rng.randf_range(11.0,18.0)+Vector3(0,rng.randf_range(0.5,2.5),0)
+		fx.streak(c,v,rng.randf_range(0.3,0.5),0.05,rng.randf_range(0.14,0.26),BattleEffects.SPARK,v,9.8,BattleEffects.NORMAL if n%2==0 else BattleEffects.OPTIONAL)
+	shockwave(fx,g,r,BattleEffects.DUST,6)
+	column(fx,g,r,2,Color(TAN_DUST,0.72),4.0)
+	scorch(fx,g,r,4.0,0.5,BattleEffects.OPTIONAL)
+	fx.mark(g,MORTAR_SPRAY,Remains.SCORCH)
+	fx.mark(g,MORTAR_CRATER,Remains.CRATER)
+
 # ---------------------------------------------------------------- kills
 # Fallback for any destroyed kind the effects do not know (new units arrive before their recipe): a smaller,
 # complete explosion with no lingering emitter. R = 2.2 m.

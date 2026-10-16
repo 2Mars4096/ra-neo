@@ -178,8 +178,8 @@ func audio_checks()->void:
 	audio.frame(2.0,focus,Basis(),72.0)
 	var booms:float=float(audio.last_start.get("boom_l",-1.0))
 	audio.event({"type":"building_collapse","building":7,"pos":Vector2(104,96),"bounds":Rect2(98,92,12,8),"height":9.0,"killed":0,"survivors":0,"visible":true})
-	# ruined_building.gd relays the collapse blast as a vehicle kill in the same frame.
-	audio.event({"type":"destroyed","kind":"tank","pos":Vector2(104,96),"visible":true})
+	# The collapse blast arrives as a world_blast in the same frame; it has no sound of its own.
+	audio.event({"type":"world_blast","kind":"collapse","pos":Vector2(104,96),"visible":true})
 	check(audio.last_start.has("rumble") and float(audio.last_start.rumble)==audio.clock,"a collapse rumbles")
 	check(float(audio.last_start.get("boom_l",-1.0))==booms and not audio.pending.any(func(item):return item[1]=="boom_l"),"the collapse is not voiced as a tank kill")
 	for i in 120:audio.frame(1.0/60,focus,Basis(),72.0)

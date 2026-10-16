@@ -41,6 +41,8 @@ const SOUNDS:={
 	"debris":{"cat":"impact","db":-9.0,"gap":0.35},
 	"rumble":{"cat":"explosion","db":-1.0,"gap":0.8},
 	"wire":{"cat":"misc","db":-10.0,"gap":0.15},
+	"mortar":{"cat":"explosion","db":-2.0,"gap":0.1},
+	"whistle":{"cat":"launch","db":-9.0,"gap":0.3},
 }
 # shot kind -> [sound, pitch, db offset]
 const FIRE:={"rifle":["rifle",1.0,0.0],"drone":["rifle",1.3,-3.0],"bunker":["mg",1.0,0.0],"aa":["autocannon",1.0,0.0],
@@ -90,7 +92,7 @@ var ui_players:Array[AudioStreamPlayer]=[]
 var ui_next:=0
 var was_silent:=false
 var building_states:Dictionary={} # building id -> last heard damage state
-var collapse_heard:Dictionary={} # collapse centre -> clock
+var whistled:Dictionary={} # mortar round impact time -> true once its whistle started
 var counters:={"played":0,"throttled":0,"capped":0,"stolen":0,"culled":0,"distant":0,"ui":0}
 
 func setup(simulation, effect_layer=null) -> void:
@@ -171,6 +173,7 @@ func frame(dt:float, view_focus:Vector3, view:Basis, size:float, running:bool=tr
 	var wind:float=sim.weather.wind.length() if sim!=null else 0.0
 	ambience.volume_db=master_db-27.0+clampf(wind/8.0,0.0,1.0)*6.0+clampf((zoom-40.0)/120.0,0.0,1.0)*4.0
 	_run_pending()
+	if live:_mortar_whistles()
 	_update_distant(dt)
 	loop_clock-=dt
 	if loop_clock<=0.0 and live:
@@ -205,6 +208,7 @@ func event(e:Dictionary) -> void:
 		"reinforcement":ui("deploy")
 		"building_damage":_building_hit(e)
 		"building_collapse":_building_collapse(e)
+		"world_blast":_world_blast(e)
 
 func _shot(e:Dictionary) -> void:
 	var kind:String=e.get("kind","rifle")
@@ -278,7 +282,6 @@ func _building_hit(e:Dictionary) -> void:
 func _building_collapse(e:Dictionary) -> void:
 	var p:Vector2=e.get("pos",Vector2.ZERO)
 	building_states[int(e.get("building",-1))]=3
-	collapse_heard[p]=clock
 	var pos:=Vector3(p.x,1.5,p.y)
 	if _ground_distance(pos)>hear:
 		_distant(pos,3.0,true)
@@ -303,12 +306,6 @@ func _destroyed(e:Dictionary) -> void:
 	var p:Vector2=e.get("pos",Vector2.ZERO)
 	var pos:=Vector3(p.x,0.7,p.y)
 	if kind in Effects.INFANTRY:return
-	# The collapse blast is relayed as a vehicle kill (ruined_building.gd); the
-	# collapse already has its own sound.
-	if collapse_heard.has(p):
-		var heard:float=collapse_heard[p]
-		collapse_heard.erase(p)
-		if heard==clock:return
 	if not bool(e.get("visible",true)) or _ground_distance(pos)>hear:
 		_distant(pos,2.0,true)
 		return
@@ -347,6 +344,44 @@ func _destroyed(e:Dictionary) -> void:
 			else:_later(wait,"boom_m",pos,1.0,0.0)
 	if water and kind!="boat":_later(wait,"splash",pos,0.7,2.0)
 	elif kind=="boat":_later(wait+0.1,"splash",pos,0.6,4.0)
+
+# Blasts from StructureDamage.explosion that are not a unit kill. A collapse has
+# its building_collapse sound and a cook-off string is voiced by the depot's
+# destroyed event, so only the mortar bomb and a crashing airframe sound here.
+func _world_blast(e:Dictionary) -> void:
+	var kind:String=e.get("kind","")
+	if kind in ["collapse","cook_off"]:return
+	var p:Vector2=e.get("pos",Vector2.ZERO)
+	var pos:=Vector3(p.x,0.5,p.y)
+	if not bool(e.get("visible",true)) or _ground_distance(pos)>hear:
+		_distant(pos,1.5,true)
+		return
+	var water:bool=sim!=null and sim.terrain.is_water(p)
+	match kind:
+		"mortar":
+			play_at("mortar",pos,rng.randf_range(0.95,1.08),0.0)
+			if water:_later(0.05,"splash",pos,0.8,3.0)
+			else:_later(rng.randf_range(0.25,0.4),"dirt",pos,0.7,4.0)
+		"crash":
+			play_at("boom_l",pos,rng.randf_range(0.95,1.05),0.0)
+			_later(rng.randf_range(0.35,0.55),"boom_s",pos,1.2,-4.0)
+			if water:_later(0.1,"splash",pos,0.6,4.0)
+		_:play_at("boom_m",pos,1.0,0.0)
+
+# Each queued enemy mortar round (FieldOps.enemy_mortar) whistles down for the
+# last WHISTLE_LEAD s of its flight, so the bomb is heard before it lands.
+const WHISTLE_LEAD:=0.62
+func _mortar_whistles() -> void:
+	if sim==null:return
+	var ops=sim.get("field_ops")
+	if not (ops is Dictionary) or not ops.has("mortar"):return
+	var now:float=float(sim.time)
+	for at in whistled.keys():if float(at)<now-1.0:whistled.erase(at)
+	for shell in ops.mortar.get("rounds",[]):
+		var lead:float=float(shell.at)-now
+		if lead>WHISTLE_LEAD or lead<0.15 or whistled.has(shell.at):continue
+		whistled[shell.at]=true
+		play_at("whistle",Vector3(shell.pos.x,6.0,shell.pos.y),WHISTLE_LEAD/lead if lead<WHISTLE_LEAD*0.8 else 1.0,0.0)
 
 func _later(delay:float, sound:String, pos:Vector3, pitch:float, db:float, impact:bool=false) -> void:
 	if delay<=0.004:
@@ -664,6 +699,14 @@ func build_library() -> void:
 	_mix(deploy,_ring(hi,0.15,[[520.0,1.0,0.05]],0.2),hi,0.0,1.0)
 	_mix(deploy,_ring(hi,0.18,[[780.0,1.0,0.07]],0.2),hi,0.08,1.0)
 	streams.ui_deploy=_wav(deploy,hi,false,0.5)
+	# Mortar (built last so the sounds above keep their noise): a sharp crump with soil raining back down, and
+	# the incoming whistle.
+	var crump:=_burst(lo,1.1,{"crack":1.0,"crack_tau":0.005,"body":1.0,"body_tau":0.07,"lp":0.6,"lp_end":0.04,"tone":1.0,"f0":140.0,"f1":42.0,"tone_tau":0.1,"sweep_tau":0.03,"rumble":0.6,"rumble_tau":0.3,"crackle":0.5,"crackle_rate":0.003,"attack":0.002})
+	for n in 6:
+		var at:=rng.randf_range(0.25,0.85)
+		_mix(crump,_burst(lo,0.15,{"body":1.0,"body_tau":0.025,"lp":0.3,"lp_end":0.08,"crackle":1.0,"crackle_rate":0.01}),lo,at,0.35*exp(-(at-0.25)/0.5))
+	streams.mortar=_wav(crump,lo)
+	streams.whistle=_wav(_whistle(mid,WHISTLE_LEAD),mid)
 
 func _silence(rate:int, seconds:float) -> PackedFloat32Array:
 	var out:=PackedFloat32Array()
@@ -757,6 +800,24 @@ func _debris(rate:int, seconds:float) -> PackedFloat32Array:
 	for n in 7:
 		var at:=rng.randf_range(0.0,seconds*0.7)
 		_mix(out,_burst(rate,0.18,{"body":1.0,"body_tau":0.03,"lp":0.25,"lp_end":0.06,"tone":0.6,"f0":120.0,"f1":60.0,"tone_tau":0.03}),rate,at,0.7*exp(-at/1.2))
+	return out
+
+# Incoming bomb: a falling (Doppler) whistle with a little flutter and air rush that swells as it nears and
+# cuts off at impact.
+func _whistle(rate:int, seconds:float) -> PackedFloat32Array:
+	var out:=_silence(rate,seconds)
+	var dt:=1.0/rate
+	var phase:=0.0
+	var lp:=0.0
+	var band:=0.0
+	for i in out.size():
+		var t:=i*dt
+		var u:=t/seconds
+		phase+=TAU*lerpf(1350.0,620.0,u*u)*dt*(1.0+0.012*sin(t*TAU*23.0))
+		var w:=rng.randf()*2.0-1.0
+		lp+=(w-lp)*0.25
+		band+=(lp-band)*0.08
+		out[i]=(sin(phase)*0.8+(lp-band)*0.9)*(0.12+0.88*u*u)*minf(1.0,(seconds-t)/0.012)
 	return out
 
 # Collapse: sub-bass groan that swells briefly and rolls away with slow surges.

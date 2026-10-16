@@ -52,6 +52,7 @@ func run() -> void:
 	projection_checks()
 	integration_checks()
 	explosion_checks()
+	mortar_checks()
 	destruction_checks()
 	scale_checks()
 	layering_checks()
@@ -518,6 +519,11 @@ func integration_checks() -> void:
 	sim.events.append({"type":"destroyed","kind":"rifle","pos":Vector2(60,60),"visible":true})
 	battle.consume_events()
 	check(live(effects.glow)==0 and live(effects.volume,Effects.FIRE)==0,"infantry casualty through battle is not an explosion")
+	effects.clear()
+	sim.events.append({"type":"world_blast","kind":"mortar","pos":Vector2(60,60),"radius":3.0,"visible":true})
+	battle.consume_events()
+	var bomb:=composition(effects)
+	check(bomb.debris>=10 and bomb.dust_ring>=1 and fireball_radius(effects)<2.0 and effects.cues.is_empty(),"mortar world_blast through battle draws the mortar burst, not a vehicle kill: %s"%bomb)
 	effects.damage_smoke(Vector3(60,2,60),0.1)
 	check(live(effects.volume,Effects.SMOKE)>=1,"damage smoke entry point used by battle draws")
 	root.remove_child(battle)
@@ -687,6 +693,52 @@ func destruction_checks() -> void:
 
 # ---------------------------------------------------------------- impact scale and layering
 # Peak visible fireball radius: recipes size the central fireball card at 2.8 R (the shader erodes the rim).
+# Brown (soil) debris pieces; metal and soot fragments are near-grey.
+func clods(effects) -> int:
+	var count:=0
+	for i in effects.volume.capacity:
+		if effects.volume.life[i]>0 and effects.volume.kind[i]==Effects.DEBRIS and effects.volume.color[i].r-effects.volume.color[i].b>0.05:count+=1
+	return count
+
+# Enemy mortar bomb (world_blast kind "mortar"): an earth fountain with a small fireball, not a vehicle kill.
+func mortar_checks() -> void:
+	var effects=fresh()
+	effects.set_world_bounds(Vector2(144,108),128.0)
+	var at:=Vector3(40,0.6,40)
+	var sig:={}
+	var radius:={}
+	var marks:={}
+	var soil:={}
+	for spec in [["mortar",func():effects.mortar_burst(at)],["tank_he",func():effects.he_burst(at,Vector3.DOWN,1.0)],["crash",func():effects.vehicle_explosion(at,1.0,false,false)]]:
+		effects.clear()
+		spec[1].call()
+		sig[spec[0]]=composition(effects)
+		soil[spec[0]]=clods(effects)
+		radius[spec[0]]=snappedf(fireball_radius(effects),0.01)
+		advance(effects,0.3)
+		marks[spec[0]]=marked(effects,at,14.0)
+	evidence["mortar"]={"signature":sig,"soil_clods":soil,"fireball_radius":radius,"marks":marks}
+	print("EFFECTS mortar: ",evidence.mortar)
+	var m:Dictionary=sig.mortar
+	check(m.flash>=1 and m.fire>=1 and m.dust_ring>=1 and m.scorch>=1,"mortar: flash, fireball, dust skirt and scorch")
+	check(radius.mortar>0.0 and radius.mortar<radius.tank_he and radius.tank_he<radius.crash,"mortar fireball is smaller than tank HE and a vehicle kill: %s"%radius)
+	check(soil.mortar>soil.tank_he and soil.mortar>soil.crash,"mortar throws more soil clods than tank HE or a vehicle kill: %s"%soil)
+	check(m.streak>=6,"mortar flings a ring of fragments (%d)"%m.streak)
+	check(m.fire<sig.crash.fire,"mortar burns less than a vehicle kill (%d vs %d fire cards)"%[m.fire,sig.crash.fire])
+	check(JSON.stringify(m)!=JSON.stringify(sig.crash) and JSON.stringify(m)!=JSON.stringify(sig.tank_he),"mortar has its own signature")
+	check(marks.mortar.texels>0 and marks.mortar.texels<marks.tank_he.texels and marks.mortar.texels<marks.crash.texels,"mortar crater is stamped, smaller than tank HE and a vehicle kill: %s"%marks)
+	# Brushes for the mortar sizes are prebuilt at mission setup (no first-use build mid-battle).
+	for size in [[Explosions.MORTAR_CRATER,Remains.CRATER],[Explosions.MORTAR_SPRAY,Remains.SCORCH]]:
+		var texels:=clampi(roundi(size[0]/Remains.TEXEL),Remains.MIN_R,Remains.MAX_R)
+		check(texels>=Remains.PREBUILT[size[1]][0] and texels<=Remains.PREBUILT[size[1]][1],"mortar %.1f m mark uses a prebuilt brush"%size[0])
+	# Water: a splash column and no permanent mark.
+	effects.clear()
+	var stamped:int=effects.remains.stamps
+	effects.mortar_burst(Vector3(138,0.6,60),true)
+	var w:=composition(effects)
+	check(w.spray>=1 and w.debris==0 and w.fire==0 and effects.remains.stamps==stamped,"mortar into water splashes without soil, fire or a mark: %s"%w)
+	release(effects)
+
 func fireball_radius(effects) -> float:
 	var widest:=0.0
 	for i in effects.volume.capacity:
