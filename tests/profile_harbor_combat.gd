@@ -16,6 +16,15 @@ func summary(label:String,costs:Array)->String:
 	var total:=0.0
 	for c in sorted:total+=c
 	return "%s ticks=%d mean=%.2fms p50=%.2fms p95=%.2fms max=%.2fms over%.0fms=%d" % [label,sorted.size(),total/sorted.size(),sorted[sorted.size()/2],sorted[int(sorted.size()*0.95)],sorted.back(),BUDGET_MS,sorted.filter(func(c):return c>BUDGET_MS).size()]
+# Seeded state digest (`-- --fingerprint`): optimisations must leave it unchanged.
+func digest(sim)->String:
+	var state:Array=[sim.combat_rng.state,sim.time,sim.kills,sim.losses]
+	for u in sim.units:
+		var members:Array=[]
+		for m in u.members:members.append([m.pos,m.hp,m.get("cover_phase",""),m.get("posture",""),m.get("target",-1),m.get("cover_goal",Vector2.ZERO),m.get("state","")])
+		state.append([u.id,u.pos,u.hp,u.target,u.state,u.path,u.orders,members,u.suppression])
+	return var_to_str(state).sha256_text()
+var fingerprints:Array=[]
 func fight(report:bool)->Array:
 	var sim=Sim.new(true,harbor_index())
 	for i in 6:sim.spawn("rifle",0,Vector2(300+i*5,640))
@@ -37,6 +46,7 @@ func fight(report:bool)->Array:
 		sim.tick(1.0/30)
 		var cost:=(Time.get_ticks_usec()-t)/1000.0
 		costs.append(cost)
+		if fingerprinting and i%100==99:fingerprints.append(digest(sim))
 		if report and cost>BUDGET_MS:
 			var parts:Array=[]
 			for key in sim.profile:
@@ -52,11 +62,15 @@ func fight(report:bool)->Array:
 		keys.sort_custom(func(a,b):return sim.profile[a]>sim.profile[b])
 		for key in keys:print("PHASE %-16s total=%8.1fms per_tick=%6.2fms" % [key,sim.profile[key],sim.profile[key]/costs.size()])
 	return costs
+var fingerprinting:=false
 func _init()->void:
 	var repeat:=1
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--repeat="):repeat=maxi(1,int(arg.get_slice("=",1)))
+		if arg=="--fingerprint":fingerprinting=true
 	var best:Array=fight(true)
+	for f in fingerprints:print("FINGERPRINT ",f)
+	fingerprints.clear()
 	for run in range(1,repeat):
 		var costs:Array=fight(false)
 		print(summary("HARBOR COMBAT RUN %d:" % (run+1),costs))

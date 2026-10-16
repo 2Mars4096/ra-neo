@@ -967,14 +967,18 @@ func tick(dt: float) -> void:
 		if target.is_empty():
 			var previous_target:=get_unit(u.target)
 			if can_fire(u,previous_target) and auto_target_ok(u,previous_target):target=previous_target
-		if target.is_empty():
+		# Nearest-priority choice (first wins ties). can_fire is the costly test,
+		# so it only runs for enemies that would beat the current best; its only
+		# side effect (VehicleDamage.weapon_ready, idempotent within a tick) is
+		# applied once up front exactly as the first can_fire call did.
+		if target.is_empty() and not candidates.is_empty() and VehicleDamage.weapon_ready(self,u):
 			var distance := INF
 			for other in candidates:
-				if can_fire(u, other) and auto_target_ok(u,other):
-					var dist: float = target_priority(u,other)
-					if dist < distance:
-						target = other
-						distance = dist
+				if other.team==u.team:continue
+				var dist: float = target_priority(u,other)
+				if dist < distance and can_fire(u, other) and auto_target_ok(u,other):
+					target = other
+					distance = dist
 		u.target = target.get("id", -1)
 		if u.aim_target!=u.target:
 			u.aim_time=0.0
@@ -1646,21 +1650,34 @@ func target_candidates(u:Dictionary) -> Array:
 	elif offset>SPREAD_NARROW:wide_ids[u.id]=wide_sections.size();wide_sections.append([u,offset+SPREAD_SLACK])
 	var base:float=reach+offset
 	var outer:float=base+SPREAD_NARROW+SPREAD_SLACK
+	var base_sq:=base*base
+	var outer_sq:=outer*outer
+	var origin:Vector2=u.pos
 	var result:Array=[]
+	var last_id:=-1
+	var ordered:=true
 	# Sections are infantry: only the land layer (0) needs the wider scan.
+	# Indexed entries are never empty, so `alive` reduces to the hp test.
 	for layer in 4:
 		var scan:float=outer if layer==0 else base
-		for other in layer_candidates(u.pos,scan,layer):
-			if not alive(other):continue
-			var gap:float=u.pos.distance_squared_to(other.pos)
-			if gap<=base*base or (gap<=outer*outer and not other.members.is_empty() and sqrt(gap)<=base+section_offset(other)):result.append(other)
+		for other in layer_candidates(origin,scan,layer):
+			if other.hp<=0.0:continue
+			var gap:float=origin.distance_squared_to(other.pos)
+			if gap<=base_sq or (gap<=outer_sq and not other.members.is_empty() and sqrt(gap)<=base+section_offset(other)):
+				result.append(other)
+				if other.id<last_id:ordered=false
+				last_id=other.id
 	# Wide sections beyond the scan; inside it the buckets already decided.
 	for entry in wide_sections:
 		var other:Dictionary=entry[0]
-		var gap:float=u.pos.distance_squared_to(other.pos)
+		var gap:float=origin.distance_squared_to(other.pos)
 		var bound:float=base+float(entry[1])
-		if gap>outer*outer and gap<=bound*bound and alive(other):result.append(other)
-	result.sort_custom(func(a,b):return a.id<b.id)
+		if gap>outer_sq and gap<=bound*bound and alive(other):
+			result.append(other)
+			if other.id<last_id:ordered=false
+			last_id=other.id
+	# Usually already in id order (whole layer lists, one layer in reach).
+	if not ordered:result.sort_custom(func(a,b):return a.id<b.id)
 	return result
 
 # Farthest living soldier from the section anchor (0 for single bodies).
@@ -1672,11 +1689,17 @@ func section_offset(u:Dictionary) -> float:
 
 func range_candidates(origin:Vector2,radius:float) -> Array:
 	var result:Array=[]
+	var radius_sq:=radius*radius
+	var last_id:=-1
+	var ordered:=true
 	for layer in 4:
 		for other in layer_candidates(origin,radius,layer):
-			if alive(other) and origin.distance_squared_to(other.pos)<=radius*radius:result.append(other)
+			if alive(other) and origin.distance_squared_to(other.pos)<=radius_sq:
+				result.append(other)
+				if other.id<last_id:ordered=false
+				last_id=other.id
 	# Preserve insertion-order ties and seeded combat outcomes across the optimization.
-	result.sort_custom(func(a,b):return a.id<b.id)
+	if not ordered:result.sort_custom(func(a,b):return a.id<b.id)
 	return result
 
 # Units of one bucket layer whose cells overlap the square around `origin`
@@ -1836,5 +1859,5 @@ func actor_candidates(a:Vector2,b:Vector2,radius:float)->Array:
 	var padding:=radius+actor_radius_max
 	for x in range(floori((minf(a.x,b.x)-padding)/4),floori((maxf(a.x,b.x)+padding)/4)+1):
 		for y in range(floori((minf(a.y,b.y)-padding)/4),floori((maxf(a.y,b.y)+padding)/4)+1):
-			entries.append_array(actor_spatial.get(Vector2i(x,y),[]))
+			entries.append_array(actor_spatial.get(Vector2i(x,y),NO_UNITS))
 	return entries

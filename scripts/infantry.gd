@@ -272,7 +272,9 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 			elif member.pos.distance_to(desired)>0.3:
 				desired=regroup_destination(u,member,sim,desired)
 		var old:Vector2=member.pos
-		var speed:float=float(sim.definitions[u.kind].speed)*(1.04+member.index*0.035)*sim.terrain.ground_speed(old,"infantry")
+		# A soldier already on its spot has no step to take; every use of the
+		# speed below then yields the same result for 0 (no terrain lookup).
+		var speed:float=0.0 if desired==old else float(sim.definitions[u.kind].speed)*(1.04+member.index*0.035)*sim.terrain.ground_speed(old,"infantry")
 		if member.suppression>0.6:speed*=0.75
 		if member.get("wound","")==LIGHT:speed*=LIGHT_SPEED
 		if member.get("cover_phase","")=="SEEKING":speed*=1.2

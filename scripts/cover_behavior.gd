@@ -24,10 +24,19 @@ static func clear(member:Dictionary) -> void:
 	member["cover_screened"]=false
 	member.erase("cover_from")
 
+# Shelter points that pass the terrain tests, by anchor position. Every soldier
+# of a section rates the same points and terrain cannot change during one
+# update(), so the scan is shared by the section only while update() runs.
+static var _shelters:Dictionary={}
+static var _sharing:=false
+
 static func update(u:Dictionary,sim) -> void:
 	if u.members.is_empty() or not sim.scenario.get("autonomy",false):return
 	var t0:int=Time.get_ticks_usec() if sim.profiling else 0
+	_sharing=true
 	_update(u,sim)
+	_sharing=false
+	_shelters.clear()
 	if sim.profiling:sim._lap("cover_update",t0)
 
 static func _update(u:Dictionary,sim) -> void:
@@ -147,8 +156,16 @@ static func find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threa
 
 static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threats:Array=[]) -> Dictionary:
 	if threats.is_empty() and not threat.is_empty():threats=[threat]
-	var candidates:Array=[]
 	var occupants:Array=sim.range_candidates(u.pos,LEASH*2+4) if sim.ticking else sim.units
+	var shelters:Array
+	if _sharing and _shelters.has(u.pos):shelters=_shelters[u.pos]
+	else:
+		shelters=_shelter_points(u,sim)
+		if _sharing:_shelters[u.pos]=shelters
+	return _pick_slot(u,member,sim,threat,threats,occupants,shelters)
+
+# Candidate points within the leash that offer cover and room for a soldier.
+static func _shelter_points(u:Dictionary,sim) -> Array:
 	var points:Array[Vector2]=[]
 	for ring in [1.2,2.4,3.6,5.5,7.5,9.0]:
 		for index in 16:points.append(u.pos+Vector2.from_angle(index*TAU/16)*ring)
@@ -168,19 +185,33 @@ static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 		for i in int(length/1.3):
 			var t:=(i+0.5)*1.3
 			points.append(zone.rect.position+(Vector2(t,zone.rect.size.y/2) if long_x else Vector2(zone.rect.size.x/2,t)))
-	var nearby:Array=[]
+	var shelters:Array=[]
 	for point in points:
 		if point.distance_to(u.pos)>LEASH:continue
 		if not sim.terrain.cover(point) or not sim.terrain.traversable(point,"land",0.8):continue
+		shelters.append(point)
+	return shelters
+
+static func _pick_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threats:Array,occupants:Array,shelters:Array) -> Dictionary:
+	var candidates:Array=[]
+	# Occupied spots (bodies and friendly cover goals) do not depend on the
+	# point: gathered once instead of per candidate point.
+	var taken:=PackedVector2Array()
+	var clearances:=PackedFloat64Array()
+	for other in occupants:
+		if not sim.alive(other) or sim.definitions[other.kind].domain!="land":continue
+		if other.team!=u.team and not sim.contact_known(u,other):continue
+		if other.members.is_empty():
+			taken.append(other.pos);clearances.append(float(sim.definitions[other.kind].radius)+0.85)
+		for peer in other.members:
+			if peer.hp<=0 or (u.id==other.id and member.index==peer.index):continue
+			taken.append(peer.pos);clearances.append(1.65)
+			if other.team==u.team and peer.cover_goal!=Vector2.ZERO:taken.append(peer.cover_goal);clearances.append(1.65)
+	var nearby:Array=[]
+	for point in shelters:
 		var reserved:=false
-		for other in occupants:
-			if not sim.alive(other) or sim.definitions[other.kind].domain!="land":continue
-			if other.team!=u.team and not sim.contact_known(u,other):continue
-			if other.members.is_empty():
-				if point.distance_to(other.pos)<float(sim.definitions[other.kind].radius)+0.85:reserved=true
-			for peer in other.members:
-				if peer.hp<=0 or (u.id==other.id and member.index==peer.index):continue
-				if point.distance_to(peer.pos)<1.65 or (other.team==u.team and peer.cover_goal!=Vector2.ZERO and point.distance_to(peer.cover_goal)<1.65):reserved=true
+		for i in taken.size():
+			if point.distance_to(taken[i])<clearances[i]:reserved=true;break
 		if reserved:continue
 		var score:float=member.pos.distance_to(point)
 		if not threat.is_empty() and point.distance_to(threat.pos)<member.pos.distance_to(threat.pos)-2:score+=4.0
