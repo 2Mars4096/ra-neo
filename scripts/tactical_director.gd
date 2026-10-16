@@ -144,7 +144,11 @@ static func update(sim) -> void:
 # reach close to firing range, leashed to where they were left. Units manning
 # works, garrisons (hold) and busy engineers stay put.
 const ENGAGE_LEASH:=14.0
+# A sheltered section that just lost its target holds and observes this long
+# (re-acquire, wait for spotting) before walking out toward another contact.
+const ENGAGE_HOLD:=4.0
 static func engage_idle(sim,u:Dictionary)->void:
+	if u.target>=0:u["engaged_at"]=sim.time
 	if u.maneuver.get("phase","")=="ENGAGE":
 		if u.maneuver.arrived or sim.time>float(u.maneuver.deadline) or u.target>=0:
 			u.maneuver={};u.reason="Engaging"
@@ -169,10 +173,12 @@ static func engage_idle(sim,u:Dictionary)->void:
 	var reach:float=float(sim.definitions[weapon].range)
 	if best<=reach*0.95 and sim.terrain.line_clear(u.pos,enemy.pos):return
 	# Soldiers settling into shelters that will see the enemy fire from cover,
-	# and a pinned section stays behind its shelters, rather than walking out.
+	# a pinned section, and one that just lost its target stay behind their
+	# shelters rather than walking out.
 	for m in u.members:
 		if m.hp<=0 or m.get("cover_phase","") not in ["SEEKING","SETTLING","SHELTERED"]:continue
 		if u.suppression>0.65 and m.cover_phase=="SHELTERED":return
+		if m.cover_phase!="SEEKING" and sim.time-float(u.get("engaged_at",-100.0))<ENGAGE_HOLD:return
 		if m.cover_goal.distance_to(enemy.pos)<=reach and sim.terrain.line_clear(m.cover_goal,enemy.pos):return
 	var desired:Vector2=enemy.pos+(u.pos-enemy.pos).normalized()*reach*0.8
 	var post:Vector2=u.post
