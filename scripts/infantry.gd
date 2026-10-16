@@ -307,7 +307,13 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 					next=old+adjusted*minf(speed*dt,old.distance_to(desired))
 		# A stationary actor has no proposed displacement to validate.
 		if speed>0.0 and desired!=old:
-			var clear:bool=sim.terrain.segment_clear(old,next,"land",0.42)
+			# actor_clear re-tests this step at the (wider) body radius. A step
+			# under one sample spacing tests only `next` at both radii, and
+			# terrain clearance only tightens with radius, so there the narrow
+			# test cannot change the outcome: skip it.
+			var autonomy:bool=sim.scenario.get("autonomy",false)
+			var implied:bool=autonomy and float(member.get("body_radius",0.8))>=0.42 and old.distance_to(next)<=0.35
+			var clear:bool=implied or sim.terrain.segment_clear(old,next,"land",0.42)
 			for other in u.members:
 				# Squadmates keep a shoulder's width but may always step apart.
 				if other.index!=member.index and other.hp>0 and next.distance_to(other.pos)<1.3 and next.distance_to(other.pos)<old.distance_to(other.pos):clear=false
@@ -403,8 +409,8 @@ static func regroup_destination(u:Dictionary,member:Dictionary,sim,goal:Vector2)
 		route=[];member["regroup_after"]=0.0
 	while not route.is_empty() and member.pos.distance_to(route[0])<0.15:route.pop_front()
 	var radius:float=member.get("body_radius",0.8)
-	var obstructed:bool=not sim.terrain.segment_clear(member.pos,goal,"land",radius)
-	if (obstructed or member.get("regroup_blocked",0.0)>0.5) and sim.time>=member.get("regroup_after",0.0):
+	# The obstruction test only matters once the re-plan timer allows a search.
+	if sim.time>=member.get("regroup_after",0.0) and (member.get("regroup_blocked",0.0)>0.5 or not sim.terrain.segment_clear(member.pos,goal,"land",radius)):
 		member["regroup_after"]=sim.time+1.0
 		member["regroup_goal"]=goal
 		var avoid:Array=[]

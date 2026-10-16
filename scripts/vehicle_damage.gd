@@ -427,21 +427,29 @@ static func before_move(sim,u:Dictionary)->float:
 
 static func _route_round_wrecks(sim,u:Dictionary)->void:
 	var d:Dictionary=sim.definitions[u.kind]
-	if d.domain!="land" or d.get("structure",false):return
+	if d.domain!="land" or d.get("structure",false) or sim.time<float(u.get("wreck_route_at",-1.0)):return
 	var legs:Array=[u.pos]
 	legs.append_array(u.path.slice(0,3))
-	var bodies:Array=[]
 	var crossing:=false
+	for wreck in sim.get_meta(WRECKS):
+		var clearance:float=float(d.radius)+float(wreck.radius)
+		if u.pos.distance_to(wreck.pos)>clearance+60.0:continue
+		for k in range(1,legs.size()):
+			if Geometry2D.get_closest_point_to_segment(wreck.pos,legs[k-1],legs[k]).distance_to(wreck.pos)<clearance:crossing=true;break
+		if crossing:break
+	if not crossing:return
+	u["wreck_route_at"]=sim.time+0.5
+	var bodies:Array=[]
 	for wreck in sim.get_meta(WRECKS):
 		var clearance:float=float(d.radius)+float(wreck.radius)
 		var gap:float=u.pos.distance_to(wreck.pos)
 		if gap>clearance+60.0:continue
 		# A hull already touching a wreck may still plan away from it.
 		bodies.append({"pos":wreck.pos,"radius":minf(clearance+0.3,gap-0.05)})
-		for k in range(1,legs.size()):
-			if not crossing and Geometry2D.get_closest_point_to_segment(wreck.pos,legs[k-1],legs[k]).distance_to(wreck.pos)<clearance:crossing=true
-	if not crossing or sim.time<float(u.get("wreck_route_at",-1.0)):return
-	u["wreck_route_at"]=sim.time+0.5
+	# A goal inside a wreck's margin can never be routed to (path() publishes no
+	# edge ending inside an avoided body): skip the doomed search, which tanks
+	# holding a post beside a wreck otherwise repeat every 0.5 s.
+	if not sim.terrain.avoids_bodies(u.path.back(),u.path.back(),bodies):return
 	var detour:Array[Vector2]=sim.terrain.path(u.pos,u.path.back(),d.domain,float(d.radius),bodies,sim.terrain.mobility_profile(u.kind))
 	if detour.is_empty():return
 	u.path=detour
@@ -456,8 +464,9 @@ static func wrecks(sim)->Array:
 static func wreck_blocks(sim,u:Dictionary,to:Vector2)->bool:
 	var d:Dictionary=sim.definitions[u.kind]
 	if d.domain!="land" or d.get("structure",false):return false
+	var radius:float=float(d.radius)
 	for wreck in sim.get_meta(WRECKS):
-		var clearance:float=float(d.radius)+float(wreck.radius)
+		var clearance:float=radius+float(wreck.radius)
 		var gap:float=to.distance_squared_to(wreck.pos)
 		if gap<clearance*clearance and gap<u.pos.distance_squared_to(wreck.pos):return true
 	return false

@@ -1019,11 +1019,28 @@ func segment_travel_cost(a:Vector2,b:Vector2,domain:String="land",profile:String
 
 func line_clear(a: Vector2, b: Vector2) -> bool:
 	var steps := maxi(1, ceili(a.distance_to(b) / 0.8))
+	if steps<2:return true
+	# Samples lie in the segment's box: rects missing it never hold one, so
+	# filter them once per line instead of per sample (same answer).
+	var box:=Rect2(a,Vector2.ZERO).expand(b).grow(0.01)
+	var dynamic:Array[Rect2]=[]
+	for rect in dynamic_blocks:
+		if rect.intersects(box,true) and not rect.has_point(a) and not rect.has_point(b):dynamic.append(rect)
+	# Unindexed (small) layouts list every solid per query: filter those too.
+	var listed:=_static_unindexed()
+	var solids:Array[Rect2]=[]
+	if listed:
+		for rect in _static_candidates("solid",a,0.0):
+			if rect.intersects(box,true):solids.append(rect)
+		if solids.is_empty() and dynamic.is_empty():return true
 	for i in range(1, steps):
 		var p:=a.lerp(b,float(i)/steps)
-		if blocked(p):return false
-		for rect in dynamic_blocks:
-			if not rect.has_point(a) and not rect.has_point(b) and rect.has_point(p):return false
+		if listed:
+			for rect in solids:
+				if rect.has_point(p):return false
+		elif blocked(p):return false
+		for rect in dynamic:
+			if rect.has_point(p):return false
 	return true
 
 func avoids_bodies(a:Vector2,b:Vector2,bodies:Array) -> bool:
@@ -1144,10 +1161,13 @@ func rebuild_static_index(invalidate_navigation:bool=true)->void:
 func _ensure_static_index()->void:
 	if _static_counts.is_empty() or _static_counts[0]!=blocks.size() or _static_counts[1]!=roadside_blocks.size() or _static_counts[2]!=prop_blocks.size() or _static_counts[3]!=woods.size() or _static_counts[4]!=static_cover.size() or _static_counts[5]!=trees.size() or _static_counts[6]!=water_blocks.size():rebuild_static_index()
 
+func _static_unindexed()->bool:
+	return not use_static_index or blocks.size()+roadside_blocks.size()+prop_blocks.size()+trees.size()+woods.size()+static_cover.size()+water_blocks.size()<64
+
 func _static_candidates(kind:String,p:Vector2,radius:float)->Array:
 	# Tiny mutable legacy fixtures keep exhaustive semantics, including in-place
 	# replacements. Large layouts use deterministic indexes, not per-query hashes.
-	if not use_static_index or blocks.size()+roadside_blocks.size()+prop_blocks.size()+trees.size()+woods.size()+static_cover.size()+water_blocks.size()<64:
+	if _static_unindexed():
 		match kind:
 			"solid":return blocks+roadside_blocks+prop_blocks
 			"building":return blocks+hard_cover_props()

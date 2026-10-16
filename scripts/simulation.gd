@@ -52,7 +52,7 @@ var spatial: Dictionary = {}
 # sparse layers (sea, air) are filtered directly instead of scanning cells.
 var spatial_layers:Array=[[],[],[],[]]
 var use_spatial_targeting:=true
-var spatial_targeting_threshold:=64
+var spatial_targeting_threshold:=0
 # target_candidates: [section, spread bound] for sections whose soldiers stand
 # wider than SPREAD_NARROW from the anchor; wide_ids maps id -> entry index.
 var wide_sections:Array=[]
@@ -457,6 +457,9 @@ func update_visibility() -> void:
 				var shelter:=indoors_share(u)
 				if shelter>0:sheltered_any[u.id]=true
 				if shelter>1:sheltered_all[u.id]=true
+	# Cover and concealment depend on the target's position only: once per
+	# target per update, not per observer (terrain.cover is the costly part).
+	var target_terrain:Dictionary={}
 	for observer in units:
 		if not alive(observer) or observer.get("build_left",0.0)>0 or comms_blocked(observer):
 			continue
@@ -467,10 +470,15 @@ func update_visibility() -> void:
 			if not alive(target) or target.team == observer.team:
 				continue
 			var radius := sight_radius
-			if terrain.cover(target.pos) and definitions[target.kind].domain == "land":
+			var land:bool=definitions[target.kind].domain == "land"
+			var ground:Array=target_terrain.get(target.id,NO_UNITS)
+			if ground.is_empty() and land:
+				ground=[terrain.cover(target.pos),terrain.concealment(target.pos)]
+				target_terrain[target.id]=ground
+			if land and ground[0]:
 				radius *= 0.7
 			if sheltered_all.has(target.id) and time-float(target.get("last_shot",-100.0))>=3.0:radius*=0.6
-			if definitions[target.kind].domain == "land" and time-float(target.get("last_shot",-100.0))>=3.0:radius*=terrain.concealment(target.pos)
+			if land and time-float(target.get("last_shot",-100.0))>=3.0:radius*=ground[1]
 			if observer.pos.distance_squared_to(target.pos) <= radius * radius:
 				if d.domain == "air" or definitions[target.kind].domain == "air" or terrain.line_clear(observer.pos, target.pos):
 					target.seen_by[observer.team] = true
@@ -481,7 +489,9 @@ func update_visibility() -> void:
 			if processed_fields.has(key):continue
 			processed_fields[key]=true
 			if not visibility_cache.has(key):
-				var field: Array[Vector2i] = []
+				# Tile -> true in scan order: merged natively below, same keys
+				# and insertion order as setting each tile in turn.
+				var field: Dictionary = {}
 				var r := ceili(sight / fog_cell_size())
 				var source := terrain.center(origin)
 				for x in range(maxi(0, origin.x-r), mini(terrain.fog_grid_size.x, origin.x+r+1)):
@@ -489,13 +499,12 @@ func update_visibility() -> void:
 						var tile := Vector2i(x,y)
 						var p := terrain.center(tile)
 						if source.distance_squared_to(p) <= sight*sight and (d.domain=="air" or terrain.line_clear(source,p)):
-							field.append(tile)
+							field[tile]=true
 				if visibility_cache.size()>=512:
 					visibility_cache.clear()
 				visibility_cache[key]=field
-			for tile in visibility_cache[key]:
-				visible_cells[tile]=true
-				explored[tile]=true
+			visible_cells.merge(visibility_cache[key])
+			explored.merge(visibility_cache[key])
 	for u in units:
 		u.visible = u.team == 0 or u.seen_by[0]
 
@@ -984,7 +993,11 @@ func tick(dt: float) -> void:
 		if profiling:_lap("infantry_move",move_lap)
 		u.suppression = maxf(0, u.suppression-dt*0.12)
 		var target_lap:int=Time.get_ticks_usec() if profiling else 0
-		var candidates:Array=target_candidates(u)
+		# Vehicles list candidates only when they need a new target (the list has
+		# no side effects for them beyond the per-tick wide-section refresh).
+		var candidates:Variant=null
+		if not u.members.is_empty():candidates=target_candidates(u)
+		elif float(d.damage)>0 and spatial_targeting():refresh_wide_sections()
 		var target: Dictionary = {}
 		if not u.orders.is_empty() and u.orders[0].mode == "attack":
 			var desired := get_unit(u.orders[0].target)
@@ -994,15 +1007,18 @@ func tick(dt: float) -> void:
 			var previous_target:=get_unit(u.target)
 			if can_fire(u,previous_target) and auto_target_ok(u,previous_target):target=previous_target
 		# Nearest-priority choice (first wins ties). can_fire is the costly test,
-		# so it only runs for enemies that would beat the current best; its only
-		# side effect (VehicleDamage.weapon_ready, idempotent within a tick) is
-		# applied once up front exactly as the first can_fire call did.
+		# so it only runs for enemies that would beat the current best and pass
+		# the cheap auto_target_ok; its only side effect (VehicleDamage.weapon_ready,
+		# idempotent within a tick) is applied once up front exactly as the first
+		# can_fire call did (soldier_checks budgets are relative per call).
+		if target.is_empty() and candidates==null:candidates=target_candidates(u)
 		if target.is_empty() and not candidates.is_empty() and VehicleDamage.weapon_ready(self,u):
 			var distance := INF
 			for other in candidates:
-				if other.team==u.team:continue
+				# can_fire rejects the dead: skip them before the priority tests.
+				if other.team==u.team or not alive(other):continue
 				var dist: float = target_priority(u,other)
-				if dist < distance and can_fire(u, other) and auto_target_ok(u,other):
+				if dist < distance and auto_target_ok(u,other) and can_fire(u, other):
 					target = other
 					distance = dist
 		u.target = target.get("id", -1)
@@ -1054,6 +1070,7 @@ func tick(dt: float) -> void:
 		update_objectives(dt)
 		showcase_mission()
 	else:Classic.tick(self,dt)
+	if profiling:lap=_lap("mission",lap)
 	enemy_clock -= dt
 	if enemy_clock <= 0 and field_ops.is_empty() and not scenario.get("autonomy",false):
 		enemy_clock = 50.0
@@ -1687,7 +1704,7 @@ func rebuild_spatial() -> void:
 func target_candidates(u:Dictionary) -> Array:
 	# Direct fixture/tool calls may mutate positions outside a tick. Preserve
 	# their authoritative behavior; live simulation maintains the spatial index.
-	if not ticking or not use_spatial_targeting or units.size()<spatial_targeting_threshold:return units
+	if not spatial_targeting():return units
 	var d:Dictionary=definitions[u.kind]
 	if float(d.damage)<=0 and u.members.is_empty():return []
 	var reach:float=float(d.range)*(Garrison.RANGE_SCALE if Garrison.inside(u) else 1.0)
@@ -1699,12 +1716,7 @@ func target_candidates(u:Dictionary) -> Array:
 	# right after moving; SPREAD_SLACK covers the anchor nudge after that query
 	# (casualty carry). Extra candidates are harmless: the exhaustive path
 	# considers every unit, so only missing ones would change outcomes.
-	if spread_serial!=spatial_serial:
-		spread_serial=spatial_serial;wide_sections.clear();wide_ids.clear()
-		for other in units:
-			if alive(other):
-				var spread:float=section_offset(other)
-				if spread>SPREAD_NARROW:wide_ids[other.id]=wide_sections.size();wide_sections.append([other,spread+SPREAD_SLACK])
+	refresh_wide_sections()
 	if wide_ids.has(u.id):wide_sections[wide_ids[u.id]][1]=maxf(wide_sections[wide_ids[u.id]][1],offset+SPREAD_SLACK)
 	elif offset>SPREAD_NARROW:wide_ids[u.id]=wide_sections.size();wide_sections.append([u,offset+SPREAD_SLACK])
 	var base:float=reach+offset
@@ -1738,6 +1750,18 @@ func target_candidates(u:Dictionary) -> Array:
 	# Usually already in id order (whole layer lists, one layer in reach).
 	if not ordered:result.sort_custom(func(a,b):return a.id<b.id)
 	return result
+
+func spatial_targeting()->bool:
+	return ticking and use_spatial_targeting and units.size()>=spatial_targeting_threshold
+
+# Wide sections of this tick, listed by its first spatial candidate query.
+func refresh_wide_sections()->void:
+	if spread_serial==spatial_serial:return
+	spread_serial=spatial_serial;wide_sections.clear();wide_ids.clear()
+	for other in units:
+		if alive(other):
+			var spread:float=section_offset(other)
+			if spread>SPREAD_NARROW:wide_ids[other.id]=wide_sections.size();wide_sections.append([other,spread+SPREAD_SLACK])
 
 # Farthest living soldier from the section anchor (0 for single bodies).
 func section_offset(u:Dictionary) -> float:
