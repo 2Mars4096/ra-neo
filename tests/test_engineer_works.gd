@@ -166,11 +166,22 @@ func _init()->void:
 	var berm:=complete(berm_sim,"vehicle_berm")
 	if not berm.is_empty():
 		check(berm_sim.terrain.hull_down(berm.pos),"berm is hull-down")
-		var shooter:Dictionary=berm_sim.spawn("atgm",1,berm.pos+Vector2(0,-14))
+		# Same shooter-to-tank geometry in the open and on the berm (penetration
+		# depends on range and facing). Direct fire: a top-attack Javelin dives on
+		# the roof, which a berm does not cover.
 		var tank:Dictionary=berm_sim.spawn("tank",0,berm.pos+Vector2(0,30))
-		var exposed:float=berm_sim.damage_amount(shooter,tank)
+		var shot:=Vector2(0,-14)
+		for kind in ["tank","atgm"]:
+			var shooter:Dictionary=berm_sim.spawn(kind,1,tank.pos+shot)
+			# A Javelin impact resolves through a proxy marked as a top attack.
+			if kind=="atgm":shooter["attack"]="top"
+			var exposed:float=berm_sim.damage_amount(shooter,tank)
+			tank.pos=berm.pos;shooter.pos=berm.pos+shot
+			var covered:float=berm_sim.damage_amount(shooter,tank)
+			if kind=="tank":check(covered<exposed*0.7,"hull-down tank takes less damage")
+			else:check(is_equal_approx(covered,exposed),"berm gives no cover from a top-attack Javelin")
+			shooter.hp=0;tank.pos=berm.pos+Vector2(0,30)
 		tank.pos=berm.pos
-		check(berm_sim.damage_amount(shooter,tank)<exposed*0.7,"hull-down tank takes less damage")
 		check(not berm_sim.terrain.hull_down(berm.pos,berm.pos+Vector2(0,10)),"open rear of berm does not protect")
 		check(berm_sim.terrain.hull_down(berm.pos,berm.pos+Vector2(10,0)),"berm side protects")
 		var helo:Dictionary=berm_sim.spawn("helo",1,berm.pos+Vector2(0,-10))
