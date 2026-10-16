@@ -200,6 +200,7 @@ func event(e:Dictionary) -> void:
 	if silent():return
 	match String(e.get("type","")):
 		"shot":_shot(e)
+		"missile_impact":_missile_impact(e)
 		"destroyed":_destroyed(e)
 		"crushed":
 			var p:Vector2=e.get("pos",Vector2.ZERO)
@@ -224,11 +225,23 @@ func _shot(e:Dictionary) -> void:
 		_distant(a,1.0 if heavy else 0.25,heavy)
 		return
 	play_at(spec[0],a,float(spec[1])*rng.randf_range(0.95,1.05),float(spec[2]))
+	# A guided missile's impact is its own event when the simulation resolves it.
+	if bool(e.get("guided",false)):return
 	# The impact lands when the round arrives, matching the visible projectile.
 	var water:bool=sim!=null and sim.terrain.is_water(to)
 	var surface:=_surface(bool(e.get("hit",true)),water,String(e.get("target_kind","")),b,heavy)
 	var delay:=a.distance_to(b)/maxf(float(weapon.speed),1.0)
 	_impact(surface,b,heavy,delay)
+
+# Guided missile arriving (simulation.gd missile_impact): a hit, or a burst where it lands.
+func _missile_impact(e:Dictionary) -> void:
+	var p:Vector2=e.get("pos",Vector2.ZERO)
+	var b:=Vector3(p.x,float(e.get("y",0.0)),p.y)
+	if not bool(e.get("visible",true)) or _ground_distance(b)>hear:
+		_distant(b,1.0,true)
+		return
+	var water:bool=sim!=null and sim.terrain.is_water(p)
+	_impact(_surface(bool(e.get("hit",false)),water,String(e.get("target_kind","")),b,true),b,true,0.0)
 
 func _surface(hit:bool, water:bool, target_kind:String, to:Vector3, heavy:bool) -> String:
 	if hit:
@@ -350,7 +363,8 @@ func _destroyed(e:Dictionary) -> void:
 # destroyed event, so only the mortar bomb and a crashing airframe sound here.
 func _world_blast(e:Dictionary) -> void:
 	var kind:String=e.get("kind","")
-	if kind in ["collapse","cook_off"]:return
+	# A missile's burst is voiced by its missile_impact event.
+	if kind in ["collapse","cook_off","missile"]:return
 	var p:Vector2=e.get("pos",Vector2.ZERO)
 	var pos:=Vector3(p.x,0.5,p.y)
 	if not bool(e.get("visible",true)) or _ground_distance(pos)>hear:

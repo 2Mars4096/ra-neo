@@ -31,7 +31,30 @@
     "air": false,
     "members": 2,
     "radius": 2.65,
-    "altitude": 0.0
+    "altitude": 0.0,
+    "range_m": 2000,
+    "flight_real": [
+      [
+        0,
+        0.0
+      ],
+      [
+        1000,
+        4.6
+      ],
+      [
+        2000,
+        14.5
+      ]
+    ],
+    "top_attack_min_m": 150,
+    "seeker_hit": 0.94,
+    "miss_blast": {
+      "radius": 2.5,
+      "damage": 30,
+      "structure": 5
+    },
+    "lock_real": 2.14
   },
   "tank": {
     "name": "M1 VANGUARD",
@@ -136,6 +159,26 @@
           "mm": 120,
           "nonpen": {
             "shock": 0.2
+          }
+        }
+      ],
+      "roof": [
+        {
+          "zone": "turret_roof",
+          "share": 0.45,
+          "mm": 50,
+          "nonpen": {
+            "optics": 0.3,
+            "shock": 0.3
+          }
+        },
+        {
+          "zone": "engine_deck",
+          "share": 0.55,
+          "mm": 30,
+          "nonpen": {
+            "mobility": 0.4,
+            "shock": 0.15
           }
         }
       ]
@@ -256,7 +299,20 @@
       1.0,
       2.0,
       1.0
-    ]
+    ],
+    "armor_zones": {
+      "roof": [
+        {
+          "zone": "roof",
+          "share": 1.0,
+          "mm": 15,
+          "nonpen": {
+            "optics": 0.3,
+            "shock": 0.3
+          }
+        }
+      ]
+    }
   },
   "fpv_drone": {
     "name": "FPV STRIKE DRONE",

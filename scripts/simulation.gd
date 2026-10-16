@@ -774,7 +774,7 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float,victim:Dictionary={
 		# Downed earlier this tick: re-aim at another soldier in sight, or hold fire.
 		victim=shot_victim(u,target,false)
 		if victim.is_empty():return false
-	var hit:bool=combat_rng.randf()<hit_chance(u,target,victim)
+	var hit:bool=combat_rng.randf()<(guided_hit_chance(u,target,victim) if u.get("guided",false) else hit_chance(u,target,victim))
 	if hit:
 		var amount:float=damage_amount(u,target,victim)*scale
 		# Buildings, field works, drones and sandbags: what reaches the target (structure_damage.gd).
@@ -797,13 +797,100 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float,victim:Dictionary={
 	if not hit:endpoint+=Vector2.from_angle(combat_rng.randf()*TAU)*combat_rng.randf_range(2.5,4.5)
 	# Weapons with an AIR_REACH fire their machine gun at aircraft, not the main gun.
 	var shot_kind:String="rifle" if AIR_REACH.has(u.kind) and definitions[target.kind].domain=="air" else (u.kind if u.kind in ["at_gun","bunker"] else definitions[u.kind].get("combat_alias",u.kind))
-	events.append({"type":"shot","from":u.pos,"to":endpoint,"kind":shot_kind,"target_kind":target.kind,"hit":hit,"from_y":u.get("fire_height",maxf(0.95,definitions[u.kind].altitude)),"to_y":maxf(0.8,unit_altitude(target)),"visible":u.visible or target.visible})
+	# A guided missile showed its flight at launch (launch_missile); hand back the impact.
+	if u.get("guided",false):u["impact"]={"to":endpoint,"hit":hit}
+	else:events.append({"type":"shot","from":u.pos,"to":endpoint,"kind":shot_kind,"target_kind":target.kind,"hit":hit,"from_y":u.get("fire_height",maxf(0.95,definitions[u.kind].altitude)),"to_y":maxf(0.8,unit_altitude(target)),"visible":u.visible or target.visible})
 	if target.hp<=0:
 		# A crew bail-out leaves an intact hull: presentation shows no blast.
 		events.append({"type":"destroyed","kind":target.kind,"pos":target.pos,"visible":target.visible,"abandoned":target.get("abandoned",false)})
 		if target.team==1:kills+=1;credits+=(35 if field_ops.is_empty() else 0)
 		else:losses+=1
 	return hit
+
+# A locked seeker: the engagement success rate against vehicles; against a
+# section, the aimed soldier's exposure only (the launcher's suppression and
+# motion no longer matter once the missile is away).
+func guided_hit_chance(u:Dictionary,target:Dictionary,victim:Dictionary) -> float:
+	if target.members.is_empty():return float(definitions[u.kind].get("seeker_hit",0.94))
+	var steady:Dictionary=u.duplicate()
+	steady.suppression=0.0
+	steady.state="READY"
+	return hit_chance(steady,target,victim)
+
+# ATGM flight. The Javelin is fire-and-forget: its seeker locks on before
+# launch (infantry_combat preparation) and the missile then guides itself, so
+# the gunner is free to fire, move or take cover. It flies for the real time of
+# flight at the engagement range (units.json atgm flight_real, FM 3-21.71
+# App. F: 1,000 m 4.6 s, 2,000 m 14.5 s; game units scale range_m to range),
+# compressed by GAME_TIME_SCALE like the rest of the weapon cycle (Javelin
+# reload ~20 s real, 7 s here). The seeker follows the target wherever it
+# moves and strikes it at impact (resolve_shot from the launch point, so the
+# hull face is the one the launcher saw) with the seeker_hit engagement success
+# rate. If the target is destroyed in flight the missile comes down on its last
+# position. A missile that misses bursts where it lands (miss_blast). The sim
+# has no smoke yet, so nothing else breaks the lock. Armoured land and sea
+# hulls beyond top_attack_min_m are hit on the roof (VehicleDamage.top_attack).
+# Presentation: the launch "shot" event carries the flight time; effects.gd
+# follows the entry in `missiles` (aim, done, end, hit) and audio_fx.gd voices
+# the "missile_impact" event.
+const GAME_TIME_SCALE:=0.35
+var missiles:Array=[]
+
+# Game seconds of flight for weapon row `d` over `distance` units.
+static func missile_flight(d:Dictionary,distance:float)->float:
+	var metres:float=distance*float(d.range_m)/float(d.range)
+	var table:Array=d.flight_real
+	var k:=1
+	while k<table.size()-1 and metres>float(table[k][0]):k+=1
+	var a:Array=table[k-1]
+	var b:Array=table[k]
+	var real:float=lerpf(float(a[1]),float(b[1]),(metres-float(a[0]))/(float(b[0])-float(a[0])))
+	return maxf(0.1,real*GAME_TIME_SCALE)
+
+func launch_missile(u:Dictionary,proxy:Dictionary,target:Dictionary,scale:float,victim:Dictionary) -> void:
+	var d:Dictionary=definitions[proxy.kind]
+	var aim:Vector2=victim.pos if not victim.is_empty() else target.pos
+	var distance:float=proxy.pos.distance_to(aim)
+	proxy["guided"]=true
+	if VehicleDamage.top_attack(self,d,target,distance):proxy["attack"]="top"
+	var flight:float=missile_flight(d,distance)
+	var visible:bool=u.visible or target.visible
+	var missile:={"shooter":u.id,"team":u.team,"target":target.id,"victim":victim,"proxy":proxy,"scale":scale,
+		"from":proxy.pos,"launched":time,"flight":flight,"impact_at":time+flight,"aim":aim,"aim_y":maxf(0.8,unit_altitude(target)),
+		"mode":proxy.get("attack","direct"),"target_kind":target.kind,"visible":visible,"lost":"","done":false,"hit":false,"end":aim}
+	missiles.append(missile)
+	events.append({"type":"shot","from":proxy.pos,"to":aim,"kind":proxy.kind,"target_kind":target.kind,"hit":true,"from_y":proxy.fire_height,"to_y":missile.aim_y,"visible":visible,"flight":flight,"guided":true,"attack":missile.mode})
+
+# Per tick after the unit loop: the seeker follows its target; impacts that are due.
+func tick_missiles() -> void:
+	for i in range(missiles.size()-1,-1,-1):
+		var m:Dictionary=missiles[i]
+		var target:=get_unit(int(m.target))
+		if m.lost=="":
+			if alive(target):m.aim=m.victim.pos if not m.victim.is_empty() and m.victim.hp>0 else target.pos
+			else:m.lost="destroyed"
+		if time<float(m.impact_at):continue
+		missiles.remove_at(i)
+		missile_impact(m,target)
+
+func missile_impact(m:Dictionary,target:Dictionary) -> void:
+	if m.lost=="":
+		var proxy:Dictionary=m.proxy
+		m.hit=resolve_shot(proxy,target,float(m.scale),m.victim)
+		var impact:Dictionary=proxy.get("impact",{})
+		m.end=impact.get("to",m.aim)
+		m.visible=bool(m.visible) or target.visible
+	else:
+		# Target destroyed in flight: the missile strikes its last position
+		# (the wreck, if one is left there).
+		m.end=m.aim
+		m.hit=target.get("wrecked",false)
+	m.done=true
+	events.append({"type":"missile_impact","pos":m.end,"y":float(m.aim_y) if m.hit else 0.0,"hit":m.hit,"target_kind":m.target_kind if m.hit else "","lost":m.lost,"mode":m.mode,"visible":m.visible})
+	if not m.hit or m.lost!="":
+		# No target struck: the warhead still bursts where the missile lands.
+		var blast:Dictionary=definitions[m.proxy.kind].get("miss_blast",{})
+		if not blast.is_empty():preload("res://scripts/structure_damage.gd").explosion(self,m.end,float(blast.radius),float(blast.damage),float(blast.structure),"missile")
 
 func damage_amount(u: Dictionary, other: Dictionary, victim:Dictionary={}) -> float:
 	var d: Dictionary = definitions[u.kind]
@@ -824,7 +911,7 @@ func damage_amount(u: Dictionary, other: Dictionary, victim:Dictionary={}) -> fl
 		damage *= Garrison.DAMAGE_SCALE if u.kind in ["rifle","engineer","drone","helo","aa","boat"] else 0.85
 	elif td.armor == 0 and td.domain == "land" and terrain.cover(cover_pos):
 		damage *= 0.55
-	elif td.armor > 0 and td.domain == "land" and d.domain == "land" and terrain.hull_down(other.pos,u.pos):
+	elif td.armor > 0 and td.domain == "land" and d.domain == "land" and u.get("attack","")!="top" and terrain.hull_down(other.pos,u.pos):
 		damage *= 0.6
 	return damage
 
@@ -1058,6 +1145,7 @@ func tick(dt: float) -> void:
 				resolve_shot(u,target,1.0)
 
 	if profiling:lap=_lap("unit_loop",lap)
+	tick_missiles()
 	VehicleDamage.tick_recrew(self,dt)
 	preload("res://scripts/structure_damage.gd").tick(self,dt)
 	update_tactics(dt)
@@ -1216,7 +1304,9 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 				continue
 		member.aim+=dt
 		member.facing=((victim.pos if not victim.is_empty() else target.pos)-member.pos).normalized()
-		var preparation:float=0.75 if weapon=="atgm" else (0.45 if scenario.get("autonomy",false) else 0.2)+member.index*0.05
+		# ATGM: the seeker lock-on before launch (target in line of sight; a new
+		# target restarts it): units.json lock_real seconds at GAME_TIME_SCALE.
+		var preparation:float=float(d.lock_real)*GAME_TIME_SCALE if weapon=="atgm" else (0.45 if scenario.get("autonomy",false) else 0.2)+member.index*0.05
 		var hurt:bool=member.get("wound","")==Infantry.LIGHT
 		if hurt:preparation*=Infantry.LIGHT_AIM
 		member.state="ACQUIRING" if member.aim<preparation else "CYCLING"
@@ -1227,7 +1317,9 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		proxy["fire_height"]=0.75 if member.posture=="CROUCHED" else (0.4 if member.posture=="PRONE" else 0.95)
 		proxy.suppression=maxf(u.suppression,member.suppression)
 		if hurt:proxy["accuracy"]=Infantry.LIGHT_ACCURACY
-		resolve_shot(proxy,target,(1.0 if weapon=="atgm" else 0.25)*(0.4 if u.kind=="engineer" else 1.0),victim)
+		var scale:float=(1.0 if weapon=="atgm" else 0.25)*(0.4 if u.kind=="engineer" else 1.0)
+		if weapon=="atgm":launch_missile(u,proxy,target,scale,victim)
+		else:resolve_shot(proxy,target,scale,victim)
 		member.cooldown=float(d.interval)*(1.8 if proxy.suppression>0.6 else 1.0)
 		member.rounds-=1
 		member.last_shot=time

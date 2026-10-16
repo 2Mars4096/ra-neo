@@ -26,6 +26,13 @@ extends RefCounted
 # Each face is a set of zones with a share of the hits: a frontal arc is not
 # uniform (glacis and turret face are strong; the lower plate, the mantlet and
 # turret ring are weak spots that a fair share of hits find).
+#
+# Top attack. A Javelin beyond its top-attack minimum range (units.json atgm
+# top_attack_min_m: 150 m in FM 3-21.71 App. F; direct attack 65 m) climbs and
+# dives onto the roof, whatever the hull's facing: the shot lands on the roof
+# zones (face ROOF) met at ROOF_INCIDENCE. Roofs are the thinnest plates on a
+# tank (turret roof ~40-70 mm, engine deck thinner; see units.json armor_zones
+# roof); rows without a roof take their thinnest face.
 
 # Armour/crew/effect data live in the vehicle rows of units.json:
 #   armor_mm [front, side, rear] (uniform plates when a row has no zones),
@@ -49,6 +56,10 @@ const NO_PENETRATION:={"near":0.0,"far":0.0,"effect":0.0,"heavy":false}
 # rear within ~53). Hit location itself blends faces by projected area.
 const FRONT_DOT:=0.5
 const REAR_DOT:=-0.6
+# Face index of the roof (zones() tables are [front, side, rear, roof]).
+const ROOF:=3
+# Terminal dive: the roof is met about 35 degrees off its normal (assumed).
+const ROOF_INCIDENCE:=0.82
 # Default projected area [front, side, rear] for rows without hull_area.
 const HULL_AREA:=[1.0,1.0,1.0]
 # Line-of-sight thickness grows as 1/cos(incidence) up to this factor (~78
@@ -139,6 +150,10 @@ static func zones(sim,kind:String)->Array:
 			for zone in authored[name]:list.append({"zone":str(zone.get("zone",name)),"share":float(zone.share),"mm":maxf(1.0,float(zone.mm)),"nonpen":zone.get("nonpen",{})})
 		else:list.append({"zone":name,"share":1.0,"mm":maxf(1.0,float(d.armor_mm[face])),"nonpen":legacy})
 		table.append(list)
+	var roof:Array=[]
+	for zone in authored.get("roof",[]):roof.append({"zone":str(zone.get("zone","roof")),"share":float(zone.share),"mm":maxf(1.0,float(zone.mm)),"nonpen":zone.get("nonpen",{})})
+	if roof.is_empty():roof.append({"zone":"roof","share":1.0,"mm":maxf(1.0,float(d.armor_mm.min())),"nonpen":legacy})
+	table.append(roof)
 	cache[kind]=table
 	return table
 
@@ -159,6 +174,18 @@ static func face_weights(sim,target:Dictionary,source:Vector2)->Array:
 	for entry in result:entry[1]=float(entry[1])/total
 	return result
 
+# Faces a shot from `u` can land on: the roof alone for a top attack.
+static func faces(sim,u:Dictionary,target:Dictionary)->Array:
+	if u.get("attack","")=="top":return [[ROOF,1.0,ROOF_INCIDENCE]]
+	return face_weights(sim,target,u.pos)
+
+# Whether weapon row `d` attacks `target` from above at `distance` m: armoured
+# land and sea hulls beyond the top-attack minimum range (game units scale
+# range_m to range).
+static func top_attack(sim,d:Dictionary,target:Dictionary,distance:float)->bool:
+	if not d.has("top_attack_min_m") or not tracked(sim,target) or sim.definitions[target.kind].domain=="air":return false
+	return distance>=float(d.top_attack_min_m)*float(d.range)/float(d.range_m)
+
 # Chance that `pen` mm defeats a zone met at incidence cos `incidence`.
 static func zone_chance(pen:float,zone:Dictionary,incidence:float)->float:
 	var plate:float=float(zone.mm)*minf(1.0/maxf(incidence,0.0001),OBLIQUITY_CAP)
@@ -170,16 +197,16 @@ static func penetration_chance(sim,u:Dictionary,target:Dictionary)->float:
 	var pen:float=penetration(sim,u,target)
 	var table:Array=zones(sim,target.kind)
 	var p:=0.0
-	for entry in face_weights(sim,target,u.pos):
+	for entry in faces(sim,u,target):
 		for zone in table[entry[0]]:p+=float(entry[1])*float(zone.share)*zone_chance(pen,zone,float(entry[2]))
 	return clampf(p,0.0,1.0)
 
 # One hit's location: {zone, p (its penetration chance)}.
 static func roll_location(sim,u:Dictionary,target:Dictionary,rng:RandomNumberGenerator)->Dictionary:
-	var faces:Array=face_weights(sim,target,u.pos)
-	var face:Array=faces[0]
+	var options:Array=faces(sim,u,target)
+	var face:Array=options[0]
 	var roll:=rng.randf()
-	for entry in faces:
+	for entry in options:
 		face=entry
 		roll-=float(entry[1])
 		if roll<0.0:break

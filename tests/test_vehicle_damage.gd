@@ -49,6 +49,16 @@ func _init()->void:
 	# frontal hits) do not.
 	check(table["atgm/tank/front"]>0.3 and table["atgm/tank/front"]<0.65,"Javelin penetrates tank front about half the time (weak zones)")
 	check(table["tank/tank/side"]>=0.99 and table["tank/tank/rear"]>=0.99 and table["tank/tank/front"]<0.35,"tank AP: flank reliable, frontal duel hard")
+	# Top attack lands on the roof whatever the facing.
+	for face in FACES:
+		var top:={"kind":"atgm","pos":Vector2(116,100),"attack":"top"}
+		var hull:={"kind":"tank","pos":Vector2(100,100),"facing":-ARC[face]}
+		check(VehicleDamage.penetration_chance(sim,top,hull)>=0.99,"Javelin top attack penetrates the tank roof (%s arc)" % face)
+		check(VehicleDamage.roll_location(sim,top,hull,RandomNumberGenerator.new()).zone.zone in ["turret_roof","engine_deck"],"top attack strikes a roof zone (%s arc)" % face)
+	var roof:Array=VehicleDamage.zones(sim,"tank")[VehicleDamage.ROOF]
+	for zone in roof:check(float(zone.mm)<=70.0 and float(zone.mm)<sim.definitions.tank.armor_mm[1],"tank %s (%d mm) is thinner than the hull side" % [zone.zone,zone.mm])
+	check(VehicleDamage.top_attack(sim,sim.definitions.atgm,{"kind":"tank","members":[]},16.0) and not VehicleDamage.top_attack(sim,sim.definitions.atgm,{"kind":"tank","members":[]},1.0),"top attack beyond 150 m (1.5 u), direct attack inside it")
+	check(not VehicleDamage.top_attack(sim,sim.definitions.atgm,{"kind":"helo","members":[]},16.0),"no top attack against aircraft")
 	var duel_front:=chance(sim,"tank","tank","front",19.0)
 	check(duel_front<table["tank/tank/front"],"tank AP penetration falls with range")
 	check(duel_front>0.15,"tank AP still finds frontal weak zones at duel range (%.2f)" % duel_front)
@@ -240,11 +250,18 @@ func _init()->void:
 	check(damaged_flight<intact_flight*0.75 and damaged_flight>0.5,"damaged gunship flies slower")
 
 	# --- 8. Two Javelin teams vs a tank: flank vs front --------------------------------
+	# Top attack (16 m is beyond the top-attack minimum) strikes the roof from
+	# any side; in direct-attack mode the frontal arc still holds.
 	var flank:=kill_times(true)
 	var frontal:=kill_times(false)
-	print("ATGM x2 vs TANK flank: mean %.1fs %s | front: mean %.1fs %s" % [mean(flank),str(flank),mean(frontal),str(frontal)])
+	print("ATGM x2 vs TANK top attack flank: mean %.1fs %s | front: mean %.1fs %s" % [mean(flank),str(flank),mean(frontal),str(frontal)])
 	check(not flank.has(-1.0) and not frontal.has(-1.0),"two Javelin teams always kill the tank within 120 s")
-	check(mean(frontal)>mean(flank)*1.8,"flank kills markedly faster than frontal fire")
+	check(mean(frontal)<mean(flank)*1.25,"top attack: frontal kills about as fast as flank kills")
+	var direct_flank:=kill_times(true,true)
+	var direct_front:=kill_times(false,true)
+	print("ATGM x2 vs TANK direct attack flank: mean %.1fs %s | front: mean %.1fs %s" % [mean(direct_flank),str(direct_flank),mean(direct_front),str(direct_front)])
+	check(not direct_flank.has(-1.0),"direct attack kills the tank from the flank within 120 s")
+	check(mean(direct_front)>mean(direct_flank)*1.8,"direct attack: flank kills markedly faster than frontal fire")
 	# --- 9. Hit location: angled hulls, grazing hits, non-penetrating effects ----------
 	var s9=Sim.new(false,harbor_index())
 	var square:=yawed_chance(s9,"tank",0.0,19.0)
@@ -312,11 +329,13 @@ func mean(values:Array)->float:
 
 # Two Javelin teams 16 m from a passive tank on the open coast map (legacy
 # preset: no autonomous cover-seeking, so the measurement is the damage model
-# plus the real fire cadence). Seconds to kill; -1 = survived 120 s.
-func kill_times(flank:bool)->Array:
+# plus the real fire cadence and missile flight; `direct` forces direct attack).
+# Seconds to kill; -1 = survived 120 s.
+func kill_times(flank:bool,direct:bool=false)->Array:
 	var times:Array=[]
 	for trial in 8:
 		var sim=Sim.new(false,0)
+		if direct:sim.definitions.atgm.top_attack_min_m=1.0e9
 		sim.combat_rng.seed=1000+trial
 		var rng:=RandomNumberGenerator.new()
 		rng.seed=500+trial

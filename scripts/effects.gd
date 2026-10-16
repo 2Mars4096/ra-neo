@@ -630,11 +630,48 @@ func fire(weapon:String, from:Vector3, to:Vector3, hit:bool=true, water:bool=fal
 			tracer_counts[weapon]=int(tracer_counts.get(weapon,0))+1
 			tracer=int(tracer_counts[weapon])%every==0 or every==1
 		var shot:={"a":a,"b":b,"dir":(b-a).normalized(),"weapon":weapon,"class":profile["class"],"age":0.0,"delay":round_index*float(profile.gap),"duration":maxf(duration,0.02),"surface":surface,"tracer":tracer,"round":round_index,"launched":false,"trail":0.0,"last":a,"loft":minf(4.0,a.distance_to(b)*0.12) if profile["class"]=="missile" else 0.0,"water_launch":launch_water,"speed":speed}
+		if profile["class"]=="missile":_track_missile(shot,from)
 		_queue(shot)
 		if round_index==0:
 			_launch(shot)
 		travel=maxf(travel,shot.delay+shot.duration)
 	return travel
+
+# Guided missiles (simulation.gd launch_missile/tick_missiles): the visual binds
+# to the sim's in-flight entry launched from `from`, so it flies for the sim's
+# time of flight onto the target where it is (its last position if destroyed)
+# and lands with the sim's outcome. Top attack lofts high and dives.
+func _track_missile(shot:Dictionary, from:Vector3) -> void:
+	var host=_live_host()
+	if host==null or not ("missiles" in host):return
+	var origin:=Vector2(from.x,from.z)
+	for entry in host.missiles:
+		if entry.done or not (entry.from as Vector2).is_equal_approx(origin):continue
+		if projectiles.any(func(other):return is_same(other.get("track"),entry)):continue
+		shot["track"]=entry
+		shot.duration=maxf(0.05,float(entry.flight))
+		if entry.mode=="top":shot.loft=clampf(shot.a.distance_to(shot.b)*0.3,2.0,7.0)
+		return
+
+# Per frame for a tracked missile: aim point, outcome and progress from the sim
+# clock (held short of arrival until the sim resolves the impact).
+func _follow(shot:Dictionary) -> float:
+	var entry:Dictionary=shot.track
+	var host=_live_host()
+	var flight:=maxf(0.05,float(entry.flight))
+	var progress:=minf(1.0,shot.age/flight)
+	if host!=null:progress=clampf((float(host.time)-float(entry.launched))/flight,0.0,1.0)
+	var aim:Vector2=entry.end if entry.done else entry.aim
+	shot.b=Vector3(aim.x,float(entry.aim_y) if not entry.done or entry.hit else FLOOR,aim.y)
+	if entry.done:shot.surface=_surface(entry.hit,is_water_at(shot.b),String(entry.target_kind),shot.b,"missile")
+	elif progress>=1.0 and shot.age<flight+5.0:progress=0.999
+	var prev:float=shot.get("progress",0.0)
+	var base:Vector3=shot.get("base",shot.a)
+	shot.base=base.lerp(shot.b,1.0 if progress>=1.0 else clampf((progress-prev)/maxf(0.0001,1.0-prev),0.0,1.0))
+	shot.progress=progress
+	# Remaining presentation time, for _pending_arrival.
+	shot.duration=shot.age+(1.0-progress)*flight
+	return progress
 
 func _surface(hit:bool, water:bool, target_kind:String, to:Vector3, weapon_class:String) -> String:
 	if hit:
@@ -713,13 +750,16 @@ func _update_projectiles(dt:float) -> void:
 			_launch(shot)
 			continue
 		shot.age+=dt
-		var progress:=minf(1.0,shot.age/float(shot.duration))
+		var tracked:=shot.has("track")
+		var progress:=_follow(shot) if tracked else minf(1.0,shot.age/float(shot.duration))
 		var a:Vector3=shot.a
 		var b:Vector3=shot.b
-		var p:=a.lerp(b,progress)+Vector3.UP*float(shot.loft)*4.0*progress*(1.0-progress)
+		var track:Vector3=shot.base if tracked else a.lerp(b,progress)
+		var p:=track+Vector3.UP*float(shot.loft)*4.0*progress*(1.0-progress)
 		var last:Vector3=shot.last
 		var moved:=p-last
 		var heading:Vector3=moved.normalized() if moved.length_squared()>0.000001 else shot.dir
+		if tracked:shot.dir=heading
 		match String(shot["class"]):
 			"fpv":
 				# Loitering munition on its terminal dive: only a small motor glint is visible.
