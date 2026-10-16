@@ -10,6 +10,10 @@ const DRILL:=0.8
 # ones to stop early. Cheap filters order the nearest candidates first.
 const RATED:=24
 const RATED_VALID:=8
+# A soldier gets up to run for shelter: routes are planned for the standing
+# body. The prone footprint (1.15 m) closed gaps a runner fits through, so a
+# soldier who had gone flat in the open found no route to reachable cover.
+const STRIDE:=0.8
 
 static func clear(member:Dictionary) -> void:
 	member["occupying"]=false
@@ -65,7 +69,10 @@ static func _update(u:Dictionary,sim) -> void:
 			if member.get("occupying",false):continue
 			if sim.time>=maxf(member.cover_until,member.get("cover_deadline",0.0)):clear(member)
 		var building:bool=u.has("building_id") or u.has("clearing_id") or (u.kind=="engineer" and sim.units.any(func(s):return s.get("queued_for",-1)==u.id and float(s.get("build_left",0.0))>0))
-		if u.orders.is_empty() and not building:occupy_works(u,sim,threat)
+		# A bleeding squadmate comes first: stay beside the casualty for buddy aid instead of
+		# walking off to man works (aid would only call the soldier back).
+		var bleeding:bool=u.members.any(func(m):return m.get("wound","")=="SEVERE" and not m.get("stable",false))
+		if u.orders.is_empty() and not building and not bleeding:occupy_works(u,sim,threat)
 		return
 	var moving:=0
 	for member in u.members:
@@ -193,7 +200,7 @@ static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 		candidates.append({"pos":entry.pos,"score":score,"screened":rating.screened and not threat.is_empty() and not rating.soft,"fire":rating.fire})
 		if candidates.size()>=RATED_VALID:break
 	candidates.sort_custom(func(a,b):return a.score<b.score)
-	var radius:float=member.get("body_radius",0.8)
+	var radius:=STRIDE
 	for candidate in candidates.slice(0,6):
 		# A clear straight line is the route path() would return: reject it
 		# without planning when a holding squadmate stands across it.
@@ -280,7 +287,7 @@ static func crossfire(u:Dictionary,threats:Array) -> bool:
 # not close within a shoulder's width of one, so a route brushing past one
 # stalls the seeker until it gives up. Moving squadmates are not obstacles.
 static func _squadmate_blocks(u:Dictionary,member:Dictionary,route:Array) -> bool:
-	var radius:float=member.get("body_radius",0.8)
+	var radius:=STRIDE
 	for peer in u.members:
 		if peer.hp<=0 or peer.index==member.index or peer.get("cover_phase","")=="SEEKING":continue
 		var clearance:float=minf(radius+float(peer.get("body_radius",0.8))-0.05,member.pos.distance_to(peer.pos)-0.05)
@@ -331,7 +338,7 @@ static func occupy_works(u:Dictionary,sim,threat:Dictionary) -> bool:
 			if slot in taken or not sim.terrain.traversable(slot,"land",0.8):continue
 			if slot.distance_squared_to(member.pos)<distance:distance=slot.distance_squared_to(member.pos);best=slot
 		if best.x<0:continue
-		var route:Array=sim.terrain.path(member.pos,best,"land",float(member.get("body_radius",0.8)),[],"infantry")
+		var route:Array=sim.terrain.path(member.pos,best,"land",STRIDE,[],"infantry")
 		if route.is_empty():continue
 		taken.append(best)
 		member.cover_goal=best;member.cover_path=route;member.cover_phase="SEEKING";member.cover_blocked=0.0

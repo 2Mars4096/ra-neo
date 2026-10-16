@@ -3,10 +3,14 @@ extends SceneTree
 # (attack_move into contact). Where real cover lies within the cover leash, at
 # least 2 of 3 attackers must reach it (SETTLING/SHELTERED) or go prone within
 # REACT seconds. On an open stretch (nearest cover beyond the leash) the
-# soldiers must instead report EXPOSED, not chase a shelter they cannot reach.
+# soldiers must instead report EXPOSED, not chase a shelter they cannot reach,
+# and drop prone within OPEN_REACT of the first incoming fire.
 const Sim=preload("res://scripts/simulation.gd")
 const Cover=preload("res://scripts/cover_behavior.gd")
 const REACT:=6.0
+# Caught in the open, soldiers go prone (and keep firing) this soon after the
+# first incoming round (they spread to prone spacing, then drop).
+const OPEN_REACT:=1.0
 # [our spawn, enemy spawn, open street]: the audited open street (nearest cover
 # ~14.5 m from the spawn, ~18 m from where contact halts it), then streets with
 # cover 3-6 m away.
@@ -37,8 +41,10 @@ func fight(index:int,a:Vector2,b:Vector2,open:bool)->void:
 	var reach:float=nearest_cover(sim.terrain,a)
 	var reacted:={}
 	var exposed:={}
+	var fired:=INF
 	for frame in int(12*30):
 		sim.tick(1.0/30)
+		if ours.has("fired_on"):fired=minf(fired,float(ours.fired_on))
 		for m in ours.members:
 			if m.hp<=0:continue
 			var phase:String=m.get("cover_phase","")
@@ -55,10 +61,13 @@ func fight(index:int,a:Vector2,b:Vector2,open:bool)->void:
 	var on_time:int=reacted.values().filter(func(t):return t<=REACT).size()
 	var flagged:int=exposed.values().filter(func(t):return t<=REACT).size()
 	var dead:int=ours.members.filter(func(m):return m.hp<=0).size()
-	var summary:="%s->%s nearest cover %.1f m, covered/prone by %.0fs: %d %s, exposed: %d, ours dead %d" % [a,b,reach,REACT,on_time,reacted,flagged,dead]
+	var flat:int=reacted.values().filter(func(t):return t-fired<=OPEN_REACT).size()
+	var summary:="%s->%s nearest cover %.1f m, covered/prone by %.0fs: %d %s, exposed: %d, first fire on us %.2fs, ours dead %d" % [a,b,reach,REACT,on_time,reacted,flagged,fired,dead]
 	if open:
 		check(reach>Cover.LEASH,"open street has no cover within the %.0f m leash: %s" % [Cover.LEASH,summary])
 		check(flagged>=2,"open street reported EXPOSED: "+summary)
+		check(flat>=2,"open street: soldiers prone within %.1fs of first incoming fire: %s" % [OPEN_REACT,summary])
+		check(dead<=1,"open street: prone soldiers hold out 12 s (at most one down): "+summary)
 	else:
 		check(reach<=Cover.LEASH-2.0,"street has cover within the leash: "+summary)
 		check(on_time>=2,"cover within leash used: "+summary)

@@ -236,6 +236,9 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 		u["cover_next"]=sim.time+0.3+float(u.id%5)*0.02
 		Cover.update(u,sim)
 	u["carry_from"]=u.pos
+	# Caught in the open (crossfire, or under fire with no shelter in reach):
+	# spread to prone spacing.
+	var open_spread:bool=u.get("crossfire",false) or in_contact(u,sim.time)
 	for member in u.members:
 		if member.hp<=0:
 			if member.get("wound","")==SEVERE:move_casualty(u,member,sim,dt)
@@ -243,8 +246,12 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 		member.cooldown-=dt
 		member.suppression=maxf(0,member.suppression-dt*0.12)
 		var offset:Vector2=member.offset
-		# Caught in the open by crossfire: spread to prone spacing.
-		if member.get("cover_phase","")=="EXPOSED" and u.get("crossfire",false):offset*=1.5
+		# Once spread, a soldier keeps the wider slot while still in the open
+		# (the contact window may lapse between bursts): shrinking it back would
+		# stand the soldier up and walk them off their firing position mid-fight.
+		var spread:bool=caught_open(member,sim.time) and (open_spread or member.get("spread",false))
+		member["spread"]=spread
+		if spread:offset*=1.5
 		var desired:Vector2=u.pos+offset
 		if member.get("aiding",-1)>=0:
 			# Buddy aid: kneel beside the casualty; no shelter moves meanwhile.
@@ -281,6 +288,10 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 				member.posture_until=sim.time+0.45
 			else:speed=0.0
 		if member.get("posture","")=="RISING" and sim.time<member.posture_until:speed=0.0
+		# Up off the ground: the standing footprint again. Combat only resets it
+		# for soldiers with a target, so one rising to run for cover kept the
+		# prone 1.15 m body and stuck in gaps a runner fits through.
+		elif member.posture!="PRONE":member.body_radius=0.8
 		var next:Vector2=old.move_toward(desired,speed*dt)
 		# Anticipatory avoidance: sidestep soldiers/vehicles a few metres ahead and
 		# ease off when someone is right in front, instead of shoving through.
@@ -619,17 +630,28 @@ static func note_fire(u:Dictionary,now:float) -> void:
 	u["pressure_seen"]=u.suppression
 	u["hit_seen"]=u.last_hit
 
-# A soldier holding still goes flat under heavy suppression, or in crossfire
+# A soldier holding still goes flat under heavy suppression, or in contact when
+# caught in the open (no shelter within the leash: EXPOSED) or in crossfire
 # while not (yet) sheltered, where there is room. Callers pre-check the cheap
 # conditions; the room check scans every soldier, so a failed one is retried
 # twice a second.
 static func goes_flat(u:Dictionary,member:Dictionary,sim,contact:bool,phase:String) -> bool:
-	if not (maxf(member.suppression,u.suppression)>0.65 or (contact and u.get("crossfire",false) and phase!="SETTLING" and phase!="SHELTERED" and not member.get("in_trench",false))):return false
+	if not (maxf(member.suppression,u.suppression)>0.65 or (contact and not member.get("in_trench",false) and (caught_open(member,sim.time) or (u.get("crossfire",false) and phase!="SETTLING" and phase!="SHELTERED")))):return false
 	if member.posture=="PRONE":return true
 	if sim.time<float(member.get("prone_retry",0.0)):return false
 	if prone_clear(u,member,sim):return true
 	member["prone_retry"]=sim.time+0.5
 	return false
+
+# No shelter within the leash (Cover marks EXPOSED). The contact drill and
+# bounding turn such soldiers to OVERWATCH; they stay in the open meanwhile.
+const OPEN_MEMORY:=2.5
+static func caught_open(member:Dictionary,now:float) -> bool:
+	var phase:String=member.get("cover_phase","")
+	if phase=="EXPOSED":
+		member["open_at"]=now
+		return true
+	return phase=="OVERWATCH" and now-float(member.get("open_at",-100.0))<OPEN_MEMORY
 
 # Recent incoming fire or lingering suppression: the section is in contact.
 static func in_contact(u:Dictionary,now:float) -> bool:

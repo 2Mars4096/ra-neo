@@ -1123,12 +1123,13 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			member.aim=0.0
 			# In a trench or any shelter soldiers stay down behind the parapet;
 			# holding still in contact or alert (any cover phase) they keep low
-			# too (contact drill), flat when pinned or caught in crossfire.
+			# too (contact drill), flat when pinned, caught in crossfire, or under
+			# fire in the open with no shelter in reach.
 			var phase:String=member.get("cover_phase","")
 			var sheltered:bool=member.in_trench or phase=="SETTLING" or phase=="SHELTERED"
 			var still:bool=autonomy and member.travel<=0.003
 			var rest:String="CROUCHED" if sheltered or (still and (contact or phase!="")) else "STANDING"
-			if still and (maxf(member.suppression,u.suppression)>0.65 or (contact and u.get("crossfire",false))) and Infantry.goes_flat(u,member,self,contact,phase):rest="PRONE"
+			if still and (contact or maxf(member.suppression,u.suppression)>0.65) and Infantry.goes_flat(u,member,self,contact,phase):rest="PRONE"
 			if member.posture=="PRONE" and rest!="PRONE":
 				member.posture="RISING"
 				member.posture_until=time+0.45
@@ -1142,14 +1143,14 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 				member.aim=0.0;member.state="RISING";continue
 			var pressure:float=maxf(member.suppression,u.suppression)
 			var desired_posture:="STANDING" if member.travel>0.003 else "CROUCHED"
-			if member.travel<=0.003 and (pressure>0.65 or (contact and u.get("crossfire",false))) and Infantry.goes_flat(u,member,self,contact,member.get("cover_phase","")):desired_posture="PRONE"
+			if member.travel<=0.003 and (pressure>0.65 or contact) and Infantry.goes_flat(u,member,self,contact,member.get("cover_phase","")):desired_posture="PRONE"
 			if desired_posture!=member.posture:
 				member.posture=desired_posture
 				member.posture_until=time+0.35
 				member.aim=0.0
 			if member.posture=="PRONE":member.body_radius=1.15
 			elif time>=member.posture_until:member.body_radius=0.8
-			# Pinned soldiers stay flat; one prone by choice (crossfire) still fires.
+			# Pinned soldiers stay flat; one prone by choice (crossfire, open ground) still fires.
 			if member.posture=="PRONE" and pressure>0.65:member.state="PINNED";member.aim=0.0;continue
 			if member.travel>0.003 or time<member.posture_until:
 				member.state="SETTLING";member.aim=0.0;continue
