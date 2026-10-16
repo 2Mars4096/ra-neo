@@ -1,20 +1,36 @@
 extends RefCounted
 
-# Component damage for vehicles (tank, IFV, corvette, gunship). A hit either
-# fails to penetrate (ricochet: little integrity loss, the crew buttons up) or
-# penetrates and may knock out one component:
+# Component damage for vehicles (tank, IFV, corvette, gunship). A hit lands on
+# a hull face and a zone of it (hit location, below), then either fails to
+# penetrate or penetrates and may knock out one component:
 #   mobility     tracks/engine: a land or sea hull cannot move (it still fires);
 #                a gunship is damaged and flies slower
 #   firepower    main weapon disabled
 #   crew         a casualty: slower reload and target acquisition; the last
 #                casualty bails the crew out (gunship: crashes)
 #   catastrophic ammunition cook-off: destroyed at once
+# A heavy round that does not penetrate still does harm, by zone: it can break
+# a track (mobility), jam or bend the gun (firepower), smash the sights (optics:
+# the gunner falls back to the auxiliary sight, less accurate) or shake the crew
+# (shock: a lost aim and a slower reload). Light rounds can only scar sights.
 # HP stays an overall integrity bar. Abandoned and destroyed land vehicles stay
 # on the map as wrecks that block vehicles. Penetration and outcome rolls use
 # a dedicated seeded RNG so they never shift the shared combat RNG stream.
+#
+# Hit location. A shot arriving at angle t off the hull axis strikes a face in
+# proportion to its projected area: front cos(t)*A_front, side |sin(t)|*A_side,
+# rear -cos(t)*A_rear (a tank hull is about twice as long as it is wide, so a
+# hull yawed 20 degrees already takes about 4 in 10 hits on the side). The plate
+# is met at incidence t (front), 90-t (side) or 180-t (rear): its line-of-sight
+# thickness grows as 1/cos(incidence), so grazing hits on the side glance off.
+# Each face is a set of zones with a share of the hits: a frontal arc is not
+# uniform (glacis and turret face are strong; the lower plate, the mantlet and
+# turret ring are weak spots that a fair share of hits find).
 
 # Armour/crew/effect data live in the vehicle rows of units.json:
-#   armor_mm [front, side, rear], crew, nonpen_damage, damage_effects {weights}.
+#   armor_mm [front, side, rear] (uniform plates when a row has no zones),
+#   armor_zones {front|side|rear: [{zone, share, mm, nonpen {effect: chance}}]},
+#   hull_area [front, side, rear], crew, nonpen_damage, damage_effects {weights}.
 # Weapon penetration (RHA-equivalent at point blank and at maximum range),
 # chance that a penetration knocks out a component, and whether it can cook
 # off ammunition. Keyed by unit kind first, then by combat alias.
@@ -29,14 +45,28 @@ const PENETRATION:={
 	"helo":{"near":600.0,"far":600.0,"effect":0.6,"heavy":true},
 }
 const NO_PENETRATION:={"near":0.0,"far":0.0,"effect":0.0,"heavy":false}
-# Hull arcs from the target's facing: front within 60 degrees, rear within ~53.
+# Hull arcs from the target's facing (labels only: front within 60 degrees,
+# rear within ~53). Hit location itself blends faces by projected area.
 const FRONT_DOT:=0.5
 const REAR_DOT:=-0.6
+# Default projected area [front, side, rear] for rows without hull_area.
+const HULL_AREA:=[1.0,1.0,1.0]
+# Line-of-sight thickness grows as 1/cos(incidence) up to this factor (~78
+# degrees); beyond it rods and jets glance off.
+const OBLIQUITY_CAP:=5.0
 # pen/armour ratio below LOW never penetrates, above LOW+SPAN always does.
 const RATIO_LOW:=0.75
 const RATIO_SPAN:=0.5
-# A heavy round that fails to penetrate can still break a track.
+# Rows without zone data: a heavy round that fails to penetrate can still
+# break a track.
 const TRACK_HIT:=0.05
+# Non-penetrating effects. Light rounds only scar sights, at this fraction of
+# the zone's optics chance. Damaged sights scale the gunner's hit chance.
+const LIGHT_OPTICS:=0.5
+const OPTICS_ACCURACY:=0.6
+# Crew shock: suppression and an extra fraction of the reload interval.
+const SHOCK_SUPPRESSION:=0.7
+const SHOCK_RELOAD:=0.5
 const BUTTON_SECONDS:=4.0
 # Per missing crew member: extra reload (fraction of interval) and acquisition.
 const RELOAD_PENALTY:=0.6
@@ -91,11 +121,76 @@ static func penetration(sim,u:Dictionary,target:Dictionary)->float:
 	var fraction:float=clampf(sim.shot_distance(u,target)/reach,0.0,1.0)
 	return lerpf(float(spec.near),float(spec.far),fraction)
 
+# Hit-location table of a hull kind: [front, side, rear] zone lists. Rows
+# without armor_zones are one uniform plate per face (armor_mm); their heavy
+# non-penetrating hits keep the legacy track-break chance on land.
+static func zones(sim,kind:String)->Array:
+	if not sim.has_meta("armor_zone_cache"):sim.set_meta("armor_zone_cache",{})
+	var cache:Dictionary=sim.get_meta("armor_zone_cache")
+	if cache.has(kind):return cache[kind]
+	var d:Dictionary=sim.definitions[kind]
+	var table:Array=[]
+	var authored:Dictionary=d.get("armor_zones",{})
+	var legacy:Dictionary={"mobility":TRACK_HIT} if d.domain=="land" else {}
+	for face in 3:
+		var name:String=["front","side","rear"][face]
+		var list:Array=[]
+		if authored.has(name):
+			for zone in authored[name]:list.append({"zone":str(zone.get("zone",name)),"share":float(zone.share),"mm":maxf(1.0,float(zone.mm)),"nonpen":zone.get("nonpen",{})})
+		else:list.append({"zone":name,"share":1.0,"mm":maxf(1.0,float(d.armor_mm[face])),"nonpen":legacy})
+		table.append(list)
+	cache[kind]=table
+	return table
+
+# Faces the shot can land on: [[face, weight, cos(incidence)], ...] with the
+# weights summing to 1 (projected area seen from `source`).
+static func face_weights(sim,target:Dictionary,source:Vector2)->Array:
+	var offset:Vector2=source-target.pos
+	if offset.length_squared()<0.0001:return [[0,1.0,1.0]]
+	var axis:Vector2=target.facing.normalized()
+	var direction:Vector2=offset.normalized()
+	var c:float=axis.dot(direction)
+	var s:float=absf(axis.cross(direction))
+	var area:Array=sim.definitions[target.kind].get("hull_area",HULL_AREA)
+	var result:Array=[]
+	var total:=0.0
+	for entry in [[0,maxf(c,0.0)*float(area[0]),c],[1,s*float(area[1]),s],[2,maxf(-c,0.0)*float(area[2]),-c]]:
+		if entry[1]>0.0001:result.append(entry);total+=float(entry[1])
+	for entry in result:entry[1]=float(entry[1])/total
+	return result
+
+# Chance that `pen` mm defeats a zone met at incidence cos `incidence`.
+static func zone_chance(pen:float,zone:Dictionary,incidence:float)->float:
+	var plate:float=float(zone.mm)*minf(1.0/maxf(incidence,0.0001),OBLIQUITY_CAP)
+	return clampf((pen/plate-RATIO_LOW)/RATIO_SPAN,0.0,1.0)
+
+# Overall penetration chance of a hit: faces by projected area, zones by share.
 static func penetration_chance(sim,u:Dictionary,target:Dictionary)->float:
-	var armour:Array=sim.definitions[target.kind].get("armor_mm",[])
-	if armour.is_empty():return 1.0
-	var plate:float=maxf(1.0,float(armour[facing_index(target,u.pos)]))
-	return clampf((penetration(sim,u,target)/plate-RATIO_LOW)/RATIO_SPAN,0.0,1.0)
+	if not sim.definitions[target.kind].has("armor_mm"):return 1.0
+	var pen:float=penetration(sim,u,target)
+	var table:Array=zones(sim,target.kind)
+	var p:=0.0
+	for entry in face_weights(sim,target,u.pos):
+		for zone in table[entry[0]]:p+=float(entry[1])*float(zone.share)*zone_chance(pen,zone,float(entry[2]))
+	return clampf(p,0.0,1.0)
+
+# One hit's location: {zone, p (its penetration chance)}.
+static func roll_location(sim,u:Dictionary,target:Dictionary,rng:RandomNumberGenerator)->Dictionary:
+	var faces:Array=face_weights(sim,target,u.pos)
+	var face:Array=faces[0]
+	var roll:=rng.randf()
+	for entry in faces:
+		face=entry
+		roll-=float(entry[1])
+		if roll<0.0:break
+	var list:Array=zones(sim,target.kind)[face[0]]
+	var zone:Dictionary=list[0]
+	roll=rng.randf()
+	for candidate in list:
+		zone=candidate
+		roll-=float(candidate.share)
+		if roll<0.0:break
+	return {"zone":zone,"p":zone_chance(penetration(sim,u,target),zone,float(face[2]))}
 
 # Expected integrity loss per hit as a fraction of the weapon's damage; used by
 # damage_amount so estimates (and the rear-weaker-than-front rule) stay honest.
@@ -117,20 +212,18 @@ static func strike(sim,u:Dictionary,target:Dictionary,amount:float)->float:
 	var td:Dictionary=sim.definitions[target.kind]
 	var spec:Dictionary=weapon_spec(sim,u)
 	var rng:=_rng(sim)
+	# `amount` carries the expected scale over all locations; the hit itself
+	# lands on one zone with its own penetration chance.
 	var p:=penetration_chance(sim,u,target)
 	var nonpen:float=float(td.get("nonpen_damage",0.1))
 	var base:float=amount/(p+(1.0-p)*nonpen)
 	var land:bool=td.domain=="land"
 	if land:target.buttoned_until=sim.time+BUTTON_SECONDS
-	if rng.randf()>=p:
-		var damage:float=base*nonpen
-		var effect:="ricochet"
-		if land and spec.heavy and not target.mobility_kill and rng.randf()<TRACK_HIT:
-			effect="mobility"
-			target.mobility_kill=true
-			_report(sim,target,effect,"%s track broken · immobilised",false)
-		else:_event(sim,target,effect,false)
-		return _finish(sim,target,damage)
+	var location:Dictionary=roll_location(sim,u,target,rng)
+	if rng.randf()>=float(location.p):
+		if land:_nonpen_effect(sim,target,location.zone,spec,rng)
+		else:_event(sim,target,"ricochet",false)
+		return _finish(sim,target,base*nonpen)
 	var damage:float=base
 	if rng.randf()<float(spec.effect):
 		var effect:String=_pick(rng,td.get("damage_effects",{}),spec.heavy)
@@ -378,15 +471,53 @@ static func wreck_cover(sim,pos:Vector2,threat:Vector2,reach:float=3.5)->bool:
 		if to_wreck.dot(threat-pos)>0.0 and Geometry2D.get_closest_point_to_segment(wreck.pos,pos,threat).distance_to(wreck.pos)<float(wreck.radius):return true
 	return false
 
+# A land hull's non-penetrating hit: at most one effect from the struck zone's
+# table (light rounds: sights only, at LIGHT_OPTICS), else a plain ricochet.
+static func _nonpen_effect(sim,target:Dictionary,zone:Dictionary,spec:Dictionary,rng:RandomNumberGenerator)->void:
+	var table:Dictionary=zone.nonpen
+	var roll:=rng.randf()
+	var effect:="ricochet"
+	for key in table:
+		if not spec.heavy and key!="optics":continue
+		roll-=float(table[key])*(1.0 if spec.heavy else LIGHT_OPTICS)
+		if roll<0.0:effect=key;break
+	match effect:
+		"mobility":
+			if not target.mobility_kill:
+				target.mobility_kill=true
+				_report(sim,target,effect,"%s track broken · immobilised",false)
+				return
+		"firepower":
+			if not target.firepower_kill:
+				target.firepower_kill=true
+				_report(sim,target,effect,"%s gun damaged · main gun disabled",false)
+				return
+		"optics":
+			if not target.get("optics_kill",false):
+				target["optics_kill"]=true
+				target["accuracy"]=OPTICS_ACCURACY
+				_report(sim,target,effect,"%s sights damaged",false)
+				return
+		"shock":
+			var td:Dictionary=sim.definitions[target.kind]
+			target.suppression=maxf(float(target.suppression),SHOCK_SUPPRESSION)
+			target.cooldown=maxf(float(target.cooldown),0.0)+float(td.interval)*SHOCK_RELOAD
+			target.aim_time=0.0
+			_event(sim,target,effect,false)
+			return
+	_event(sim,target,"ricochet",false)
+
 # Field repair (FieldOps repair-point tick, same safety rules as its hp heal):
 # one knocked-out component at a time, tracks/engine first, then the main gun,
-# then each crew casualty replaced. Progress persists if the work is interrupted.
-const REPAIR_SECONDS:={"mobility":20.0,"firepower":25.0,"crew":40.0}
+# then the sights, then each crew casualty replaced. Progress persists if the
+# work is interrupted.
+const REPAIR_SECONDS:={"mobility":20.0,"firepower":25.0,"optics":15.0,"crew":40.0}
 static func field_repair(sim,u:Dictionary,dt:float)->void:
 	if not u.has("crew") or u.abandoned:return
 	var job:=""
 	if u.mobility_kill:job="mobility"
 	elif u.firepower_kill:job="firepower"
+	elif u.get("optics_kill",false):job="optics"
 	elif int(u.crew)<int(u.crew_full):job="crew"
 	if job.is_empty():
 		u.erase("repair_job");u.erase("repair_done")
@@ -405,6 +536,9 @@ static func field_repair(sim,u:Dictionary,dt:float)->void:
 		"firepower":
 			u.firepower_kill=false
 			_report(sim,u,"repaired_firepower","%s main gun repaired")
+		"optics":
+			u.erase("optics_kill");u.erase("accuracy")
+			_report(sim,u,"repaired_optics","%s sights replaced")
 		"crew":
 			u.crew=int(u.crew)+1
 			_report(sim,u,"repaired_crew","%s crew replacement arrived")
@@ -578,6 +712,7 @@ static func _board(sim,section:Dictionary,hull:Dictionary)->Dictionary:
 	fresh.crew_full=crew_full
 	fresh.mobility_kill=hull.get("mobility_kill",false)
 	fresh.firepower_kill=hull.get("firepower_kill",false)
+	if hull.get("optics_kill",false):fresh["optics_kill"]=true;fresh["accuracy"]=OPTICS_ACCURACY
 	# The wreck is gone: its node hides (not alive, not wrecked).
 	hull.wrecked=false
 	hull.abandoned_hp=0.0

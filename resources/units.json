@@ -25,7 +25,7 @@
     "range": 20,
     "sight": 19,
     "damage": 49,
-    "interval": 3.2,
+    "interval": 7.0,
     "armor": 0,
     "cost": 140,
     "air": false,
@@ -61,6 +61,84 @@
       "mobility": 0.27,
       "firepower": 0.2,
       "crew": 0.35
+    },
+    "hull_area": [
+      1.0,
+      2.0,
+      1.0
+    ],
+    "armor_zones": {
+      "front": [
+        {
+          "zone": "turret_glacis",
+          "share": 0.76,
+          "mm": 760,
+          "nonpen": {
+            "shock": 0.25,
+            "optics": 0.06,
+            "mobility": 0.03,
+            "firepower": 0.03
+          }
+        },
+        {
+          "zone": "mantlet",
+          "share": 0.1,
+          "mm": 420,
+          "nonpen": {
+            "optics": 0.35,
+            "firepower": 0.2,
+            "shock": 0.2
+          }
+        },
+        {
+          "zone": "lower_plate",
+          "share": 0.14,
+          "mm": 330,
+          "nonpen": {
+            "mobility": 0.3,
+            "shock": 0.2
+          }
+        }
+      ],
+      "side": [
+        {
+          "zone": "hull_side",
+          "share": 0.6,
+          "mm": 160,
+          "nonpen": {
+            "mobility": 0.35,
+            "shock": 0.2
+          }
+        },
+        {
+          "zone": "turret_side",
+          "share": 0.4,
+          "mm": 320,
+          "nonpen": {
+            "optics": 0.1,
+            "shock": 0.25
+          }
+        }
+      ],
+      "rear": [
+        {
+          "zone": "engine_deck",
+          "share": 0.7,
+          "mm": 90,
+          "nonpen": {
+            "mobility": 0.4,
+            "shock": 0.1
+          }
+        },
+        {
+          "zone": "turret_bustle",
+          "share": 0.3,
+          "mm": 120,
+          "nonpen": {
+            "shock": 0.2
+          }
+        }
+      ]
     }
   },
   "drone": {
@@ -173,7 +251,12 @@
       "mobility": 0.25,
       "firepower": 0.2,
       "crew": 0.25
-    }
+    },
+    "hull_area": [
+      1.0,
+      2.0,
+      1.0
+    ]
   },
   "fpv_drone": {
     "name": "FPV STRIKE DRONE",

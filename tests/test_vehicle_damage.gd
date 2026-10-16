@@ -44,10 +44,15 @@ func _init()->void:
 				row+="  %s %.2f/%.2f" % [face,near,far]
 			print(row)
 	check(table["atgm/tank/side"]>=0.99 and table["atgm/tank/rear"]>=0.99,"Javelin reliably penetrates tank side and rear")
-	check(table["atgm/tank/front"]>0.15 and table["atgm/tank/front"]<0.5,"Javelin penetrates tank front only sometimes")
-	check(table["tank/tank/side"]>=0.99 and table["tank/tank/rear"]>=0.99 and table["tank/tank/front"]<0.3,"tank AP: flank reliable, frontal duel hard")
-	check(chance(sim,"tank","tank","front",19.0)<table["tank/tank/front"],"tank AP penetration falls with range")
-	check(table["at_gun/tank/side"]>=0.99 and table["at_gun/tank/front"]<0.1,"AT gun kills from the flank, not the front")
+	# Frontal arcs are not uniform: the glacis/turret face stops tank AP and
+	# mostly stops a Javelin, the mantlet and lower plate (a quarter of the
+	# frontal hits) do not.
+	check(table["atgm/tank/front"]>0.3 and table["atgm/tank/front"]<0.65,"Javelin penetrates tank front about half the time (weak zones)")
+	check(table["tank/tank/side"]>=0.99 and table["tank/tank/rear"]>=0.99 and table["tank/tank/front"]<0.35,"tank AP: flank reliable, frontal duel hard")
+	var duel_front:=chance(sim,"tank","tank","front",19.0)
+	check(duel_front<table["tank/tank/front"],"tank AP penetration falls with range")
+	check(duel_front>0.15,"tank AP still finds frontal weak zones at duel range (%.2f)" % duel_front)
+	check(table["at_gun/tank/side"]>=0.99 and table["at_gun/tank/front"]<0.3,"AT gun kills from the flank; frontally only through weak zones")
 	check(table["aa/aa/side"]>=0.99 and table["aa/tank/side"]==0.0 and table["aa/tank/rear"]==0.0,"autocannon defeats light armour only")
 	for target in ["tank","aa","boat"]:
 		for face in FACES:check(table["rifle/%s/%s" % [target,face]]==0.0 and table["bunker/%s/%s" % [target,face]]==0.0,"small arms never penetrate %s %s" % [target,face])
@@ -93,10 +98,15 @@ func _init()->void:
 			if event.type=="vehicle_damage" and event.effect not in ["destroyed","wreck"]:effect=event.effect if event.penetrated else "nonpen_"+event.effect
 		tally[effect]=tally.get(effect,0)+1
 	print("OUTCOMES Javelin vs tank front (n=%d): %s" % [trials,str(tally)])
-	var ricochet:float=float(tally.get("nonpen_ricochet",0)+tally.get("nonpen_mobility",0))/trials
+	var nonpens:=0
+	for key in tally:
+		if str(key).begins_with("nonpen_"):nonpens+=int(tally[key])
+	var ricochet:float=float(nonpens)/trials
 	check(absf(ricochet-(1.0-table["atgm/tank/front"]))<0.03,"frontal Javelin non-penetration share %.2f matches table" % ricochet)
-	var track:float=float(tally.get("nonpen_mobility",0))/maxf(1,tally.get("nonpen_ricochet",0)+tally.get("nonpen_mobility",0))
-	check(track>0.02 and track<0.09,"a few non-penetrating hits break a track (%.3f)" % track)
+	var track:float=float(tally.get("nonpen_mobility",0))/maxf(1,nonpens)
+	check(track>0.015 and track<0.09,"a few non-penetrating hits break a track (%.3f)" % track)
+	var shock:float=float(tally.get("nonpen_shock",0))/maxf(1,nonpens)
+	check(shock>0.15 and shock<0.35,"heavy non-penetrating hits shake the crew (%.3f)" % shock)
 	if sim.has_meta(VehicleDamage.WRECKS):sim.remove_meta(VehicleDamage.WRECKS)
 
 	# --- 3. Immobilised tank holds position but fires --------------------------------
@@ -235,11 +245,49 @@ func _init()->void:
 	print("ATGM x2 vs TANK flank: mean %.1fs %s | front: mean %.1fs %s" % [mean(flank),str(flank),mean(frontal),str(frontal)])
 	check(not flank.has(-1.0) and not frontal.has(-1.0),"two Javelin teams always kill the tank within 120 s")
 	check(mean(frontal)>mean(flank)*1.8,"flank kills markedly faster than frontal fire")
+	# --- 9. Hit location: angled hulls, grazing hits, non-penetrating effects ----------
+	var s9=Sim.new(false,harbor_index())
+	var square:=yawed_chance(s9,"tank",0.0,19.0)
+	var angled:=yawed_chance(s9,"tank",20.0,19.0)
+	var grazing:=yawed_chance(s9,"tank",5.0,19.0)
+	print("TANK AP vs TANK at 19 m: square-on %.2f, yawed 5 deg %.2f, yawed 20 deg %.2f" % [square,grazing,angled])
+	check(angled>square+0.05,"a hull yawed 20 degrees exposes its side to frontal fire")
+	check(grazing<=square+0.001,"grazing hits on the side glance off")
+	var layer:Dictionary=s9.spawn("tank",0,BASE)
+	var plated:Dictionary=s9.spawn("tank",1,BASE+Vector2(19,0))
+	plated.facing=Vector2.LEFT
+	var effects:Dictionary={}
+	var sighted:=false
+	for i in 3000:
+		reset(plated)
+		s9.events.clear()
+		VehicleDamage.strike(s9,layer,plated,s9.damage_amount(layer,plated))
+		for event in s9.events:
+			if event.type=="vehicle_damage" and not event.penetrated:effects[event.effect]=effects.get(event.effect,0)+1
+		if plated.get("optics_kill",false) and not sighted:
+			sighted=true
+			check(is_equal_approx(float(plated.accuracy),VehicleDamage.OPTICS_ACCURACY),"smashed sights cut the layer's accuracy")
+			var before:float=s9.hit_chance(layer,plated)
+			layer["accuracy"]=plated.accuracy
+			check(s9.hit_chance(layer,plated)<before*0.7,"a tank on its auxiliary sight hits less often")
+			layer.erase("accuracy")
+			VehicleDamage.ensure_state(s9,plated)
+			VehicleDamage.field_repair(s9,plated,VehicleDamage.REPAIR_SECONDS.optics+0.1)
+			check(not plated.has("optics_kill") and not plated.has("accuracy"),"field repair replaces the sights")
+	print("NON-PENETRATING tank AP vs tank front at 19 m (n=3000): %s" % str(effects))
+	check(sighted,"frontal hits sometimes smash the sights")
+	for effect in ["shock","optics","firepower","mobility"]:check(effects.get(effect,0)>0,"non-penetrating hits cause %s" % effect)
+	if s9.has_meta(VehicleDamage.WRECKS):s9.remove_meta(VehicleDamage.WRECKS)
+
+	# --- 10. Tank duel: square-on at 18 m, both firing ---------------------------------
+	var duels:=duel_times()
+	print("TANK DUEL square-on 18 m: mean %.1fs %s" % [mean(duels),str(duels)])
+	check(not duels.has(-1.0),"a frontal tank duel is decided within 90 s")
 	print("VEHICLE DAMAGE: %d checks, %d failures" % [checks,failures])
 	quit(0 if failures==0 else 1)
 
 func reset(u:Dictionary)->void:
-	for key in ["crew","crew_full","mobility_kill","firepower_kill","abandoned","buttoned_until","reload_mark","aim_mark"]:u.erase(key)
+	for key in ["crew","crew_full","mobility_kill","firepower_kill","optics_kill","accuracy","abandoned","buttoned_until","reload_mark","aim_mark"]:u.erase(key)
 	u.hp=u.max_hp
 	u.cooldown=0.0
 
@@ -286,4 +334,35 @@ func kill_times(flank:bool)->Array:
 			sim.tick(1.0/30)
 			if not sim.alive(tank):killed=sim.time;break
 		times.append(snappedf(killed,0.1))
+	return times
+
+# Penetration chance of `weapon` at `distance` m against a tank whose hull is
+# yawed `yaw` degrees off the line of fire (0 = square-on).
+func yawed_chance(sim,weapon:String,yaw:float,distance:float)->float:
+	var target:={"kind":"tank","pos":Vector2(100,100),"facing":Vector2.RIGHT.rotated(deg_to_rad(yaw))}
+	var shooter:={"kind":weapon,"pos":Vector2(100+distance,100)}
+	return VehicleDamage.penetration_chance(sim,shooter,target)
+
+# Two stationary tanks 18 m apart, hulls square-on, both firing (legacy coast
+# preset, as kill_times). Seconds to the first loss; -1 = none within 90 s.
+func duel_times()->Array:
+	var times:Array=[]
+	for trial in 6:
+		var sim=Sim.new(false,0)
+		sim.combat_rng.seed=3000+trial
+		var rng:=RandomNumberGenerator.new()
+		rng.seed=900+trial
+		sim.set_meta("vehicle_damage_rng",rng)
+		var base:=Vector2(22,62)
+		var a:Dictionary=sim.spawn("tank",0,base)
+		var b:Dictionary=sim.spawn("tank",1,base+Vector2(18,0))
+		a.facing=Vector2.RIGHT
+		b.facing=Vector2.LEFT
+		sim.update_visibility()
+		var decided:=-1.0
+		for i in 90*30:
+			sim.tactical_clock=1000.0
+			sim.tick(1.0/30)
+			if not sim.alive(a) or not sim.alive(b):decided=sim.time;break
+		times.append(snappedf(decided,0.1))
 	return times
