@@ -1,5 +1,5 @@
 extends SceneTree
-# Javelin flight (fire-and-forget): lock-on before launch needs line of sight;
+# Javelin flight (fire-and-forget) and missile load: lock-on before launch needs line of sight;
 # real time of flight compressed with the game time scale; after launch the
 # gunner is free and the missile's seeker follows the target (a moving tank is
 # still hit; the gunner killed, suppressed, moving or blinded changes nothing);
@@ -10,6 +10,7 @@ const Sim=preload("res://scripts/simulation.gd")
 const Effects=preload("res://scripts/effects.gd")
 const AudioFX=preload("res://scripts/audio_fx.gd")
 const VehicleDamage=preload("res://scripts/vehicle_damage.gd")
+const HUD=preload("res://scripts/hud.gd")
 const DT:=1.0/30
 const BASE:=Vector2(30,62)
 var failures:=0
@@ -27,6 +28,10 @@ func _init()->void:
 	miss_checks()
 	presentation_checks()
 	audio_checks()
+	load_checks()
+	resupply_checks()
+	ai_resupply_checks()
+	infantry_target_checks()
 	print("ATGM FLIGHT: %d checks, %d failures" % [checks,failures])
 	quit(0 if failures==0 else 1)
 
@@ -271,3 +276,110 @@ func audio_checks()->void:
 	audio.event({"type":"world_blast","kind":"missile","pos":centre+Vector2(18,0),"radius":2.5,"visible":true})
 	check(audio.stats().counters.played==played and audio.stats().pending==0,"the missile burst is voiced once, by missile_impact")
 	audio.free()
+
+# A team carries three missiles (CLU + one round on the gunner, two on the
+# ammunition bearer); when they are spent the gunner fights with his rifle.
+func load_checks()->void:
+	var world:=setup(16.0,9)
+	var sim=world.sim
+	check(sim.missiles_left(world.team)==3 and int(sim.definitions.atgm.missiles)==3,"a Javelin team carries three missiles")
+	check(Array(HUD.damage_tags(sim,world.team))==["MISSILES 3/3"],"HUD reads MISSILES 3/3: %s" % [HUD.damage_tags(sim,world.team)])
+	var log:Array=[]
+	var warned:=false
+	for i in 30*40:
+		world.tank.hp=world.tank.max_hp
+		world.tank.cooldown=1000.0
+		sim.tactical_clock=1000.0
+		sim.tick(DT)
+		for event in sim.events:
+			if event.type=="shot" and event.kind=="atgm":log.append(event)
+			if event.type=="warning" and str(event.text).contains("out of missiles"):warned=true
+		sim.events.clear()
+	print("LOAD launches in 40 s: %d, missiles left %d" % [log.size(),sim.missiles_left(world.team)])
+	check(log.size()==3 and sim.missiles_left(world.team)==0,"three launches and no more (%d)" % log.size())
+	check(warned,"the player is told the team is out of missiles")
+	check(sim.section_weapon(world.team,world.team.members[0])=="rifle","the empty gunner fights with his rifle")
+	check(Array(HUD.damage_tags(sim,world.team))==["NO MISSILES · RESUPPLY"],"HUD reads NO MISSILES: %s" % [HUD.damage_tags(sim,world.team)])
+
+# Rounds are drawn one per resupply_real s (game-scaled) beside a supply
+# source, not away from it and not under fire.
+func resupply_checks()->void:
+	var world:=setup(16.0,9)
+	var sim=world.sim
+	var team:Dictionary=world.team
+	team.missiles=0
+	var per:float=float(sim.definitions.atgm.resupply_real)*Sim.GAME_TIME_SCALE
+	for i in 30*int(per+2):step(sim,world.tank,[])
+	check(sim.missiles_left(team)==0,"no resupply away from a supply source")
+	var source:Dictionary=sim.supply_source(team)
+	var spot:Vector2=source.pos
+	world.tank.pos=spot+Vector2(60,0)
+	place(team,spot)
+	team.last_hit=sim.time
+	for i in 30*2:step(sim,world.tank,[])
+	team.last_hit=sim.time
+	for i in 30*int(per):
+		step(sim,world.tank,[])
+		team.last_hit=sim.time
+	check(sim.missiles_left(team)==0,"no resupply under fire")
+	var started:float=sim.time
+	var full:=-1.0
+	for i in 30*int(4*per):
+		step(sim,world.tank,[])
+		if full<0.0 and sim.missiles_left(team)==3:full=sim.time-started
+	print("RESUPPLY 3 rounds in %.1f s (%.1f s each = %.0f s real)" % [full,per,float(sim.definitions.atgm.resupply_real)])
+	check(full>=3*per-RESUPPLY_SLACK-0.5 and full<=3*per+RESUPPLY_SLACK+3.0,"three rounds take ~3 x %.1f s beside the supply source (%.1f s)" % [per,full])
+
+const RESUPPLY_SLACK:=0.5
+
+func place(team:Dictionary,at:Vector2)->void:
+	team.pos=at
+	team.orders.clear()
+	team.path.clear()
+	for k in team.members.size():team.members[k].pos=at+Vector2(0.8*k,0.3)
+
+# The enemy AI walks an empty team back for rounds and returns it to its order.
+func ai_resupply_checks()->void:
+	var sim=Sim.new(false,0)
+	# A distant player unit keeps the mission running (no side wiped out).
+	sim.spawn("rifle",0,Vector2(8,10))
+	var team:Dictionary=sim.spawn("atgm",1,BASE+Vector2(10,0))
+	var mark:=BASE+Vector2(-14,-10)
+	sim.issue([team.id],mark,"attack_move")
+	team.missiles=0
+	var source:Dictionary=sim.supply_source(team)
+	var reached:=false
+	var refilled:=-1.0
+	for i in 30*90:
+		sim.tactical_clock=1000.0
+		sim.tick(DT)
+		sim.events.clear()
+		if team.pos.distance_to(source.pos)<=float(source.reach):reached=true
+		if refilled<0.0 and sim.missiles_left(team)==3:refilled=sim.time
+		if refilled>0.0 and sim.time>refilled+1.0:break
+	var resumed:bool=not team.orders.is_empty() and Vector2(team.orders[-1].pos).distance_to(mark)<1.0
+	print("AI RESUPPLY reached source %s, full at %.1f s, resumed %s" % [reached,refilled,resumed])
+	check(reached,"an empty enemy team walks back to its supply source")
+	check(refilled>0.0,"it draws three rounds there")
+	check(resumed,"then returns to its last order")
+
+# Missiles are kept for vehicles, works and troops in buildings: against a
+# section in the open the gunner uses his rifle.
+func infantry_target_checks()->void:
+	var sim=Sim.new(false,0)
+	var team:Dictionary=sim.spawn("atgm",0,BASE)
+	var foot:Dictionary=sim.spawn("rifle",1,BASE+Vector2(10,0))
+	sim.update_visibility()
+	var missiles:=0
+	var rifle:=0
+	for i in 30*15:
+		sim.tactical_clock=1000.0
+		sim.tick(DT)
+		for event in sim.events:
+			if event.type=="shot" and event.kind=="atgm":missiles+=1
+			if event.type=="shot" and event.kind=="rifle" and (event.from as Vector2).distance_to(team.members[0].pos)<0.5:rifle+=1
+		sim.events.clear()
+		for m in foot.members:m.hp=m.max_hp
+	print("INFANTRY in the open: %d missiles, %d gunner rifle shots" % [missiles,rifle])
+	check(missiles==0,"no missile at a section in the open")
+	check(rifle>0,"the gunner fires his rifle at it")

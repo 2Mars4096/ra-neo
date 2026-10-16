@@ -54,7 +54,9 @@
       "damage": 30,
       "structure": 5
     },
-    "lock_real": 2.14
+    "lock_real": 2.14,
+    "missiles": 3,
+    "resupply_real": 30.0
   },
   "tank": {
     "name": "M1 VANGUARD",

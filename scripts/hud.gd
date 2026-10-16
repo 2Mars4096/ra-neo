@@ -679,6 +679,10 @@ func draw_sidebar(sim) -> void:
 # important first. Infantry wounds are deliberately never labelled.
 static func damage_tags(sim,u:Dictionary) -> PackedStringArray:
 	var tags:=PackedStringArray()
+	# Javelin teams: missiles carried (simulation.gd missile load).
+	if u.kind=="atgm":
+		var left:int=sim.missiles_left(u)
+		tags.append("MISSILES %d/%d" % [left,int(sim.definitions.atgm.missiles)] if left>0 else "NO MISSILES · RESUPPLY")
 	if not u.has("crew"):return tags
 	if u.get("abandoned",false):tags.append("ABANDONED")
 	if u.has("crash"):tags.append("GOING DOWN")

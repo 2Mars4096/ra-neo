@@ -577,7 +577,7 @@ func can_fire(u: Dictionary, other: Dictionary) -> bool:
 		var budget:int=soldier_checks+SECTION_CHECKS
 		for member in u.members:
 			if member.hp<=0:continue
-			var weapon:String="atgm" if u.kind=="atgm" and member.index==0 else "rifle"
+			var weapon:String=section_weapon(u,member)
 			if weapon_reaches(weapon,member.pos,other,mini(SOLDIER_CHECKS,budget-soldier_checks)):return true
 			if soldier_checks>=budget:return false
 		return false
@@ -672,7 +672,7 @@ func unit_altitude(u:Dictionary) -> float:
 # The weapon a unit brings against this kind (squads: Javelin or rifles).
 func attack_weapon(u:Dictionary,target_kind:String) -> String:
 	if u.get("members",[]).is_empty():return u.kind
-	return "atgm" if u.kind=="atgm" and effective_weapon("atgm",target_kind) else "rifle"
+	return "atgm" if u.kind=="atgm" and missiles_left(u)>0 and effective_weapon("atgm",target_kind) else "rifle"
 
 # Ground distance at which the weapon reaches this target, net of its altitude.
 func horizontal_reach(weapon:String,other:Dictionary) -> float:
@@ -705,7 +705,7 @@ func contact_known(u:Dictionary,other:Dictionary) -> bool:
 func effective_unit(u:Dictionary,target_kind:String) -> bool:
 	if u.get("members",[]).is_empty():return effective_weapon(u.kind,target_kind)
 	for member in u.members:
-		if member.hp>0 and effective_weapon("atgm" if u.kind=="atgm" and member.index==0 else "rifle",target_kind):return true
+		if member.hp>0 and effective_weapon(section_weapon(u,member),target_kind):return true
 	return false
 
 func effective_weapon(weapon:String, target_kind:String) -> bool:
@@ -863,6 +863,7 @@ func launch_missile(u:Dictionary,proxy:Dictionary,target:Dictionary,scale:float,
 
 # Per tick after the unit loop: the seeker follows its target; impacts that are due.
 func tick_missiles() -> void:
+	tick_ammo()
 	for i in range(missiles.size()-1,-1,-1):
 		var m:Dictionary=missiles[i]
 		var target:=get_unit(int(m.target))
@@ -872,6 +873,81 @@ func tick_missiles() -> void:
 		if time<float(m.impact_at):continue
 		missiles.remove_at(i)
 		missile_impact(m,target)
+
+# Javelin missile load. A team carries units.json atgm.missiles rounds (the CLU
+# with one round on the gunner, two more on the ammunition bearer: 6.4 kg CLU,
+# 15.9 kg per round). When they are spent the gunner fights with his rifle.
+# Rounds are drawn only near a friendly supply source (SUPPLY_KINDS, or the
+# side's rear rally point), one per resupply_real s (game time scaled), and
+# not while under fire. AI-controlled sides (team 1) send an empty team back
+# to the nearest source and return it to its last order when full.
+const SUPPLY_KINDS:=["hq","refinery","forward_supply_point","command_post","ammo_depot"]
+const SUPPLY_REACH:=5.0
+const RESUPPLY_QUIET:=3.0
+const AMMO_PERIOD:=0.5
+var ammo_checked:=0.0
+
+func missiles_left(u:Dictionary) -> int:
+	if u.kind!="atgm":return 0
+	return int(u.get("missiles",definitions.atgm.missiles))
+
+func section_weapon(u:Dictionary,member:Dictionary) -> String:
+	return "atgm" if u.kind=="atgm" and member.index==0 and missiles_left(u)>0 else "rifle"
+
+func spend_missile(u:Dictionary) -> void:
+	u["missiles"]=maxi(0,missiles_left(u)-1)
+	u.erase("resupply_done")
+	if u.missiles==0 and u.team==0:events.append({"type":"warning","text":"Javelin team out of missiles · resupply at HQ or a supply point"})
+
+# Nearest friendly supply source: {pos, reach} (reach: distance to stand within).
+func supply_source(u:Dictionary) -> Dictionary:
+	var best:={"pos":rally_point(u),"reach":SUPPLY_REACH}
+	var nearest:float=u.pos.distance_to(best.pos)
+	for other in units:
+		if other.team!=u.team or not (other.kind in SUPPLY_KINDS) or not alive(other) or float(other.get("build_left",0.0))>0:continue
+		var reach:float=float(definitions[other.kind].get("radius",2.0))+SUPPLY_REACH
+		var gap:float=u.pos.distance_to(other.pos)-reach
+		if gap<nearest:
+			nearest=gap
+			best={"pos":other.pos,"reach":reach}
+	return best
+
+func tick_ammo() -> void:
+	var elapsed:float=time-ammo_checked
+	if elapsed<AMMO_PERIOD:return
+	ammo_checked=time
+	var d:Dictionary=definitions.atgm
+	var load:int=int(d.missiles)
+	var per_round:float=float(d.resupply_real)*GAME_TIME_SCALE
+	for u in units:
+		if u.kind!="atgm" or not alive(u):continue
+		var left:int=missiles_left(u)
+		if left>=load:continue
+		var source:=supply_source(u)
+		if u.pos.distance_to(source.pos)<=float(source.reach):
+			if time-float(u.last_hit)<RESUPPLY_QUIET:continue
+			u["resupply_done"]=float(u.get("resupply_done",0.0))+elapsed
+			if float(u.resupply_done)>=per_round:
+				u.resupply_done=float(u.resupply_done)-per_round
+				left+=1
+				u["missiles"]=left
+			u.reason="Resupplying missiles %d/%d" % [left,load]
+			if left>=load:
+				u.erase("resupply_done")
+				if u.has("resupply_resume"):
+					var resume:Dictionary=u.resupply_resume
+					u.erase("resupply_resume")
+					# Unless re-tasked meanwhile (an order away from the source).
+					if u.orders.is_empty() or Vector2(u.orders[-1].pos).distance_to(source.pos)<=float(source.reach)+2.0:issue([u.id],resume.pos,resume.mode)
+			continue
+		if u.team==0 or left>0 or Garrison.inside(u):continue
+		# AI: an empty team heads back for rounds (re-sent if re-tasked elsewhere).
+		var heading:bool=not u.orders.is_empty() and Vector2(u.orders[-1].pos).distance_to(source.pos)<=float(source.reach)+2.0
+		if heading:continue
+		if not u.has("resupply_resume") and not u.orders.is_empty():u["resupply_resume"]={"pos":u.orders[-1].pos,"mode":"attack_move" if u.orders[-1].mode in ["attack","attack_move"] else u.orders[-1].mode}
+		var away:Vector2=u.pos-source.pos
+		var stand:Vector2=source.pos+(away.normalized() if away.length()>0.01 else Vector2.DOWN)*(float(source.reach)-1.5)
+		if issue([u.id],stand,"move")>0:u.reason="Out of missiles · returning to resupply"
 
 func missile_impact(m:Dictionary,target:Dictionary) -> void:
 	if m.lost=="":
@@ -1213,7 +1289,16 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			if member.posture!="RISING" or time>=member.posture_until:
 				member.posture="STANDING" if member.cover_phase=="SEEKING" and not member.in_trench else "CROUCHED"
 			continue
-		var weapon:String="atgm" if u.kind=="atgm" and member.index==0 else "rifle"
+		var weapon:String=section_weapon(u,member)
+		if weapon=="atgm":
+			# Missiles are kept for vehicles, works and troops in buildings; with
+			# none of those in reach the gunner fights with his rifle.
+			if not eligible_by_weapon.has("atgm"):
+				var marks:Array=[]
+				for other in candidates:
+					if alive(other) and other.team!=u.team and contact_known(u,other) and effective_weapon("atgm",other.kind) and auto_target_ok(u,other) and (other.members.is_empty() or Garrison.inside(other)):marks.append(other)
+				eligible_by_weapon["atgm"]=marks
+			if eligible_by_weapon["atgm"].is_empty():weapon="rifle"
 		var d:Dictionary=definitions[weapon]
 		var target:Dictionary={}
 		var victim:Dictionary={}
@@ -1322,7 +1407,9 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		proxy.suppression=maxf(u.suppression,member.suppression)
 		if hurt:proxy["accuracy"]=Infantry.LIGHT_ACCURACY
 		var scale:float=(1.0 if weapon=="atgm" else 0.25)*(0.4 if u.kind=="engineer" else 1.0)
-		if weapon=="atgm":launch_missile(u,proxy,target,scale,victim)
+		if weapon=="atgm":
+			launch_missile(u,proxy,target,scale,victim)
+			spend_missile(u)
 		else:resolve_shot(proxy,target,scale,victim)
 		member.cooldown=float(d.interval)*(1.8 if proxy.suppression>0.6 else 1.0)
 		member.rounds-=1
