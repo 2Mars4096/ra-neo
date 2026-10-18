@@ -34,7 +34,7 @@
 
 - [ ] [12: Field operations and smooth play](plans/12-field-operations.md) — current priority: one supply, off-map purchases, engineer tactical support, measured lag fixes.
 
-- [ ] Resolve three-person squad timing regression: first section arrives67.10s versus the preserved60s assertion; all90s completion/collision checks pass.
+- [x] Three-person squad timing regression resolved (test_regroup_recovery 0 failures, 2026-10-18).
 
 - [x] [11: Structured asset library](plans/11-asset-library.md) —100 callable models/10 categories, native gallery, metadata, placement contracts and Codex/Claude review fixes.
 
