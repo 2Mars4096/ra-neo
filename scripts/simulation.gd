@@ -203,7 +203,7 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 			# Attack orders pursue the last visible position, never hidden live positions.
 			target = enemy.pos
 			if not terrain.traversable(target, domain, radius):
-				target = attack_position(u, enemy)
+				target = attack_position(u, enemy, slots+attack_rivals(u, target_id, ids, queued))
 		# Over the tick's route budget, validate reachability only (grid search)
 		# and plan the route at the start of a later tick.
 		var planned:=take_route_budget(u.pos,target)
@@ -327,19 +327,55 @@ func plan_queued_routes()->void:
 		if u.path.is_empty():finish_order(u)
 	route_budget-=float(ROUTE_QUEUE_WORK-work)/ROUTE_WORK_PER_UNIT
 
-func attack_position(u:Dictionary,enemy:Dictionary)->Vector2:
+# Firing spots a group attacking a structure must not share: friends already
+# attacking it keep their spots and parked friendly hulls hold theirs, so the
+# attackers spread round the target instead of converging on one cell (where
+# they would cycle give-way among themselves). Returns slot-style entries.
+func attack_rivals(u:Dictionary,target_id:int,ids:Array,queued:bool)->Array[Dictionary]:
+	var layer:=collision_layer(u)
+	var rivals:Array[Dictionary]=[]
+	for other in units:
+		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=layer or definitions[other.kind].get("structure",false):continue
+		# Units of this command re-plan (their spots arrive as command slots).
+		if not queued and (ids.has(other.id) or ids.has(float(other.id))):continue
+		if other.orders.is_empty():
+			if other.maneuver.is_empty():rivals.append({"pos":other.pos,"radius":crowd_radius(other.kind),"layer":layer})
+			continue
+		for order in other.orders:
+			if order.mode=="attack" and int(order.get("target",-1))==target_id:
+				# Its spot, and where it stands (stopped short to fire).
+				rivals.append({"pos":order.pos,"radius":crowd_radius(other.kind),"layer":layer})
+				rivals.append({"pos":other.pos,"radius":crowd_radius(other.kind),"layer":layer})
+				break
+	return rivals
+
+func attack_position(u:Dictionary,enemy:Dictionary,taken:Array=[])->Vector2:
 	var d:Dictionary=definitions[u.kind]
 	var reach:float=horizontal_reach(attack_weapon(u,enemy.kind),enemy)*0.9
 	var candidates:Array=[]
-	for x in terrain.fog_grid_size.x:
-		for y in terrain.fog_grid_size.y:
+	# Only cells within reach can qualify: scan their bounding box, not the map.
+	var low:Vector2i=terrain.cell(enemy.pos-Vector2.ONE*reach)
+	var high:Vector2i=terrain.cell(enemy.pos+Vector2.ONE*reach)
+	for x in range(low.x,high.x+1):
+		for y in range(low.y,high.y+1):
 			var p:Vector2=terrain.center(Vector2i(x,y))
 			if not terrain.traversable(p,d.domain,float(d.radius)) or p.distance_to(enemy.pos)>reach:continue
 			if definitions[enemy.kind].domain!="air" and not terrain.line_clear(p,enemy.pos):continue
 			candidates.append({"pos":p,"distance":p.distance_squared_to(u.pos)})
 	candidates.sort_custom(func(a,b):return a.distance<b.distance)
-	for candidate in candidates:
-		if not terrain.path(u.pos,candidate.pos,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind)).is_empty():return candidate.pos
+	var layer:=collision_layer(u)
+	var crowd:=crowd_radius(u.kind)
+	var ground:bool=definitions[enemy.kind].domain!="air"
+	# A free spot first; with every spot in reach taken, the nearest one.
+	for spread in ([true,false] if not taken.is_empty() else [false]):
+		for candidate in candidates:
+			if spread and taken.any(func(slot):return slot.layer==layer and candidate.pos.distance_to(slot.pos)<crowd+float(slot.radius)+0.7):continue
+			# A hull stops up to ~0.75 u off its spot: no line of fire that a
+			# corner cuts at a hand's width either side.
+			if ground:
+				var side:Vector2=(enemy.pos-candidate.pos).normalized().orthogonal()*0.75
+				if not terrain.line_clear(candidate.pos+side,enemy.pos) or not terrain.line_clear(candidate.pos-side,enemy.pos):continue
+			if not terrain.path(u.pos,candidate.pos,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind)).is_empty():return candidate.pos
 	return Vector2(-1,-1)
 
 
@@ -1461,6 +1497,9 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			u["stall_pos"]=u.pos;u["stall_at"]=time
 		u["stall_seen"]=time
 		stalled=time-float(u.stall_at)>2.0
+		# Jammed a hand's width from a waypoint (a grid centre a friend now
+		# covers): steer for the next one instead of nosing into the friend.
+		if (stalled or u.blocked_time>1.0) and u.path.size()>1 and u.pos.distance_to(u.path[0])<1.0:u.path.pop_front()
 		# Jam clock: no 2 u of headway, kept across re-plans (which restart the
 		# stall clock), so a friendly jam escalates instead of re-planning forever.
 		if time-float(u.get("jam_seen",-1.0))>0.5 or u.pos.distance_to(u.get("jam_pos",u.pos))>2.0:
@@ -1474,6 +1513,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 				u.path.clear()
 				finish_order(u)
 				return
+			if order.mode=="attack" and jam>JAM_GIVE_WAY and attack_respot(u,order):return
 			if jam>JAM_GIVE_WAY and time>=float(u.get("give_way_at",0.0)):
 				u["give_way_at"]=time+1.0
 				if not make_way(u,true,jam>JAM_UNDER_FIRE) and jam>JAM_BACK_OFF:back_off(u)
@@ -2064,9 +2104,10 @@ func standing_bodies(u:Dictionary,from:Vector2,to:Vector2,ignore:Array=[])->Arra
 # With `movers` (a hull jammed among friendly vehicles), moving friendly
 # vehicles of lower priority (higher id: deterministic right of way) give way
 # too: they back or turn off to such a spot, then resume their own orders.
-# A mover in a fight is not asked (one under threat but not firing is, by an
-# `insistent` hull jammed past JAM_UNDER_FIRE). Returns true when a friend was
-# asked to give way.
+# A mover in a fight is not asked (one under threat but not firing, or only
+# shelling a building, is, by an `insistent` hull jammed past JAM_UNDER_FIRE).
+# An immobilised hull is never asked. Returns true when a friend was asked to
+# give way.
 const JAM_GIVE_WAY:=2.5
 const JAM_BACK_OFF:=4.0
 const JAM_UNDER_FIRE:=12.0
@@ -2077,9 +2118,10 @@ func make_way(u:Dictionary,movers:bool=false,insistent:bool=false)->bool:
 	for other in movement_neighbors(u):
 		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=collision_layer(u):continue
 		var od:Dictionary=definitions[other.kind]
-		if not other.maneuver.is_empty() or other.hold_command or od.get("structure",false) or other.has("building_id") or time<float(other.get("yield_until",0.0)):continue
+		# An immobilised hull cannot pull over: the asker routes round it instead.
+		if not other.maneuver.is_empty() or other.hold_command or od.get("structure",false) or other.has("building_id") or other.get("mobility_kill",false) or time<float(other.get("yield_until",0.0)):continue
 		if not other.orders.is_empty():
-			if not movers or other.id<u.id or not u.members.is_empty() or not other.members.is_empty() or other.orders[0].get("give_way",false) or engaged(other) or (not insistent and under_threat(other)):continue
+			if not movers or other.id<u.id or not u.members.is_empty() or not other.members.is_empty() or other.orders[0].get("give_way",false) or (engaged(other) and not (insistent and shelling(other))) or (not insistent and under_threat(other)):continue
 			# Only a mover ahead holds the way (one behind is just following).
 			if (other.pos-u.pos).dot(u.path[0]-u.pos)<=0.0:continue
 		var clearance:float=crowd_radius(u.kind)+crowd_radius(other.kind)+0.5
@@ -2116,12 +2158,21 @@ func back_off(u:Dictionary)->void:
 		if other.pos.distance_to(u.pos)>clearance+1.0:continue
 		keep_off.append({"pos":other.pos,"radius":minf(clearance,other.pos.distance_to(u.pos)-0.05)})
 		if not other.path.is_empty():legs.append([other.pos]+other.path.slice(0,2))
-	if keep_off.is_empty():return
+	# Only friends moving through press it: backing off for parked or
+	# immobilised hulls lets nobody pass and just repeats (the detour routes
+	# round them instead).
+	if keep_off.is_empty() or legs.is_empty():return
 	var found:Array=_give_way_spot(u,legs,keep_off,own*2.0+0.5,true)
 	if found.is_empty():return
 	u["yield_until"]=time+6.0
 	give_way(u,found)
 	u.reason="Making way"
+
+# Firing on a building is no fight for the crew's life: a friend jammed past
+# JAM_UNDER_FIRE (insistent) may ask it to pull over; it resumes firing after.
+func shelling(u:Dictionary)->bool:
+	var target:=get_unit(int(u.target))
+	return alive(target) and definitions[target.kind].get("structure",false)
 
 # A crew in a fight (a target, or firing in the last few seconds) holds its
 # ground: it neither gives way nor backs off.
@@ -2184,6 +2235,39 @@ func _give_way_spot(other:Dictionary,legs:Array,keep_off:Array,clearance:float,m
 			if not route.is_empty() and _route_length(other.pos,route)<=ring*1.6+2.0:return [spot,route]
 			if queries>=6:return []
 	return []
+
+# A hull jammed on its way to a firing spot on a structure takes the nearest
+# free one instead (in reach and line of fire, clear of the spots and hulls of
+# friends attacking it and of parked friends): an attack group spreads round
+# the target rather than queueing behind friends stopped to fire. Once per
+# RESPOT_EVERY; give-way and back-off still follow while the jam lasts.
+const RESPOT_EVERY:=4.0
+func attack_respot(u:Dictionary,order:Dictionary)->bool:
+	if time<float(u.get("respot_at",0.0)):return false
+	u["respot_at"]=time+RESPOT_EVERY
+	var enemy:=get_unit(int(order.get("target",-1)))
+	var d:Dictionary=definitions[u.kind]
+	if not alive(enemy) or terrain.traversable(enemy.pos,d.domain,float(d.radius)):return false
+	# Routes round friendly hulls standing still (firing, parked): a plain
+	# route would lead straight back into the line of friends firing.
+	var avoid:Array=[]
+	for other in movement_neighbors(u):
+		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=collision_layer(u) or not other.members.is_empty() or float(other.speed_now)>0.5:continue
+		var clearance:float=float(d.radius)+0.4+float(definitions[other.kind].radius)+0.08
+		avoid.append({"pos":other.pos,"radius":minf(clearance,u.pos.distance_to(other.pos)-0.05)})
+	var spot:=attack_position(u,enemy,attack_rivals(u,enemy.id,[],true))
+	if spot.x<0:return false
+	var route:=terrain.path(u.pos,spot,d.domain,float(d.radius),avoid,terrain.mobility_profile(u.kind))
+	# Pressed hard against a friend there may be no way round from here yet.
+	if route.is_empty():route=terrain.path(u.pos,spot,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind))
+	if route.is_empty():return false
+	order.pos=spot
+	u.path=route
+	u.blocked_time=0.0
+	# The jam clock runs on: a crowd that still holds the hull escalates to
+	# give-way and back-off as before (a new spot alone never ends a jam).
+	u.reason="Taking another firing position"
+	return true
 
 # Near its goal, a hull that cannot close in takes the clear spot it is on:
 # its final waypoint is a hand's width away, a friendly vehicle holds the spot,

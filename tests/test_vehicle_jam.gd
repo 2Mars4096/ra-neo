@@ -75,6 +75,11 @@ func _init()->void:
 	for corner in [Vector2(-1,-1),Vector2(1,-1),Vector2(1,1),Vector2(-1,1)]:
 		fired.append([yard+corner*12.0,yard,(-corner).normalized()])
 	run_case("same_goal_under_fire",fired,60.0,"move",1.0/30.0,yard+Vector2(0,-24))
+	# 9. A pressed block of six tanks given one group attack on an enemy
+	# structure (classic map, enemy HQ): they spread to distinct firing spots
+	# round it and all fire, with no give-way cycle among themselves.
+	run_group_attack(1.0/30.0)
+	run_group_attack(0.1)
 	if checks==0:failures+=1;printerr("FAIL: no cases ran")
 	print("VEHICLE JAM: %d checks, %d failures" % [checks,failures])
 	quit(0 if failures==0 else 1)
@@ -149,3 +154,57 @@ func run_case(label:String,entries:Array,limit:float,mode:String="move",dt:float
 		check(under_fire>1.0,"%s: the tanks are under threat (%.1f s)" % [label,under_fire])
 		line+=" under_fire=%.1f" % under_fire
 	print(line," wall=%.0f ms" % elapsed)
+
+func run_group_attack(dt:float)->void:
+	var label:="group_attack_structure_dt%.2f" % dt
+	var sim=Sim.new(true,scenario_index("classic"))
+	var hq:Dictionary={}
+	for u in sim.units:
+		if u.team==1 and u.kind=="hq":hq=u
+		elif u.team==1:u.hp=0.0
+	check(not hq.is_empty() and not sim.terrain.traversable(hq.pos,"land",2.45),"%s: fixture has an enemy structure" % label)
+	var tanks:Array=[]
+	for i in 6:
+		var start:=Vector2(28+(i%2)*CONTACT,8+(i/2)*CONTACT)
+		var tank:Dictionary=sim.spawn("tank",0,start)
+		tank.pos=start
+		tank.facing=Vector2.RIGHT
+		tanks.append(tank)
+	sim.rebuild_spatial()
+	hq.seen_by=[true,true];hq.visible=true
+	var ids:Array=tanks.map(func(t):return t.id)
+	check(sim.issue(ids,hq.pos,"attack",false,hq.id)==tanks.size(),"%s: every tank accepts the group attack" % label)
+	var spots:Array=tanks.map(func(t):return t.orders[0].pos if not t.orders.is_empty() else Vector2.INF)
+	var closest:=INF
+	for i in spots.size():
+		for j in range(i+1,spots.size()):closest=minf(closest,spots[i].distance_to(spots[j]))
+	check(closest>=sim.crowd_radius("tank")*2.0,"%s: firing spots are distinct (closest %.1f u apart)" % [label,closest])
+	var streak:Array=[];var worst:Array=[];var anchor:Array=[];var stall:Array=[];var worst_stall:Array=[];var fired:Array=[]
+	for tank in tanks:
+		streak.append(0.0);worst.append(0.0);anchor.append(tank.pos);stall.append(0.0);worst_stall.append(0.0);fired.append(-1.0)
+	var limit:=90.0
+	for step in int(limit/dt):
+		hq.hp=hq.max_hp;hq.seen_by=[true,true];hq.visible=true
+		sim.classic.enemy_credits=0.0
+		sim.tick(dt);sim.events.clear()
+		var done:=true
+		for i in tanks.size():
+			var tank:Dictionary=tanks[i]
+			if tank.state=="YIELDING" and tank.blocked_time>0:streak[i]+=dt
+			else:streak[i]=0.0
+			worst[i]=maxf(worst[i],streak[i])
+			# Firing from its spot is no stall.
+			if tank.orders.is_empty() or tank.state=="ENGAGING" or tank.pos.distance_to(anchor[i])>1.5:
+				anchor[i]=tank.pos;stall[i]=0.0
+			else:stall[i]+=dt
+			worst_stall[i]=maxf(worst_stall[i],stall[i])
+			if fired[i]<0 and tank.target==hq.id and float(tank.last_shot)>0:fired[i]=sim.time
+			if fired[i]<0:done=false
+		if done:break
+	var line:="%s: closest_spots=%.1f" % [label,closest]
+	for i in tanks.size():
+		line+=" [%d fired=%.1f yield=%.1f stall=%.1f %s]" % [i,fired[i],worst[i],worst_stall[i],tanks[i].state]
+		check(fired[i]>=0.0,"%s: tank %d reaches a firing spot and fires within %.0f s" % [label,i,limit])
+		check(worst[i]<=YIELD_LIMIT,"%s: tank %d yields at most %.0f s at a stretch (%.1f s)" % [label,i,YIELD_LIMIT,worst[i]])
+		check(worst_stall[i]<=YIELD_LIMIT*2.0,"%s: tank %d is never stuck without headway over %.0f s (%.1f s)" % [label,i,YIELD_LIMIT*2.0,worst_stall[i]])
+	print(line)
