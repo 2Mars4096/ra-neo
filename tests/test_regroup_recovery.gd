@@ -39,10 +39,15 @@ func _init()->void:
 					print(" actor=",m.index," pos=",m.pos," phase=",m.get("cover_phase","")," occupying=",m.get("occupying",false)," goal=",m.cover_goal," cover_path=",m.get("cover_path",[])," gap=",m.pos.distance_to(u.pos)," regroup=",m.get("regroup_path",[]))
 	check(sim.get_unit(1).pos.distance_to(Vector2(21.7,11.2))>6,"squad one escapes the reproduced villa stall")
 	check(sim.get_unit(2).pos.distance_to(Vector2(16.6,30))>6,"squad two escapes the reproduced cafe stall")
+	# Sections caught mid-regroup at the 60 s check (contact just ended, so its
+	# shelters stopped counting) are judged when that regroup ends instead.
+	var reunion_due:Dictionary={}
 	for id in [1,2,3]:
 		var u:Dictionary=sim.get_unit(id)
 		check(u.hp>0,"mission section survives recovery: %s"%id)
-		check(u.members.all(func(m):return reunited(sim,m,u)),"all live section members reunite after contact: %s"%id)
+		if u.members.all(func(m):return reunited(sim,m,u)):check(true,"all live section members reunite after contact: %s"%id)
+		elif u.get("regroup_active",false):reunion_due[id]=sim.time
+		else:check(false,"all live section members reunite after contact: %s"%id)
 		# Whether a section separates in the mission depends on how the seeded
 		# fight unfolds; every separation must start a regroup and finish in time.
 		check(not regroups[id].separated or u.get("regroup_count",0)>0,"separated section completed a bounded regroup: %s"%id)
@@ -56,6 +61,12 @@ func _init()->void:
 		check_actors(sim,previous)
 		track_regroups(sim,[1,2,3],regroups)
 		record_completions(sim,first_completion)
+		for id in reunion_due.keys():
+			var u:Dictionary=sim.get_unit(id)
+			if u.get("regroup_active",false) and sim.time-float(reunion_due[id])<=REGROUP_BOUND:continue
+			check(not u.get("regroup_active",false) and u.members.all(func(m):return reunited(sim,m,u)),"all live section members reunite after contact: %s"%id)
+			print("REUNION DEFERRED squad=",id," from t=",snappedf(reunion_due[id],0.1)," to t=",snappedf(sim.time,0.1))
+			reunion_due.erase(id)
 	for id in [1,2,3]:
 		check(regroups[id].missed<0.5 and regroups[id].longest<=REGROUP_BOUND,"late regroups start and stay bounded: %s"%id)
 		check(completed_attack_move(sim,sim.get_unit(id)),"all sections complete single attack-move: %s"%id)
