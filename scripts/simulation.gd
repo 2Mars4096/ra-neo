@@ -1241,6 +1241,10 @@ func tick(dt: float) -> void:
 			moving = false
 		if not u.maneuver.is_empty():moving=not u.maneuver.arrived
 		if Infantry.Cover.seeking(u) or u.get("regroup_active",false) or Garrison.transit(u)!="":moving=false
+		if not u.members.is_empty() and scenario.get("autonomy",false):
+			if moving:u.erase("engage_halt_at");u.erase("engage_shift")
+			elif target.is_empty():u.erase("engage_shift")
+			else:space_engaged(u,target,dt)
 		if profiling:target_lap=_lap("unit_targeting",target_lap)
 		if moving:
 			move_unit(u, dt)
@@ -1298,6 +1302,96 @@ func tick(dt: float) -> void:
 		result = "DEFEAT"
 
 	ticking=false
+
+# Sections halted to fight keep about two section radii apart, so one burst or
+# round cannot catch both. The later arrival (a section in cover never) shifts
+# its anchor to the nearest clear spot with a line of fire to its target.
+const ENGAGED_SPACING:=4.0
+const SPACING_REACH:=6.0
+func fight_halted(o:Dictionary)->bool:
+	if o.members.is_empty() or not alive(o) or Garrison.inside(o) or Garrison.transit(o)!="" or o.has("garrison_target"):return false
+	if not o.maneuver.is_empty():return o.maneuver.get("arrived",false)
+	return o.orders.is_empty() or o.hold_command or int(o.target)>=0 or Infantry.Cover.seeking(o)
+
+func holds_shelter(u:Dictionary)->bool:
+	return u.members.any(func(m):return m.hp>0 and (m.get("occupying",false) or m.get("cover_phase","") in ["SETTLING","SHELTERED"]))
+
+func space_engaged(u:Dictionary,target:Dictionary,dt:float)->void:
+	var since:float=u.get_or_add("engage_halt_at",time)
+	if u.hold_command or not u.maneuver.is_empty() or u.get("regroup_active",false) or Garrison.inside(u) or Garrison.transit(u)!="" or u.has("garrison_target"):
+		u.erase("engage_shift");return
+	if u.has("engage_shift"):
+		var spot:Vector2=u.engage_shift
+		# Soldiers follow the anchor in formation until they have gathered on
+		# the new spot (or a few seconds pass); cover searches resume from there.
+		if u.pos.distance_to(spot)<0.01:
+			if time>=float(u.get("shift_until",0.0)) or u.members.all(func(m):return m.hp<=0 or m.pos.distance_to(u.pos+m.offset)<1.2):
+				u.erase("engage_shift");return
+		u["cover_resume_after"]=time+0.2
+		var previous:Vector2=u.pos
+		var old_bucket:=bucket(u)
+		u.pos=u.pos.move_toward(spot,float(definitions[u.kind].speed)*terrain.ground_speed(u.pos,"infantry")*dt)
+		u.facing=(target.pos-u.pos).normalized() if target.pos!=u.pos else u.facing
+		var new_bucket:=bucket(u)
+		if new_bucket!=old_bucket:
+			spatial[old_bucket].erase(u)
+			if not spatial.has(new_bucket):spatial[new_bucket]=[]
+			spatial[new_bucket].append(u)
+		if previous.distance_to(u.pos)<0.001 and u.pos.distance_to(spot)>=0.01:u.erase("engage_shift")
+		return
+	if time<float(u.get("spacing_check",0.0)):return
+	u["spacing_check"]=time+0.5+float(u.id%5)*0.05
+	if holds_shelter(u) or Infantry.Cover.seeking(u):return
+	# Where the soldiers are: trailing ones may still be passing the other section.
+	var body:=Vector2.ZERO
+	var living:=0
+	for member in u.members:
+		if member.hp>0:body+=member.pos;living+=1
+	if living==0:return
+	body/=living
+	var anchors:PackedVector2Array=[]
+	var crowded:=false
+	for other in range_candidates(u.pos,SPACING_REACH+ENGAGED_SPACING+4.0):
+		if other.id==u.id or other.team!=u.team or not fight_halted(other):continue
+		var at:Vector2=other.get("engage_shift",other.pos)
+		anchors.append(at)
+		if other.pos.distance_squared_to(u.pos)>=ENGAGED_SPACING*ENGAGED_SPACING and at.distance_squared_to(u.pos)>=ENGAGED_SPACING*ENGAGED_SPACING:continue
+		# The section already there (or in cover) holds; the later one moves.
+		var first:float=other.get("engage_halt_at",-INF)
+		if holds_shelter(other) or first<since or (first==since and other.id<u.id):crowded=true
+	if not crowded:return
+	var radius:float=float(definitions[u.kind].radius)
+	var center:Vector2=body if body.distance_to(u.pos)>1.5 else u.pos
+	var reach:float=maxf(float(definitions.rifle.range),u.pos.distance_to(target.pos)+0.5)
+	var closing:float=center.distance_to(target.pos)
+	var spots:Array=[]
+	for ring in [0.0,2.0,3.0,4.0,5.0,SPACING_REACH]:
+		for index in (1 if ring==0.0 else 12):
+			var p:Vector2=center+Vector2.from_angle(index*TAU/12+ring)*ring
+			if p.distance_to(target.pos)>reach:continue
+			var clear:=true
+			for at in anchors:
+				if p.distance_squared_to(at)<ENGAGED_SPACING*ENGAGED_SPACING:clear=false;break
+			if not clear:continue
+			# Fire positions sideways or back, not a rush at the enemy.
+			var score:float=ring+maxf(0.0,closing-p.distance_to(target.pos)-1.0)*3.0
+			spots.append({"pos":p,"score":score})
+	spots.sort_custom(func(a,b):return a.score<b.score)
+	for entry in spots.slice(0,10):
+		var p:Vector2=entry.pos
+		if not terrain.traversable(p,"land",radius) or not terrain.segment_clear(u.pos,p,"land",radius) or not terrain.line_clear(p,target.pos):continue
+		# Soldiers reach their new slots without filing through the other section.
+		var through:=false
+		for member in u.members:
+			if member.hp<=0:continue
+			for at in anchors:
+				var gap:float=minf(Infantry.Cover.FOOTPRINT,member.pos.distance_to(at)-0.1)
+				if Geometry2D.get_closest_point_to_segment(at,member.pos,p+member.offset).distance_to(at)<gap:through=true
+		if through:continue
+		u["engage_shift"]=p
+		u["shift_until"]=time+u.pos.distance_to(p)/maxf(0.5,float(definitions[u.kind].speed))+1.0
+		u.reason="Spacing out from a friendly section"
+		return
 
 func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 	if candidates==null:candidates=target_candidates(u)

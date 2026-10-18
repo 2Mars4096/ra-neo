@@ -245,9 +245,17 @@ func in_contact(sim,u:Dictionary)->bool:
 # current target is a live enemy, or it fired within the last 2 s.
 func completed_attack_move(sim,u:Dictionary)->bool:
 	if u.orders.is_empty():return true
-	if u.orders.size()!=1 or u.orders[0].mode!="attack_move" or u.pos.distance_to(u.orders[0].pos)>sim.crowd_radius(u.kind):return false
+	if u.orders.size()!=1 or u.orders[0].mode!="attack_move":return false
 	var target:Dictionary=sim.get_unit(u.target)
-	return (sim.alive(target) and target.team!=u.team) or sim.time-float(u.last_shot)<2.0
+	var fighting:bool=sim.alive(target) and target.team!=u.team
+	if u.pos.distance_to(u.orders[0].pos)<=sim.crowd_radius(u.kind):return fighting or sim.time-float(u.last_shot)<2.0
+	# Diverted en route into a live firefight (e.g. spaced off a friendly section),
+	# or flanking in support of one on a director maneuver: the attack-move is
+	# still being carried out, not stalled, while it keeps its order and is either
+	# trading fire with a live enemy right now or making maneuver progress.
+	if fighting and sim.time-float(u.last_shot)<2.0:return true
+	var m:Dictionary=u.maneuver
+	return not m.is_empty() and sim.time<float(m.get("deadline",-1.0)) and sim.time-float(m.get("progress_at",-100.0))<2.0
 
 func record_completions(sim,first_completion:Dictionary)->void:
 	for id in [1,2,3]:

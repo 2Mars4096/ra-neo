@@ -14,6 +14,8 @@ const RATED_VALID:=8
 # body. The prone footprint (1.15 m) closed gaps a runner fits through, so a
 # soldier who had gone flat in the open found no route to reachable cover.
 const STRIDE:=0.8
+# A halted friendly section's formation (offsets ~1 u, prone 1.5 u, plus a body).
+const FOOTPRINT:=2.0
 
 # Maneuvers that leave the soldiers free to take cover: covering a partner,
 # consolidating after casualties, and a cover bound once it has arrived.
@@ -97,9 +99,22 @@ static func _update(u:Dictionary,sim) -> void:
 	var living:int=u.members.filter(func(m):return m.hp>0).size()
 	var limit:int=maxi(1,floori(living/2.0))
 	var bearing:Vector2=(threat.pos-u.pos).normalized() if not threat.is_empty() else Vector2.ZERO
+	# Anchors of other friendly sections halted to fight: a soldier trailing
+	# through one does not stop there to watch or hide, but carries on to its
+	# own section's formation.
+	var footprints:=PackedVector2Array()
+	for other in neighbors:
+		if other.team==u.team and other.id!=u.id and not other.members.is_empty() and other.pos.distance_squared_to(u.pos)<(LEASH+FOOTPRINT)*(LEASH+FOOTPRINT) and sim.fight_halted(other):footprints.append(other.pos)
 	for member in u.members:
 		if member.hp<=0:continue
 		var phase:String=member.get("cover_phase","")
+		# Inside one, or still to pass through one on the way to its own slot.
+		var intruding:=false
+		var slot:Vector2=u.pos+member.offset
+		for at in footprints:
+			if member.pos.distance_squared_to(at)<FOOTPRINT*FOOTPRINT:intruding=true;break
+			if member.pos.distance_squared_to(slot)>4.0 and Geometry2D.get_closest_point_to_segment(at,member.pos,slot).distance_squared_to(at)<FOOTPRINT*FOOTPRINT:intruding=true;break
+		if intruding and phase in ["OVERWATCH","EXPOSED"]:member.cover_phase="";phase=""
 		if phase in ["SEEKING","SETTLING","SHELTERED"]:
 			var weapon:String=member_weapon(u,member)
 			# A wall shelter seen by a threat it cannot answer from there is lost;
@@ -128,6 +143,7 @@ static func _update(u:Dictionary,sim) -> void:
 			if exposed or member.cover_goal.distance_to(u.pos)>LEASH or member.get("cover_blocked",0.0)>2.0 or (phase!="SHELTERED" and sim.time>member.get("cover_deadline",0.0)):
 				clear(member);member.cover_until=sim.time+(0.0 if stale and exposed else 1.0)
 			else:continue
+		if intruding:continue
 		if sim.time<member.cover_until:continue
 		# Contact drill, then bounding: one soldier rushes while the rest fire.
 		if moving>=limit or sim.time<u.get("drill_until",0.0):
@@ -209,6 +225,10 @@ static func _pick_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 		if other.team!=u.team and not sim.contact_known(u,other):continue
 		if other.members.is_empty():
 			taken.append(other.pos);clearances.append(float(sim.definitions[other.kind].radius)+0.85)
+		# Another friendly section halted to fight: its formation footprint
+		# stays its own, so the two do not mingle into one target.
+		elif other.team==u.team and other.id!=u.id and sim.fight_halted(other):
+			taken.append(other.pos);clearances.append(FOOTPRINT)
 		for peer in other.members:
 			if peer.hp<=0 or (u.id==other.id and member.index==peer.index):continue
 			taken.append(peer.pos);clearances.append(1.65)
