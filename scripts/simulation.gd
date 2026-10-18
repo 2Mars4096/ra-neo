@@ -2106,35 +2106,43 @@ func standing_bodies(u:Dictionary,from:Vector2,to:Vector2,ignore:Array=[])->Arra
 # too: they back or turn off to such a spot, then resume their own orders.
 # A mover in a fight is not asked (one under threat but not firing, or only
 # shelling a building, is, by an `insistent` hull jammed past JAM_UNDER_FIRE).
-# An immobilised hull is never asked. Returns true when a friend was asked to
-# give way.
+# An immobilised hull is never asked. A vehicle a hand's width from the end of
+# its only order has all but arrived: a section asks it like a parked one.
+# Where no spot is near, a parked friend pulls on past the end of the asker's
+# next legs. A failed search is retried after GIVE_WAY_RETRY (the asker moves,
+# friends clear). Returns true when a friend was asked to give way.
 const JAM_GIVE_WAY:=2.5
 const JAM_BACK_OFF:=4.0
 const JAM_UNDER_FIRE:=12.0
+const GIVE_WAY_RETRY:=2.0
 func make_way(u:Dictionary,movers:bool=false,insistent:bool=false)->bool:
 	if u.path.is_empty() or not scenario.get("autonomy",false):return false
 	var legs:Array=[u.pos]+u.path.slice(0,2)
+	var route_legs:Array=[u.pos]+u.path.slice(0,4)
 	var asked:=false
 	for other in movement_neighbors(u):
 		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=collision_layer(u):continue
 		var od:Dictionary=definitions[other.kind]
 		# An immobilised hull cannot pull over: the asker routes round it instead.
-		if not other.maneuver.is_empty() or other.hold_command or od.get("structure",false) or other.has("building_id") or other.get("mobility_kill",false) or time<float(other.get("yield_until",0.0)):continue
-		if not other.orders.is_empty():
+		if not other.maneuver.is_empty() or other.hold_command or od.get("structure",false) or other.has("building_id") or other.get("mobility_kill",false) or time<float(other.get("yield_until",0.0)) or time<float(other.get("give_way_retry",0.0)):continue
+		var arriving:bool=not u.members.is_empty() and other.members.is_empty() and other.orders.size()==1 and other.orders[0].mode in ["move","attack_move"] and not other.orders[0].get("give_way",false) and not other.path.is_empty() and other.pos.distance_to(other.path.back())<=1.0 and not engaged(other)
+		var parked:bool=other.orders.is_empty() or arriving
+		if not parked:
 			if not movers or other.id<u.id or not u.members.is_empty() or not other.members.is_empty() or other.orders[0].get("give_way",false) or (engaged(other) and not (insistent and shelling(other))) or (not insistent and under_threat(other)):continue
 			# Only a mover ahead holds the way (one behind is just following).
 			if (other.pos-u.pos).dot(u.path[0]-u.pos)<=0.0:continue
 		var clearance:float=crowd_radius(u.kind)+crowd_radius(other.kind)+0.5
 		if not _near_legs(other.pos,legs,clearance):continue
-		# A mover asked once is not asked again soon (no shuffling back and forth).
-		other["yield_until"]=time+(6.0 if other.orders.is_empty() else 20.0)
 		# Never step aside through the unit being let past.
 		var keep_off:Array=[{"pos":u.pos,"radius":minf(clearance,other.pos.distance_to(u.pos)-0.05)}]
-		var found:Array=_give_way_spot(other,legs,keep_off,clearance)
+		var found:Array=_give_way_spot(other,legs,keep_off,clearance,false,parked,route_legs)
 		if found.is_empty():
+			other["give_way_retry"]=time+GIVE_WAY_RETRY
 			if movers:continue
 			return false
-		if other.orders.is_empty():
+		# A mover asked once is not asked again soon (no shuffling back and forth).
+		other["yield_until"]=time+(6.0 if parked else 20.0)
+		if parked:
 			other.orders=[{"mode":"move","pos":found[0],"target":-1}]
 			other.state="MOVING"
 		else:give_way(other,found)
@@ -2212,22 +2220,25 @@ func _route_length(from:Vector2,route:Array)->float:
 
 # Nearest clear spot 6-12 u (a mover: 3-12 u) from `other` off `legs` (one leg list, or several
 # when `many`), reached by a short route clear of `keep_off`: [spot, route] or [].
-func _give_way_spot(other:Dictionary,legs:Array,keep_off:Array,clearance:float,many:bool=false)->Array:
+# A `parked` friend given `far_legs` (the asker's route further on) also tries
+# 14-16 u off those: it pulls on past the end of the asker's next legs.
+func _give_way_spot(other:Dictionary,legs:Array,keep_off:Array,clearance:float,many:bool=false,parked:bool=false,far_legs:Array=[])->Array:
 	var od:Dictionary=definitions[other.kind]
 	var queries:=0
 	# A moving friend just pulls over, to its own right first (as oncoming
 	# hulls keep right), so it does not cut across the lane it leaves open.
-	var moving:bool=not other.path.is_empty() and not other.orders.is_empty()
+	var moving:bool=not parked and not other.path.is_empty() and not other.orders.is_empty()
 	var base:=0.0
 	if moving:
 		var travel:Vector2=other.path.back()-other.pos
 		base=Vector2(-travel.y,travel.x).angle()
-	for ring in ([3.0,4.5,6.0,8.0,10.0,12.0] if moving else [6.0,8.0,10.0,12.0]):
+	var rings:Array=[3.0,4.5,6.0,8.0,10.0,12.0] if moving else [6.0,8.0,10.0,12.0]+([14.0,16.0] if not far_legs.is_empty() else [])
+	for ring in rings:
 		for i in 16:
 			var turn:int=i if not moving else (i+1)/2*(1 if i%2==1 else -1)
 			var spot:Vector2=other.pos+Vector2.from_angle(base+turn*TAU/16)*ring
 			var on_legs:=false
-			for list in (legs if many else [legs]):
+			for list in ([far_legs] if ring>12.0 else (legs if many else [legs])):
 				if _near_legs(spot,list,clearance):on_legs=true;break
 			if on_legs or not terrain.avoids_bodies(other.pos,spot,keep_off) or not location_clear(spot,other.kind,other.id):continue
 			var route:=terrain.path(other.pos,spot,od.domain,float(od.radius),keep_off,terrain.mobility_profile(other.kind))
