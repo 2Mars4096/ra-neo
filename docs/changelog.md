@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-18 — Realistic armour and Javelin, vehicle traffic, section tactics, spikes
+
+- Armour: hit location by presented area and impact angle, weak zones per face, and per-zone penetration effects (crew, ammunition, gun, mobility, fire), scaled by the round's behind-armour effect. Non-penetrating hits can break tracks, disable the gun, smash sights or shake the crew. Tank duels resolve in ~15-35 s (`test_vehicle_damage` 94/0).
+- Javelin: fire-and-forget (lock-on needs line of sight before launch, seeker to impact at 0.94), realistic flight time, top attack on roof zones (berms give no cover from it), misses burst. Teams carry 3 missiles and resupply only at friendly supply points (HUD "MISSILES n/3") (`test_atgm_flight` 62/0).
+- Classic: the scripted player uses combined arms (opening Javelin teams, second harvester, east defensive arc, infantry hunt ATGM teams). Economy values unchanged (testing supply stays doubled). Default seed VICTORY 512.8 s.
+- Vehicle traffic: jam clock with lower-id right of way, give-way and back-off moves; attack groups take distinct firing spots with a clear line of fire; no give-way while engaged; tanks ordered onto wrecks stop beside them; pressed tanks can plan a route away; sections can ask a near-arrived vehicle to clear and parked friends pull forward (`test_vehicle_jam` 243/0, `test_wreck_goal`, `test_pressed_route`).
+- Harvesters reach ore around wrecks and immobilised hulls and fall back to other fields (`test_harvester_access`).
+- Section tactics: hold 4 s in cover after losing a target; prone when caught in the open; detour past sheltering squadmates; consolidate on casualties under fire; drag casualties to cover before aid; bound to cover beyond the leash under sustained fire (`test_engage_hold`, `test_open_ground_contact`, `test_section_contact`).
+- Sections with every soldier down refuse orders (toast) and keep their anchor with their men; the AI skips them (`test_downed_section`).
+- Routes: published vehicle routes no longer clip corners (`test_roadside_props` passes); aircraft climb over tall harbor structures.
+- Performance: battle-start spike 85 -> 15 ms (staggered cover searches, capped route queue); late-game tick ~35% cheaper with byte-identical state.
+
 ## 2026-10-16 — Enemy buildings, mortar, open-ground prone, frame time, air clearance
 
 - Enemy defenders garrison buildings near objectives; the enemy fires mortar salvos with a warning toast (`test_enemy_garrison` 38/0). Mortar rounds have their own whistle (0.62 s before impact), dirt-fountain burst and 1.4 m crater. A building collapse is no longer also voiced as a tank kill.

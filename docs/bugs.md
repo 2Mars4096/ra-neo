@@ -142,3 +142,10 @@ Full linear conversion of the batched palette made units and trim too dark in th
 - `tactical_director.engage_idle` can still pull a whole section out of wall cover when its only shooter loses a target for a moment (seen in test_garrison's halt; currently masked).
 - Tick 0 of a harbor battle still costs ~85 ms (simultaneous cover searches plus field_ops setup). Queued routes can cost up to ~16 ms in one tick (`ROUTE_QUEUE_WORK` 180); lowering it trades spike size for route delay.
 - Regroup exemption that counted "a known enemy within 25 u" (not just incoming fire) as contact deadlocked all three regroup-mission sections (anchor waits on the leash for soldiers Cover keeps sheltered). Reverted; only rounds received in the last 4 s count.
+
+## 2026-10-18 round
+
+- Classic playthrough outcome is a coin flip across combat seeds; single-seed pass/fail flips with almost any combat change. Judge balance on a seed sweep (default + 11-20), not one seed.
+- Regroup recovery's mission part is one chaotic seeded fight; it was made robust with fixtures/bounds, but combat changes can still expose real traffic bugs there (it caught the parked-tank alley jam).
+- Gunner-held ATGM guidance (TOW-style) was replaced by fire-and-forget for the Javelin (realism); stretching lock time or lowering seeker odds to rescue classic was rejected.
+- A hard tank hold-back outside Javelin reach stalled classic assaults (2/5 wins); kept a milder pull-back.

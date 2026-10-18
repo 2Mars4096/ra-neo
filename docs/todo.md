@@ -61,13 +61,14 @@
 - [x] Test failures fixed (garrison cover search; regroup counts occupying/in-contact cover within leash): garrison "halted section takes cover against buildings (1 of 3)"; regroup recovery (3) - design call: halted cover distance vs 2.8 m regroup limit.
 - [x] Timing checks made load-robust (test_audio calibrated, test_presentation_cache controlled clock).
 - [ ] Large group orders: issuing 16 units across the map still costs ~0.22-0.25 s on the click under load (was ~900 ms); test_hitches 250 ms check is marginal under heavy load. Consider spreading formation-slot/route setup across ticks.
-- [ ] Testing economy: restore normal supply (1600, 3/s) when testing ends.
+- [ ] Testing economy: restore normal supply (1600, 3/s) when testing ends (player: keep doubled for now).
+- [ ] Infantry sections sent to one point stack (in progress: spread slots + unstack pass).
 - [ ] Deferred by player: wounded marker / bleed-out countdown, rescue of stranded wounded.
 
 - [x] Enemy uses buildings and mortar; open-ground prone; air clearance over tall structures; HARVEST LINE fixed; ~11% cheaper tick (2026-10-16).
-- [ ] Classic playthrough DEFEAT ~344 s: balance decision needed (see bugs.md 2026-10-16).
-- [ ] Roadside-props corner clips (~1 cm): exact sweep rejected; needs a nav-grid-consistent approach.
-- [ ] engage_idle pulls sections out of wall cover when the lone shooter loses its target.
+- [x] Classic playthrough: realistic armour/Javelin + combined-arms script; VICTORY (economy unchanged).
+- [x] Roadside-props corner clips fixed (published edges bent at skipped grid nodes).
+- [x] engage_idle holds 4 s in cover after losing a target.
 - [x] Smarter contact tactics: contact drill, fire-from-cover corner slots, shelter re-evaluation, crossfire prone, crouch in cover, one-at-a-time rushes.
 
 ## Next development priorities
