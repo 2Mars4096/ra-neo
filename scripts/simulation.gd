@@ -157,6 +157,8 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 	var spacing: Dictionary = {}
 	var slots: Array[Dictionary] = []
 	var open:Dictionary={} # formation_slot memo for this command
+	var section_open:Dictionary={} # team -> the same for sections (slots include held spots)
+	var held:Dictionary={} # team -> held_spots, gathered once per command
 	terrain.begin_path_memo()
 	for id in ids:
 		var member:=get_unit(int(id))
@@ -209,7 +211,11 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 		var planned:=take_route_budget(u.pos,target)
 		if mode!="attack":
 			terrain.path_probe=not planned
-			target=formation_slot(target,u,slots,open)
+			# Sections also keep clear of spots friends already hold or head for.
+			if not u.members.is_empty() and domain=="land":
+				if not held.has(u.team):held[u.team]=held_spots(u,destination,ids)
+				target=formation_slot(target,u,slots,section_open.get_or_add(u.team,{}),held[u.team])
+			else:target=formation_slot(target,u,slots,open)
 			terrain.path_probe=false
 			if target.x<0: continue
 		var route:Array=[]
@@ -1265,6 +1271,7 @@ func tick(dt: float) -> void:
 	VehicleDamage.tick_recrew(self,dt)
 	preload("res://scripts/structure_damage.gd").tick(self,dt)
 	update_tactics(dt)
+	unstack_sections()
 	if profiling:lap=_lap("tactics",lap)
 	if not field_ops.is_empty():
 		FieldOps.tick(self,dt)
@@ -1845,7 +1852,16 @@ func spawn_position(origin: Vector2, kind: String) -> Vector2:
 # `open` memoises candidate checks for one command (unchanged terrain, slots
 # only added): units sent to the same spot rescan the same rings, skipping
 # candidates already found taken by a slot or blocked by terrain.
-func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary], open:Dictionary={}) -> Vector2:
+# `held` spots (held_spots: friends outside this command) are kept clear too.
+# A section sent to a spot a friend holds comes up beside it, as sections come
+# on line: a little forward of abreast of its approach first (SECTION_RING, in
+# 1/16 turns from straight ahead), then further forward, then back. Standing
+# clear already, no more than SECTION_STAY farther out than the nearest free
+# ring, it stays where it is: a re-sent order never shuffles sections round.
+# Otherwise (a group's own slots, terrain) the rings run as for vehicles.
+const SECTION_RING:=[3,-3,4,-4,2,-2,5,-5,1,-1,6,-6,0,7,-7,8]
+const SECTION_STAY:=2.0
+func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary], open:Dictionary={}, held:Array[Dictionary]=[]) -> Vector2:
 	var d: Dictionary=definitions[u.kind]
 	var domain:String=d.domain
 	var radius:=float(d.radius)
@@ -1866,16 +1882,17 @@ func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary], op
 	var profile:String=terrain.mobility_profile(u.kind)
 	# Probing from open ground, reachable() runs the straight-line check first.
 	var probe:=terrain.path_probe and terrain.traversable(u.pos,domain,radius)
+	var section:bool=not held.is_empty() and not u.members.is_empty() and not slot_clear(origin,layer,crowd,held)
+	if not held.is_empty():slots=slots+held
+	var ahead:float=(origin-u.pos).angle() if section and u.pos.distance_squared_to(origin)>0.0001 else 0.0
+	var stay:=INF
 	for ring in 18:
+		if ring==1 and section and slot_clear(u.pos,layer,crowd,slots) and terrain.traversable(u.pos,domain,radius):stay=u.pos.distance_to(origin)-SECTION_STAY
+		if stay<=ring:return u.pos
 		for i in (1 if ring==0 else 16):
-			var p:=origin+Vector2.from_angle(i*TAU/16.0)*ring
+			var p:=origin+Vector2.from_angle(ahead+int(SECTION_RING[i])*TAU/16.0 if section else i*TAU/16.0)*ring
 			if taken.has(p):continue
-			var clear:=true
-			for slot in slots:
-				if slot.layer==layer and p.distance_to(slot.pos)<crowd+float(slot.radius)+0.3:
-					clear=false
-					break
-			if not clear:
+			if not slot_clear(p,layer,crowd,slots):
 				taken[p]=true
 				continue
 			var free=known.get(p)
@@ -1887,6 +1904,73 @@ func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary], op
 				if terrain.reachable(u.pos,p,domain,radius,profile): return p
 			elif terrain.segment_clear(u.pos,p,domain,radius) or not terrain.path(u.pos,p,domain,radius,[],profile).is_empty(): return p
 	return Vector2(-1,-1)
+
+# Sections never stand stacked for long. Arrival spots keep orders apart, but
+# two sections can still end up together (orders ending at once on one route,
+# give-way spots): an idle one whose anchor stays within STACKED of another
+# idle friendly section's for STACK_WAIT steps to the nearest clear spot (via
+# issue: formation_slot round the held spots). Not while firing, nor while
+# holding, garrisoning or regrouping; under threat only after STACK_WAIT_THREAT.
+const STACKED:=3.0
+const STACK_WAIT:=4.0
+const STACK_WAIT_THREAT:=15.0
+const STACK_CHECK:=1.0
+var stack_check_at:=0.0
+func unstack_sections()->void:
+	if time<stack_check_at:return
+	stack_check_at=time+STACK_CHECK
+	var idle:Array=[]
+	for u in units:
+		if u.members.is_empty() or not alive(u) or not u.orders.is_empty() or not u.maneuver.is_empty() or u.hold_command:continue
+		if u.get("combat_ineffective",false) or u.get("regroup_active",false) or u.has("garrison_target") or Garrison.inside(u) or Garrison.transit(u)!="" or definitions[u.kind].domain!="land":continue
+		idle.append(u)
+	for u in idle:
+		var below:Dictionary={}
+		for other in idle:
+			# (One stepping aside earlier in this pass is no longer there.)
+			if other.id<u.id and other.team==u.team and other.orders.is_empty() and other.pos.distance_squared_to(u.pos)<STACKED*STACKED:
+				below=other
+				break
+		if below.is_empty():
+			u.erase("stacked_since")
+			continue
+		var since:float=u.get_or_add("stacked_since",time)
+		if engaged(u) or time-since<(STACK_WAIT_THREAT if under_threat(u) else STACK_WAIT):continue
+		u.erase("stacked_since")
+		# Ordered a hand's width away from the other, it steps out that side.
+		var away:Vector2=u.pos-below.pos
+		away=away.normalized() if away.length_squared()>0.0001 else Vector2.from_angle(u.id)
+		if issue([u.id],u.pos+away*0.25,"move")>0:u.reason="Spreading out"
+
+func slot_clear(p:Vector2,layer:String,crowd:float,slots:Array[Dictionary])->bool:
+	for slot in slots:
+		if slot.layer==layer and p.distance_to(slot.pos)<crowd+float(slot.radius)+0.3:return false
+	return true
+
+# Spots near `around` that friendly sections hold or are heading for (their
+# last order, unless an attack) and that parked friendly vehicles and
+# structures stand on, as formation_slot entries, so a section sent there
+# arrives beside them rather than on the same anchor. Units of this command
+# re-plan (their spots arrive as command slots); sections bound for or inside
+# a building pass through its door rather than hold it.
+const HELD_REACH:=30.0
+func held_spots(u:Dictionary,around:Vector2,ids:Array)->Array[Dictionary]:
+	var layer:=collision_layer(u)
+	var spots:Array[Dictionary]=[]
+	for other in units:
+		if other.team!=u.team or not alive(other) or collision_layer(other)!=layer:continue
+		if ids.has(other.id) or ids.has(float(other.id)):continue
+		var spot:Vector2=other.pos
+		if other.members.is_empty():
+			if not other.orders.is_empty() or not other.maneuver.is_empty():continue
+		else:
+			if other.has("garrison_target") or Garrison.inside(other) or Garrison.transit(other)!="":continue
+			if not other.orders.is_empty():
+				if other.orders[-1].mode=="attack":continue
+				spot=other.orders[-1].pos
+		if spot.distance_squared_to(around)>HELD_REACH*HELD_REACH:continue
+		spots.append({"pos":spot,"radius":crowd_radius(other.kind),"layer":layer})
+	return spots
 
 func movement_clear(u: Dictionary, to: Vector2, neighbors: Array) -> bool:
 	var d: Dictionary=definitions[u.kind]
