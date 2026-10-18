@@ -151,14 +151,21 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 		return 0
 	order_feedback="No route • Ground units need land, ships need water"
 	order_adjusted=false
+	order_resolving=0
+	last_command={}
 	command_serial+=1
 	var accepted := 0
 	var formation: Dictionary = {}
-	var spacing: Dictionary = {}
 	var slots: Array[Dictionary] = []
-	var open:Dictionary={} # formation_slot memo for this command
-	var section_open:Dictionary={} # team -> the same for sections (slots include held spots)
-	var held:Dictionary={} # team -> held_spots, gathered once per command
+	# What the command's units share while their targets resolve, now or
+	# (past CLICK_SLOTS) at the start of later ticks: resolve_slots().
+	var command:={"ids":ids,"destination":destination,"mode":mode,"queued":queued,"target":target_id,"spacing":{},"slots":slots,
+		"open":{}, # formation_slot memo for this command
+		"section_open":{}, # team -> the same for sections (slots include held spots)
+		"held":{}, # team -> held_spots, gathered once per command
+		"placed":0,"pending":0,"report":{}} # units with a target so far / still resolving
+	var spacing:Dictionary=command.spacing
+	var resolved:=0
 	terrain.begin_path_memo()
 	for id in ids:
 		var member:=get_unit(int(id))
@@ -176,76 +183,208 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 			order_feedback="LINK LOST • Last orders continue; capture EXCHANGE to restore radio"
 			continue
 		var domain: String = definitions[u.kind].domain
-		var radius: float = definitions[u.kind].radius
 		var index: int = formation.get(domain, 0)
 		formation[domain] = index + 1
-		var target := destination
-		if mode!="attack" and not terrain.traversable(destination,domain,radius):
-			var sector_order:=false
-			for obj in objectives:
-				if destination.distance_to(obj.pos)<2.0 and domain=="land": sector_order=true
-			if not sector_order:
-				# Candidate spots only need reachability, not a whole smoothed route.
-				terrain.path_probe=true
-				target=terrain.reachable_destination(u.pos,destination,domain,radius,terrain.mobility_profile(u.kind))
-				terrain.path_probe=false
-				if target.x<0:continue
-				order_adjusted=true
-		if mode != "attack" and ids.size() > 1:
-			target += Vector2((index % 3 - 1) * spacing[domain], (index / 3) * spacing[domain])
-		if not terrain.traversable(target, domain, radius):
-			target = destination
-		if mode == "attack":
-			var enemy := get_unit(target_id)
-			if not alive(enemy) or enemy.team == u.team or not contact_known(u,enemy):
-				continue
-			if not effective_unit(u,enemy.kind):
-				order_feedback="Weapon ineffective against this target • use a suitable counter"
-				continue
-			# Attack orders pursue the last visible position, never hidden live positions.
-			target = enemy.pos
-			if not terrain.traversable(target, domain, radius):
-				target = attack_position(u, enemy, slots+attack_rivals(u, target_id, ids, queued))
-		# Over the tick's route budget, validate reachability only (grid search)
-		# and plan the route at the start of a later tick.
-		var planned:=take_route_budget(u.pos,target)
-		if mode!="attack":
-			terrain.path_probe=not planned
-			# Sections also keep clear of spots friends already hold or head for.
-			if not u.members.is_empty() and domain=="land":
-				if not held.has(u.team):held[u.team]=held_spots(u,destination,ids)
-				target=formation_slot(target,u,slots,section_open.get_or_add(u.team,{}),held[u.team])
-			else:target=formation_slot(target,u,slots,open)
-			terrain.path_probe=false
-			if target.x<0: continue
-		var route:Array=[]
-		if planned:
-			route=order_route(u,target,ids)
-			if route.is_empty():
-				continue
-		elif mode=="attack" and not terrain.reachable(u.pos,target,domain,radius,terrain.mobility_profile(u.kind)):
+		# A large group's click records its orders only: past the first
+		# CLICK_SLOTS units, targets (formation slots, reachability) resolve in
+		# command order over the next ticks while the units hold their orders.
+		if mode!="attack" and resolved>=CLICK_SLOTS:
+			if queued and u.orders.size()>=12:continue
+			if is_same(command.ids,ids):command.ids=ids.duplicate()
+			if not u.members.is_empty() and domain=="land" and not command.held.has(u.team):command.held[u.team]=held_spots(u,destination,ids)
+			var held_at:=destination
+			if ids.size()>1:held_at+=Vector2((index % 3 - 1) * spacing[domain], (index / 3) * spacing[domain])
+			if not terrain.traversable(held_at,domain,float(definitions[u.kind].radius)):held_at=destination
+			# Should no target turn up, the unit carries on as before the click.
+			var before:Dictionary={} if queued else order_snapshot(u)
+			var waiting:=record_order(u,mode,held_at,target_id,queued,true)
+			waiting["slot"]=true
+			slot_queue.append({"unit":u.id,"order":waiting,"index":index,"command":command,"before":before})
+			command.pending+=1
+			order_resolving+=1
+			accepted += 1
 			continue
-		if not queued:
-			FieldOps.pause_builder(self,u.id)
-			Director.cancel(u)
-			for actor in u.members:Infantry.Cover.clear(actor)
-			u.command_group=command_serial
-			u.orders.clear()
-			u.path.clear()
-			u.erase("route_pending")
-		if u.orders.size() >= 12:
-			continue
-		var order := {"mode":mode,"pos":target,"target":target_id}
-		u.orders.append(order)
-		if u.orders.size()==1:u.intent=order.duplicate()
-		slots.append({"pos":target,"radius":crowd_radius(u.kind),"layer":collision_layer(u)})
+		resolved+=1
+		var plan:=order_target(u,command,index,false)
+		if plan.is_empty():continue
+		if u.orders.size()>=12 and queued:continue
+		var order:=record_order(u,mode,plan.pos,target_id,queued)
+		slots.append({"pos":plan.pos,"radius":crowd_radius(u.kind),"layer":collision_layer(u)})
 		if u.orders.size() == 1:
-			if planned:u.path = route
+			if plan.planned:u.path = plan.route
 			else:defer_route(u,"order")
-		u.state = "ADVANCING" if mode == "attack_move" else "MOVING"
 		accepted += 1
+		command.placed+=1
 	terrain.end_path_memo()
+	if command.pending>0:last_command=command
 	return accepted
+
+# Units of the last issue() whose targets still resolve (slot_queue); its
+# return value counts them as accepted until they do.
+var order_resolving:=0
+var last_command:Dictionary={}
+
+# Asks for an "order_report" event (the order toast, no alert sound) once the
+# last command's queued targets have resolved: `text` • placed / `of` sections
+# (the unplaced had no room or route).
+func report_resolution(text:String,of:int)->void:
+	if not last_command.is_empty() and last_command.pending>0:last_command.report={"text":text,"of":of}
+
+func _slot_resolved(command:Dictionary,placed:bool)->void:
+	if placed:command.placed+=1
+	command.pending-=1
+	if command.pending>0 or command.report.is_empty():return
+	var of:int=command.report.of
+	var text:String=command.report.text+" • %d / %d sections" % [command.placed,of]
+	if command.placed==0:text="No route or room • 0 / %d sections" % of
+	elif command.placed<of:text+=" (%d no room)" % (of-command.placed)
+	events.append({"type":"order_report","text":text})
+
+# Units a group command resolves in the click; the rest queue (slot_queue).
+const CLICK_SLOTS:=8
+
+# Where a commanded unit goes: {"pos", "planned" (route below, or queue it),
+# "route"}, or {} when it cannot go. In the click (`deferred` false) a route
+# within the tick's budget is planned on the spot; resolved later, only short
+# hops are, the rest join the route queue.
+func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dictionary:
+	var destination:Vector2=command.destination
+	var mode:String=command.mode
+	var ids:Array=command.ids
+	var target_id:int=command.target
+	var slots:Array[Dictionary]=command.slots
+	var domain: String = definitions[u.kind].domain
+	var radius: float = definitions[u.kind].radius
+	var target := destination
+	if mode!="attack" and not terrain.traversable(destination,domain,radius):
+		var sector_order:=false
+		for obj in objectives:
+			if destination.distance_to(obj.pos)<2.0 and domain=="land": sector_order=true
+		if not sector_order:
+			# Candidate spots only need reachability, not a whole smoothed route.
+			terrain.path_probe=true
+			target=terrain.reachable_destination(u.pos,destination,domain,radius,terrain.mobility_profile(u.kind))
+			terrain.path_probe=false
+			if target.x<0:return {}
+			order_adjusted=true
+	if mode != "attack" and ids.size() > 1:
+		target += Vector2((index % 3 - 1) * command.spacing[domain], (index / 3) * command.spacing[domain])
+	if not terrain.traversable(target, domain, radius):
+		target = destination
+	if mode == "attack":
+		var enemy := get_unit(target_id)
+		if not alive(enemy) or enemy.team == u.team or not contact_known(u,enemy):
+			return {}
+		if not effective_unit(u,enemy.kind):
+			order_feedback="Weapon ineffective against this target • use a suitable counter"
+			return {}
+		# Attack orders pursue the last visible position, never hidden live positions.
+		target = enemy.pos
+		if not terrain.traversable(target, domain, radius):
+			target = attack_position(u, enemy, slots+attack_rivals(u, target_id, ids, command.queued))
+	# Over the tick's route budget, validate reachability only (grid search)
+	# and plan the route at the start of a later tick.
+	var planned:=route_cost(u.pos,target)<=0.0 if deferred else take_route_budget(u.pos,target)
+	if mode!="attack":
+		terrain.path_probe=not planned
+		# Sections also keep clear of spots friends already hold or head for.
+		if not u.members.is_empty() and domain=="land":
+			if not command.held.has(u.team):command.held[u.team]=held_spots(u,destination,ids)
+			target=formation_slot(target,u,slots,command.section_open.get_or_add(u.team,{}),command.held[u.team])
+		else:target=formation_slot(target,u,slots,command.open)
+		terrain.path_probe=false
+		if target.x<0: return {}
+	var route:Array=[]
+	if planned:
+		route=order_route(u,target,ids)
+		if route.is_empty():
+			return {}
+	elif mode=="attack" and not terrain.reachable(u.pos,target,domain,radius,terrain.mobility_profile(u.kind)):
+		return {}
+	return {"pos":target,"planned":planned,"route":route}
+
+# A unit whose target is still resolving (`waiting`) keeps building and its
+# cover until it resolves (resolve_slots), so a unit that gets none is as it was.
+func record_order(u:Dictionary,mode:String,target:Vector2,target_id:int,queued:bool,waiting:bool=false)->Dictionary:
+	if not queued:
+		if not waiting:FieldOps.pause_builder(self,u.id)
+		Director.cancel(u)
+		if not waiting:for actor in u.members:Infantry.Cover.clear(actor)
+		u.command_group=command_serial
+		u.orders.clear()
+		u.path.clear()
+		u.erase("route_pending")
+	var order := {"mode":mode,"pos":target,"target":target_id}
+	u.orders.append(order)
+	if u.orders.size()==1:u.intent=order.duplicate()
+	u.state = "ADVANCING" if mode == "attack_move" else "MOVING"
+	return order
+
+# What a new order replaces (record_order, Director.cancel), to put back.
+const SNAPSHOT_KEYS:=["orders","path","intent","state","command_group","route_pending","maneuver","reason","commit_until","next_decision","hold_command","maneuver_review"]
+func order_snapshot(u:Dictionary)->Dictionary:
+	var snapshot:={}
+	for key in SNAPSHOT_KEYS:
+		if u.has(key):snapshot[key]=u[key].duplicate() if key in ["orders","path"] else u[key]
+	return snapshot
+
+func restore_orders(u:Dictionary,snapshot:Dictionary)->void:
+	for key in SNAPSHOT_KEYS:
+		if snapshot.has(key):u[key]=snapshot[key]
+		else:u.erase(key)
+	# A route it was waiting for queues again (the queue may have dropped it).
+	if u.has("route_pending") and route_waiting(u) and not route_queue.has(u.id):route_queue.append(u.id)
+
+# Queued formation slots (issue past CLICK_SLOTS), resolved first come first
+# served at the start of each tick, before queued routes and out of the same
+# work cap (~SLOT_WORK checks a unit). Each resolves exactly as in the click,
+# against its command's slots so far; a unit whose order was replaced or that
+# died meanwhile is skipped. Without a target the unit goes back to the orders
+# (and route) it had before the click, as the click turns such a unit down; a
+# queued (shift) order is just dropped.
+const SLOT_WORK:=8
+const SLOT_QUEUE_WORK:=32
+var slot_queue:Array=[]
+func resolve_slots()->int:
+	var work:=0
+	if slot_queue.is_empty():return work
+	terrain.begin_path_memo()
+	while not slot_queue.is_empty() and work<SLOT_QUEUE_WORK:
+		var entry:Dictionary=slot_queue.pop_front()
+		var u:=get_unit(int(entry.unit))
+		var order:Dictionary=entry.order
+		var at:=-1
+		if alive(u):
+			for i in u.orders.size():
+				if is_same(u.orders[i],order):at=i;break
+		if at<0:
+			_slot_resolved(entry.command,false)
+			continue
+		work+=SLOT_WORK
+		var plan:=order_target(u,entry.command,entry.index,true)
+		order.erase("slot")
+		_slot_resolved(entry.command,not plan.is_empty())
+		if plan.is_empty():
+			if not entry.before.is_empty():
+				restore_orders(u,entry.before)
+				continue
+			u.orders.remove_at(at)
+			if at==0:
+				u.path.clear()
+				u.erase("route_pending")
+				start_next_order(u)
+			continue
+		if not entry.before.is_empty():
+			FieldOps.pause_builder(self,u.id)
+			for actor in u.members:Infantry.Cover.clear(actor)
+		order.pos=plan.pos
+		entry.command.slots.append({"pos":plan.pos,"radius":crowd_radius(u.kind),"layer":collision_layer(u)})
+		if at==0:
+			u.intent=order.duplicate()
+			if plan.planned:u.path=plan.route
+			else:defer_route(u,"order")
+	terrain.end_path_memo()
+	return work
 
 # Route planning budget. A cross-map route costs ~20 ms of GDScript, so each
 # tick spends a fixed, deterministic amount of planning: ROUTE_BUDGET units
@@ -293,15 +432,17 @@ func defer_route(u:Dictionary,mode:String)->void:
 	if not route_queue.has(u.id):route_queue.append(u.id)
 
 func route_waiting(u:Dictionary)->bool:
+	if u.path.is_empty() and u.maneuver.is_empty() and not u.orders.is_empty() and u.orders[0].has("slot"):return true
 	var pending:Dictionary=u.get("route_pending",{})
 	return not pending.is_empty() and u.path.is_empty() and u.maneuver.is_empty() and not u.orders.is_empty() and is_same(u.orders[0],pending.order)
 
-func plan_queued_routes()->void:
-	var work:=ROUTE_QUEUE_WORK
+func plan_queued_routes(spent:int=0)->void:
+	var work:=ROUTE_QUEUE_WORK-spent
 	var searches:=ROUTE_SEARCHES_PER_TICK
 	while not route_queue.is_empty() and work>0:
 		var u:=get_unit(int(route_queue[0]))
-		if not alive(u) or not route_waiting(u):
+		# (A target still resolving re-queues its unit once known.)
+		if not alive(u) or not route_waiting(u) or u.orders[0].has("slot"):
 			if not u.is_empty():u.erase("route_pending")
 			route_queue.pop_front()
 			continue
@@ -1168,7 +1309,7 @@ func tick(dt: float) -> void:
 	terrain.advance_navigation_weights(NAV_WEIGHT_CELLS_PER_TICK)
 	route_budget=ROUTE_BUDGET
 	if profiling:lap=_lap("setup+spatial",lap)
-	plan_queued_routes()
+	plan_queued_routes(resolve_slots())
 	if profiling:lap=_lap("route_queue",lap)
 	recruit_clock = maxf(0, recruit_clock-dt)
 	sensor_clock -= dt
@@ -1848,10 +1989,16 @@ func finish_order(u: Dictionary) -> void:
 	u.orders.pop_front()
 	u.reason="Objective reached · holding"
 	u.path.clear()
-	if not u.orders.is_empty():
-		u.intent=u.orders[0].duplicate()
-		if take_route_budget(u.pos,u.orders[0].pos):u.path=order_route(u,u.orders[0].pos)
-		else:defer_route(u,"order")
+	start_next_order(u)
+
+# The next order takes over: its route now or queued (its target still
+# resolving: the unit holds until resolve_slots() queues the route).
+func start_next_order(u:Dictionary)->void:
+	if u.orders.is_empty():return
+	u.intent=u.orders[0].duplicate()
+	if u.orders[0].has("slot"):return
+	if take_route_budget(u.pos,u.orders[0].pos):u.path=order_route(u,u.orders[0].pos)
+	else:defer_route(u,"order")
 
 func update_objectives(dt: float) -> void:
 	for obj in objectives:
@@ -2398,6 +2545,7 @@ func _route_length(from:Vector2,route:Array)->float:
 
 # Nearest clear spot 6-12 u (a mover: 3-12 u) from `other` off `legs` (one leg list, or several
 # when `many`), reached by a short route clear of `keep_off`: [spot, route] or [].
+# Clear means clear of friends' bodies and of the spots they are heading for.
 # A `parked` friend given `far_legs` (the asker's route further on) also tries
 # 14-16 u off those: it pulls on past the end of the asker's next legs.
 func _give_way_spot(other:Dictionary,legs:Array,keep_off:Array,clearance:float,many:bool=false,parked:bool=false,far_legs:Array=[])->Array:
@@ -2411,14 +2559,28 @@ func _give_way_spot(other:Dictionary,legs:Array,keep_off:Array,clearance:float,m
 		var travel:Vector2=other.path.back()-other.pos
 		base=Vector2(-travel.y,travel.x).angle()
 	var rings:Array=[3.0,4.5,6.0,8.0,10.0,12.0] if moving else [6.0,8.0,10.0,12.0]+([14.0,16.0] if not far_legs.is_empty() else [])
+	# Spots friends are heading for (order and give-way spots, a section's held
+	# spot, a route's end) are as taken as their bodies: friends asked to give
+	# way at once never pull over onto one spot.
+	var claims:Array=[]
+	var crowd:=crowd_radius(other.kind)
+	var layer:=collision_layer(other)
+	for friend in units:
+		if friend.id==other.id or friend.team!=other.team or (friend.orders.is_empty() and friend.path.is_empty()) or not alive(friend) or collision_layer(friend)!=layer:continue
+		var apart:float=crowd+crowd_radius(friend.kind)+0.3
+		var reach:float=float(rings.back())+apart
+		for end in ([friend.orders[0].pos,friend.orders[-1].pos] if not friend.orders.is_empty() else [])+([friend.path.back()] if not friend.path.is_empty() else []):
+			if end.distance_squared_to(other.pos)<reach*reach:claims.append([end,apart*apart])
 	for ring in rings:
 		for i in 16:
 			var turn:int=i if not moving else (i+1)/2*(1 if i%2==1 else -1)
 			var spot:Vector2=other.pos+Vector2.from_angle(base+turn*TAU/16)*ring
-			var on_legs:=false
+			var taken:=false
 			for list in ([far_legs] if ring>12.0 else (legs if many else [legs])):
-				if _near_legs(spot,list,clearance):on_legs=true;break
-			if on_legs or not terrain.avoids_bodies(other.pos,spot,keep_off) or not location_clear(spot,other.kind,other.id):continue
+				if _near_legs(spot,list,clearance):taken=true;break
+			for claim in claims:
+				if spot.distance_squared_to(claim[0])<claim[1]:taken=true;break
+			if taken or not terrain.avoids_bodies(other.pos,spot,keep_off) or not location_clear(spot,other.kind,other.id):continue
 			var route:=terrain.path(other.pos,spot,od.domain,float(od.radius),keep_off,terrain.mobility_profile(other.kind))
 			queries+=1
 			if not route.is_empty() and _route_length(other.pos,route)<=ring*1.6+2.0:return [spot,route]

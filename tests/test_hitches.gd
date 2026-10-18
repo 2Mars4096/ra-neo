@@ -178,6 +178,7 @@ func routes()->void:
 		check(accepted==group.size(),"cross-map group order accepts every unit")
 		var queued:int=sim.route_queue.size()
 		check(queued>0,"over-budget routes queue instead of planning in the command")
+		check(sim.slot_queue.size()==group.size()-Sim.CLICK_SLOTS,"past the first %d units, formation slots queue too" % Sim.CLICK_SLOTS)
 		check(group.all(func(id):var u=sim.get_unit(id);return not u.orders.is_empty() and (not u.path.is_empty() or sim.route_waiting(u))),"queued units hold their order while waiting")
 		var routed_at:=-1
 		var worst:=0.0
@@ -187,7 +188,7 @@ func routes()->void:
 			sim.tick(1.0/30)
 			worst=maxf(worst,(Time.get_ticks_usec()-started)/1000.0)
 			budget_low=minf(budget_low,sim.route_budget)
-			if routed_at<0 and sim.route_queue.is_empty():routed_at=i+1
+			if routed_at<0 and sim.route_queue.is_empty() and sim.slot_queue.is_empty():routed_at=i+1
 		check(routed_at>0 and routed_at<=60,"queue drains within two seconds (%d ticks)" % routed_at)
 		# Queue work is capped per tick: a grid search only starts with room for it
 		# (one per tick), so at most one string-pull step runs past the cap.
@@ -195,14 +196,16 @@ func routes()->void:
 		var progressed:=group.filter(func(id):var u=sim.get_unit(id);return u.pos.distance_to(u.home)>8.0 and not u.orders.is_empty() and not u.path.is_empty()).size()
 		check(progressed==group.size(),"every queued unit departs on its planned route (%d/%d)" % [progressed,group.size()])
 		print("HITCH group order: issue=%.1fms queued=%d drained_after=%d ticks worst_tick=%.1fms" % [issue_ms,queued,routed_at,worst])
-		# Was ~47 ms idle (~250 ms under load); ~11 ms idle now.
+		# Was ~47 ms idle (~250 ms under load), ~11 ms with route queueing; ~4 ms
+		# with queued formation slots.
 		check(issue_ms<100.0,"16-unit cross-map command click stays cheap (%.1f ms)" % issue_ms)
 		runs.append(var_to_str(group.map(func(id):var u=sim.get_unit(id);return [u.pos,u.path,u.orders])))
 	check(runs[0]==runs[1],"budgeted planning is deterministic across identical runs")
 	large_order()
 
 # 40 units to a crowded quay corner: many find no formation slot or no route,
-# the costly case (~330 ms idle before batch memos, ~42 ms now).
+# the costly case (~330 ms idle before batch memos, ~42 ms with them, ~5 ms
+# with formation slots past the first CLICK_SLOTS units queued).
 func large_order()->void:
 	var sim=Sim.new(false,harbor_index())
 	for kind in ["rifle","tank"]:
@@ -211,9 +214,67 @@ func large_order()->void:
 	var group:Array=[]
 	for i in 30:group.append(sim.spawn("rifle",0,Vector2(250+(i%4)*7,600+(i/4)*7)).id)
 	for i in 10:group.append(sim.spawn("tank",0,Vector2(250+(i%6)*9,680+(i/6)*9)).id)
+	# Earlier orders (short moves): units the new order has no room for keep them.
+	var prior:={}
+	for id in group:
+		var u:Dictionary=sim.get_unit(id)
+		sim.issue([id],u.pos+Vector2(10,0),"move")
+		prior[id]={"orders":u.orders.map(func(o):return [o.mode,o.pos]),"path":u.path.duplicate()}
 	var started:=Time.get_ticks_usec()
 	var accepted:int=sim.issue(group,Vector2(860,200),"move")
 	var issue_ms:=(Time.get_ticks_usec()-started)/1000.0
-	print("HITCH large order: issue=%.1fms accepted=%d/%d queued=%d" % [issue_ms,accepted,group.size(),sim.route_queue.size()])
-	check(accepted>=16 and sim.route_queue.size()>0,"40-unit order accepts the units that fit and queues their routes")
-	check(issue_ms<200.0,"40-unit order click stays cheap (%.1f ms)" % issue_ms)
+	var slots_queued:int=sim.slot_queue.size()
+	check(accepted>=16 and sim.route_queue.size()>0 and slots_queued>0 and sim.order_resolving==slots_queued,"40-unit order accepts the units that fit and queues their routes and slots")
+	check(issue_ms<60.0,"40-unit order click stays cheap (%.1f ms)" % issue_ms)
+	check(group.all(func(id):var u=sim.get_unit(id);return u.orders.is_empty() or sim.route_waiting(u) or not u.path.is_empty()),"units hold their orders while slots and routes wait")
+	sim.report_resolution("Order confirmed",group.size())
+	# Each unit is judged when its target is known: placed in the new order, or
+	# back on exactly its orders and route from before the click (as a unit the
+	# click itself turns down, which is never touched).
+	var fresh:={}
+	for id in group:
+		var u:Dictionary=sim.get_unit(id)
+		if u.command_group==sim.command_serial:fresh[id]=u.orders[0]
+	var fitted:Array=[]
+	var tally:={"kept":0,"other":0} # (lambdas capture locals by value)
+	var judge:=func(id:int)->void:
+		var u:Dictionary=sim.get_unit(id)
+		var orders:Array=u.orders.map(func(o):return [o.mode,o.pos])
+		var same:bool=orders==prior[id].orders and (u.path==prior[id].path or sim.route_waiting(u))
+		# (One already standing on its earlier target completes that order.)
+		var done:bool=not prior[id].orders.is_empty() and u.pos.distance_to(prior[id].orders[0][1])<0.5 and orders==prior[id].orders.slice(1)
+		if same or done:tally.kept+=1
+		else:tally.other+=1;printerr("  u%d not as before: %s vs %s" % [id,u.orders,prior[id]])
+	for id in group:if not fresh.has(id):judge.call(id)
+	var reports:Array=[]
+	var drained:=-1
+	var slotted:=-1
+	var worst:=0.0
+	for i in 150:
+		started=Time.get_ticks_usec()
+		sim.tick(1.0/30)
+		worst=maxf(worst,(Time.get_ticks_usec()-started)/1000.0)
+		for event in sim.events:if event.type=="order_report":reports.append(event.text)
+		sim.events.clear()
+		for id in fresh.keys():
+			var u:Dictionary=sim.get_unit(id)
+			var order:Dictionary=fresh[id]
+			if order.has("slot"):continue
+			fresh.erase(id)
+			if u.orders.any(func(o):return is_same(o,order)):fitted.append([id,sim.collision_layer(u),sim.crowd_radius(u.kind),order.pos])
+			else:judge.call(id)
+		if slotted<0 and sim.slot_queue.is_empty():slotted=i+1
+		if drained<0 and sim.slot_queue.is_empty() and sim.route_queue.is_empty():drained=i+1
+	var kept:int=tally.kept
+	check(fresh.is_empty() and tally.other==0 and kept>0,"units without room keep their earlier orders and routes (%d kept, %d placed)" % [kept,fitted.size()])
+	check(drained>0 and drained<=60,"slot and route queues drain within two seconds (%d ticks)" % drained)
+	# Queued slots resolve against the command's earlier ones: no two overlap.
+	var apart:=true
+	for a in fitted:
+		for b in fitted:
+			if a[0]<b[0] and a[1]==b[1] and Vector2(a[3]).distance_to(b[3])<a[2]+b[2]+0.3-0.001:apart=false
+	check(apart,"queued formation slots keep clear of each other (%d placed)" % fitted.size())
+	# The final count is the one the click itself gave before slots queued.
+	check(fitted.size()==17 and kept==group.size()-17,"as many units fit as when the click resolved every slot (17 / 40): %d" % fitted.size())
+	check(reports==["Order confirmed • 17 / 40 sections (23 no room)"],"one follow-up toast gives the real count: %s" % [reports])
+	print("HITCH large order: issue=%.1fms slots_queued=%d placed=%d kept=%d slots_after=%d drained_after=%d ticks worst_tick=%.1fms" % [issue_ms,slots_queued,fitted.size(),kept,slotted,drained,worst])

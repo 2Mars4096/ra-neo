@@ -611,7 +611,7 @@ func consume_events() -> void:
 	for event in sim.events:
 		if event.type=="destroyed" and event.get("abandoned",false):continue
 		if audio!=null:audio.event(event)
-		if event.type=="warning":
+		if event.type in ["warning","order_report"]:
 			notify(event.text)
 		elif event.type=="crushed":
 			if harbor_props==null:harbor_props=find_child("HarborProps",true,false)
@@ -790,7 +790,10 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 					break
 		marker.position=Vector3(destination.x,0.1,destination.y)
 		marker_time=1.0
-		notify(lead+("Nearest accessible position" if sim.order_adjusted else ("Queued" if queued else "Order confirmed"))+" • %d / %d sections" % [count,ids.size()]+release_note(before))
+		var status:=lead+("Nearest accessible position" if sim.order_adjusted else ("Queued" if queued else "Order confirmed"))
+		# A large group's last targets resolve over the next ticks: the real count follows.
+		if sim.order_resolving>0:sim.report_resolution(status,ids.size())
+		notify((lead+"Order issued • resolving %d…" % sim.order_resolving if sim.order_resolving>0 else status+" • %d / %d sections" % [count,ids.size()])+release_note(before))
 		if stuck_note!="":notify(lead+stuck_note+" • %d / %d moving" % [count,ids.size()+stuck.size()])
 		if downed_note!="":notify(lead+downed_note+" • %d / %d moving" % [count,ids.size()+stuck.size()+downed.size()])
 		ping()
@@ -1102,7 +1105,8 @@ func _input(event: InputEvent) -> void:
 					var target: Vector2=(p-hud.minimap.position)/hud.minimap.size*sim.terrain.world_size
 					var before:=active_sites()
 					var count:=sim.issue(orderable(),target,"attack_move" if attack_mode else "move",event.shift_pressed)
-					notify("Minimap order • %d sections" % count+release_note(before))
+					if sim.order_resolving>0:sim.report_resolution("Minimap order",count)
+					notify(("Minimap order • resolving %d…" % sim.order_resolving if sim.order_resolving>0 else "Minimap order • %d sections" % count)+release_note(before))
 					attack_mode=false
 				if event.button_index==MOUSE_BUTTON_LEFT:
 					ui_action(action,p)
