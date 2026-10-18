@@ -80,6 +80,15 @@ func _init()->void:
 	# round it and all fire, with no give-way cycle among themselves.
 	run_group_attack(1.0/30.0)
 	run_group_attack(0.1)
+	# 10. Few firing spots: tanks attack the enemy HQ (a corner of the classic
+	# map) past immobilised friends standing on the near side of its firing
+	# ring, under normal fog. With two such friends every tank fires; with
+	# three, walling off the near side, a tank that cannot get through still
+	# changes its firing spot at most Sim.RESPOT_MAX times (it used to cycle
+	# spots for as long as the attack lasted).
+	run_limited_attack(5,1.0/30.0,2)
+	run_limited_attack(5,0.1,2)
+	run_limited_attack(4,0.1,3,false)
 	if checks==0:failures+=1;printerr("FAIL: no cases ran")
 	print("VEHICLE JAM: %d checks, %d failures" % [checks,failures])
 	quit(0 if failures==0 else 1)
@@ -207,4 +216,54 @@ func run_group_attack(dt:float)->void:
 		check(fired[i]>=0.0,"%s: tank %d reaches a firing spot and fires within %.0f s" % [label,i,limit])
 		check(worst[i]<=YIELD_LIMIT,"%s: tank %d yields at most %.0f s at a stretch (%.1f s)" % [label,i,YIELD_LIMIT,worst[i]])
 		check(worst_stall[i]<=YIELD_LIMIT*2.0,"%s: tank %d is never stuck without headway over %.0f s (%.1f s)" % [label,i,YIELD_LIMIT*2.0,worst_stall[i]])
+	print(line)
+
+func run_limited_attack(count:int,dt:float,blockers:int,all_fire:bool=true)->void:
+	var label:="limited_spots_attack_%d_b%d_dt%.2f" % [count,blockers,dt]
+	var sim=Sim.new(true,scenario_index("classic"))
+	var hq:Dictionary={}
+	for u in sim.units:
+		if u.team==1 and u.kind=="hq":hq=u
+		elif u.team==1:u.hp=0.0
+	check(not hq.is_empty() and not sim.terrain.traversable(hq.pos,"land",2.45),"%s: fixture has an enemy structure" % label)
+	var tanks:Array=[]
+	for i in count:
+		var start:=Vector2(28+(i%2)*CONTACT,8+(i/2)*CONTACT)
+		var tank:Dictionary=sim.spawn("tank",0,start)
+		tank.pos=start
+		tank.facing=Vector2.RIGHT
+		tanks.append(tank)
+	# Immobilised friends (they hold and cannot give way) on the near side of
+	# the ring, 19 u out: west to south-west of the HQ.
+	for k in blockers:
+		var stuck:Dictionary=sim.spawn("tank",0,hq.pos+Vector2.from_angle(PI*(0.75+0.25*k/maxf(1,blockers-1)))*19.0)
+		stuck.mobility_kill=true
+		stuck.hold_command=true
+	sim.rebuild_spatial()
+	# Sighted for the order; normal fog from then on.
+	hq.seen_by=[true,true];hq.visible=true
+	check(sim.issue(tanks.map(func(t):return t.id),hq.pos,"attack",false,hq.id)==tanks.size(),"%s: every tank accepts the group attack" % label)
+	# Changes of each tank's firing spot (a structure never moves: only a
+	# re-spot moves it).
+	var last:Array=[];var respots:Array=[];var fired:Array=[]
+	for tank in tanks:last.append(Vector2.INF);respots.append(0);fired.append(-1.0)
+	var limit:=150.0
+	for step in int(limit/dt):
+		hq.hp=hq.max_hp
+		sim.classic.enemy_credits=0.0
+		sim.tick(dt);sim.events.clear()
+		var done:=true
+		for i in tanks.size():
+			var tank:Dictionary=tanks[i]
+			if not tank.orders.is_empty() and tank.orders[0].mode=="attack":
+				if last[i]!=Vector2.INF and tank.orders[0].pos!=last[i]:respots[i]+=1
+				last[i]=tank.orders[0].pos
+			if fired[i]<0 and tank.target==hq.id and float(tank.last_shot)>0:fired[i]=sim.time
+			if fired[i]<0:done=false
+		if done:break
+	var line:="%s:" % label
+	for i in tanks.size():
+		line+=" [%d fired=%.1f respots=%d %s]" % [i,fired[i],respots[i],tanks[i].state]
+		if all_fire:check(fired[i]>=0.0,"%s: tank %d fires on the HQ within %.0f s" % [label,i,limit])
+		check(respots[i]<=Sim.RESPOT_MAX,"%s: tank %d changes its firing spot at most %d times (%d)" % [label,i,Sim.RESPOT_MAX,respots[i]])
 	print(line)

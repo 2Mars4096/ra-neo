@@ -2590,15 +2590,28 @@ func _give_way_spot(other:Dictionary,legs:Array,keep_off:Array,clearance:float,m
 # A hull jammed on its way to a firing spot on a structure takes the nearest
 # free one instead (in reach and line of fire, clear of the spots and hulls of
 # friends attacking it and of parked friends): an attack group spreads round
-# the target rather than queueing behind friends stopped to fire. Once per
-# RESPOT_EVERY; give-way and back-off still follow while the jam lasts.
+# the target rather than queueing behind friends stopped to fire. Never while
+# it is in reach with line of fire. Per target: the first RESPOT_FREE re-spots
+# RESPOT_EVERY apart, then the wait doubles, and after RESPOT_MAX it holds the
+# spot it has (all spots taken: the nearest) - a hull that cannot get through
+# stops cycling spots round the target. Give-way and back-off still follow
+# while the jam lasts. (Committing to a spot while closing on it, or holding
+# the nearest free spot early, left more tanks of a crowded attack unfired.)
 const RESPOT_EVERY:=4.0
+const RESPOT_FREE:=3
+const RESPOT_MAX:=6
 func attack_respot(u:Dictionary,order:Dictionary)->bool:
-	if time<float(u.get("respot_at",0.0)):return false
+	var target_id:=int(order.get("target",-1))
+	if int(u.get("respot_target",-1))!=target_id:
+		u["respot_target"]=target_id;u["respots"]=0;u["respot_at"]=0.0
+	var count:int=u.respots
+	if count>=RESPOT_MAX or time<float(u.respot_at):return false
 	u["respot_at"]=time+RESPOT_EVERY
-	var enemy:=get_unit(int(order.get("target",-1)))
+	var enemy:=get_unit(target_id)
 	var d:Dictionary=definitions[u.kind]
 	if not alive(enemy) or terrain.traversable(enemy.pos,d.domain,float(d.radius)):return false
+	# (It stops to fire once its gun is ready.)
+	if contact_known(u,enemy) and weapon_reaches(attack_weapon(u,enemy.kind),u.pos,enemy):return false
 	# Routes round friendly hulls standing still (firing, parked): a plain
 	# route would lead straight back into the line of friends firing.
 	var avoid:Array=[]
@@ -2615,6 +2628,8 @@ func attack_respot(u:Dictionary,order:Dictionary)->bool:
 	order.pos=spot
 	u.path=route
 	u.blocked_time=0.0
+	u.respots=count+1
+	u.respot_at=time+RESPOT_EVERY*pow(2.0,maxi(0,count+1-RESPOT_FREE))
 	# The jam clock runs on: a crowd that still holds the hull escalates to
 	# give-way and back-off as before (a new spot alone never ends a jam).
 	u.reason="Taking another firing position"
