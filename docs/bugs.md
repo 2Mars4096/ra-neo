@@ -149,3 +149,9 @@ Full linear conversion of the batched palette made units and trim too dark in th
 - Regroup recovery's mission part is one chaotic seeded fight; it was made robust with fixtures/bounds, but combat changes can still expose real traffic bugs there (it caught the parked-tank alley jam).
 - Gunner-held ATGM guidance (TOW-style) was replaced by fire-and-forget for the Javelin (realism); stretching lock time or lowering seeker odds to rescue classic was rejected.
 - A hard tank hold-back outside Javelin reach stalled classic assaults (2/5 wins); kept a milder pull-back.
+
+## 2026-10-18 leftovers
+
+- Harvester jam fix (claimed spots, dock queue, staging) plus threat-aware deposits is ready in worker worktree cff8a4a1 but NOT merged. It removes shared-spot jams and cuts player harvester deaths 82 -> 58 over 29 seeds, but wins drop 24 -> 20 of 29 and the 8-seed classic check fails (5/8). A dock-spot unload rule lost loads; a fixed "enemy half" territory rule and avoiding sightings on home ground both wrecked the economy. Needs a player decision.
+- The classic 8-seed check is fragile: neutral controls (rotating harvester stand points 0.2 rad) drop main from 24/29 to ~19/29 and can fail it. Judge classic changes on 29+ seeds against such controls.
+- Wrecks are permanent and solid; a fully wreck-sealed pocket traps tanks (no shove-aside). Single-lane approaches still leave ~20% of a 12-tank column unfired within 180 s.

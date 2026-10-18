@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-18 (later) — Leftover fixes
+
+- Engaged sections keep ~4 u apart: the later arrival shifts to a clear fire position and soldiers avoid the other section's footprint (`test_engaged_spacing`).
+- Large orders: the click resolves 8 slots and the rest per tick (40-unit click 42 -> 5 ms, identical slots); units that don't fit keep their old orders; a follow-up toast gives the real count.
+- Give-way spots skip spots friends are already heading to (`test_give_way_spots`).
+- attack_respot: per-target cap with doubling cooldown; no re-spot when already in reach with line of fire.
+- Firing spots must be reachable around wrecks; shelling friends press on or shift off a jammed tank's route (seed-8 gridlock behind a wreck wall fixed).
+- The post-order "cover search spike" was a one-time soldier-grid build that battle.gd already does at load; `test_cover_search_cost` guards cover cost per tick.
+- Classic check: 8 fixed combat seeds (47291 + 1..7), pass at >= 6 wins.
+
 ## 2026-10-18 — Realistic armour and Javelin, vehicle traffic, section tactics, spikes
 
 - Armour: hit location by presented area and impact angle, weak zones per face, and per-zone penetration effects (crew, ammunition, gun, mobility, fire), scaled by the round's behind-armour effect. Non-penetrating hits can break tracks, disable the gun, smash sights or shake the crew. Tank duels resolve in ~15-35 s (`test_vehicle_damage` 94/0).
