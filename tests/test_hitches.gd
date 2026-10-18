@@ -211,6 +211,8 @@ func large_order()->void:
 	for kind in ["rifle","tank"]:
 		var definition:Dictionary=sim.definitions[kind]
 		sim.terrain.nav_grid(definition.domain,float(definition.radius),sim.terrain.mobility_profile(kind))
+	# Soldier cover grid, built at load by battle.gd (a lazy build costs ~160 ms once).
+	sim.terrain.nav_grid("land",0.8,"infantry")
 	var group:Array=[]
 	for i in 30:group.append(sim.spawn("rifle",0,Vector2(250+(i%4)*7,600+(i/4)*7)).id)
 	for i in 10:group.append(sim.spawn("tank",0,Vector2(250+(i%6)*9,680+(i/6)*9)).id)
