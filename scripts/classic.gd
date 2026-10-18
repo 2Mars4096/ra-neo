@@ -116,87 +116,39 @@ static func cancel(sim,facility:Dictionary) -> bool:
 	spend(sim,facility.team,-float(item.cost))
 	return true
 
-# Refinery dock. A refinery unloads one harvester at a time (UNLOAD_TIME for a
-# full load, credited when done) and is free again the moment it is empty.
-# Returning harvesters each drive to their own dock spot round it, never one
-# another harvester stands on or is headed for, and wait there for their turn;
-# with every dock spot taken they queue at a staging spot on STAGE_RINGS, and
-# idle harvesters park off the dock the same way.
-const DOCK_REACH:=8.0
-# Any unloading time delays the economy: 0.5 s per load halved scripted
-# classic wins over 28 seeds (credits for the opening Javelin teams came late).
-const UNLOAD_TIME:=0.0
-const STAGE_RINGS:=[12.5,15.5] # clear of a hull stopped at the edge of reach
-const STAGE_ROUTES:=2 # path queries per body set when planning a staging spot
-const HAUL_GAP:=4.3 # between harvester stops and destinations: two hulls and a margin
-
 static func harvest(sim,u:Dictionary,dt:float) -> void:
 	if not u.has("cargo"):u["cargo"]=0.0;u["haul"]="COLLECT"
-	# Its own trip (a player's order stands), even once a friend making way has rerouted it.
-	var own:bool=not u.orders.is_empty() and u.command_group==int(u.get("haul_command",-1))
 	var refineries:=structures(sim,u.team,"refinery")
-	if refineries.is_empty():
-		u.reason="Waiting for refinery"
-		if own and u.blocked_time>4.0:sim.stop([u.id])
-		return
+	if refineries.is_empty():u.reason="Waiting for refinery";return
 	var refinery:Dictionary=refineries[0]
 	for r in refineries:
-		if r.id==u.get("dock_refinery",-1):refinery=r;break
 		if u.pos.distance_to(r.pos)<u.pos.distance_to(refinery.pos):refinery=r
 	if u.haul=="RETURN":
-		# It unloads on its dock spot (or where it stopped, was held up or was
-		# ordered to), not wherever it crosses into reach.
-		var docked:bool=not own or u.get("dock_unload",false) or u.blocked_time>1.0 or u.pos.distance_to(u.haul_destination)<1.5
-		if u.pos.distance_to(refinery.pos)<DOCK_REACH and docked:
-			var holder:=dock_holder(sim,refinery)
-			if holder.is_empty():
-				sim.stop([u.id])
-				refinery["dock_id"]=u.id;u["dock_refinery"]=refinery.id;u["dock_unload"]=true;u["unload_left"]=UNLOAD_TIME*float(u.cargo)/120.0;holder=u
-			elif holder.id!=u.id:
-				if not u.orders.is_empty():sim.stop([u.id])
-				u.reason="Queued to unload: %d" % u.cargo
-				return
-			u.unload_left-=dt
-			u.reason="Unloading: %d" % u.cargo
-			if u.unload_left<=0.0:
-				spend(sim,u.team,-float(u.cargo));u.cargo=0.0;u.haul="COLLECT";u.dock_unload=false
-				refinery.dock_id=-1;u.erase("dock_refinery")
-			return
-		var staged:bool=u.get("dock_wait",false)
-		if (u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0))) or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and own):
-			var excluded:Vector2=u.get("haul_destination",Vector2.INF) if own and not staged else Vector2.INF
+		if u.pos.distance_to(refinery.pos)<8:
+			spend(sim,u.team,-float(u.cargo));u.cargo=0.0;u.haul="COLLECT";sim.stop([u.id])
+		elif (u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0))) or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and not u.orders.is_empty() and u.orders[0].pos==u.get("haul_destination",Vector2.INF)):
+			var excluded:Vector2=u.get("haul_destination",Vector2.INF) if not u.orders.is_empty() else Vector2.INF
 			var dock:=delivery_route(sim,u,refinery,excluded)
 			if dock.is_empty():dock=delivery_route(sim,u,refinery,excluded,7.0,true)
 			u["haul_repath_at"]=sim.time+5.0
 			if not dock.is_empty() and sim.issue([u.id],dock.pos)>0:
-				u.path=dock.path;u["haul_destination"]=dock.pos;u["haul_command"]=u.command_group;u["dock_wait"]=false;staged=false
-			else:
-				u["haul_retry_at"]=sim.time+1.0
-				# Every dock spot taken: queue off the dock (where it waits already, or a staging spot).
-				if not (staged and u.orders.is_empty()):staged=stage(sim,u,refinery,u.haul_destination if own and staged else Vector2.INF)
-		u.reason=("Queued to unload: %d" if staged else "Returning cargo: %d") % u.cargo
+				u.path=dock.path;u["haul_destination"]=dock.pos
+			else:u["haul_retry_at"]=sim.time+1.0
+		u.reason="Returning cargo: %d" % u.cargo
 		return
 	var field:=ore_field(sim,u)
 	if field.is_empty():
 		if u.cargo>0:u.haul="RETURN"
-		else:
-			u.reason="Resource deposits exhausted" if sim.classic.fields.all(func(f):return f.remaining<=0) else "No reachable deposit"
-			# Idle: off the dock and clear of other harvesters.
-			if own and u.blocked_time>4.0:sim.stop([u.id])
-			if u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0)):
-				u["haul_retry_at"]=sim.time+1.0
-				if u.pos.distance_to(refinery.pos)<DOCK_REACH+float(sim.definitions[u.kind].radius) or claimed(u.pos,haul_claims(sim,u)):stage(sim,u,refinery)
+		else:u.reason="Resource deposits exhausted" if sim.classic.fields.all(func(f):return f.remaining<=0) else "No reachable deposit"
 		return
-	# Passing over the centre it collects there, unless another harvester stands
-	# or is headed within a hull of it.
-	if (u.pos.distance_to(field.pos)<4 and (u.orders.is_empty() or not claimed(u.pos,haul_claims(sim,u)))) or (u.pos.distance_to(u.get("ore_cell",Vector2.INF))<ORE_SCOOP and field.pos.distance_to(u.ore_cell)<ORE_RINGS[-1][0]+0.5):
+	if u.pos.distance_to(field.pos)<4 or (u.pos.distance_to(u.get("ore_cell",Vector2.INF))<ORE_SCOOP and field.pos.distance_to(u.ore_cell)<ORE_RINGS[-1][0]+0.5):
 		sim.stop([u.id])
 		var amount:float=minf(18*dt,minf(120-u.cargo,field.remaining))
 		u.cargo+=amount;field.remaining-=amount
 		u.reason="Harvesting: %d / 120" % u.cargo
 		if u.cargo>=119.9 or field.remaining<=0:u.haul="RETURN"
-	elif (u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0))) or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and own):
-		var excluded:Vector2=u.get("haul_destination",Vector2.INF) if own else Vector2.INF
+	elif (u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0))) or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and not u.orders.is_empty() and u.orders[0].pos==u.get("haul_destination",Vector2.INF)):
+		var excluded:Vector2=u.get("haul_destination",Vector2.INF) if not u.orders.is_empty() else Vector2.INF
 		u["haul_repath_at"]=sim.time+5.0
 		clear_deposit(sim,u,field)
 		var approach:=ore_route(sim,u,field,excluded)
@@ -205,68 +157,12 @@ static func harvest(sim,u:Dictionary,dt:float) -> void:
 		# movement and the blocked re-plan handle them.
 		if approach.is_empty():approach=ore_route(sim,u,field,excluded,true)
 		if not approach.is_empty() and sim.issue([u.id],approach.pos)>0:
-			u.path=approach.path;u["haul_destination"]=approach.pos;u["haul_command"]=u.command_group;u["ore_cell"]=approach.pos
+			u.path=approach.path;u["haul_destination"]=approach.pos;u["ore_cell"]=approach.pos
 		else:
 			# Walled off by wrecks or immobilised hulls: try another deposit.
 			if not u.has("ore_skip"):u["ore_skip"]={}
 			u.ore_skip[sim.classic.fields.find(field)]=sim.time+ORE_SKIP
 			u["haul_retry_at"]=sim.time+1.0;u.reason="Deposit blocked · rerouting"
-
-# The harvester unloading at the refinery, or {} when its dock is free.
-static func dock_holder(sim,refinery:Dictionary)->Dictionary:
-	var holder:Dictionary=sim.get_unit(int(refinery.get("dock_id",-1)))
-	if not sim.alive(holder) or holder.get("haul","")!="RETURN" or not holder.get("dock_unload",false) or int(holder.get("dock_refinery",-1))!=refinery.id:return {}
-	return holder
-
-# Sends the harvester to a staging spot off the dock; false when none is free.
-static func stage(sim,u:Dictionary,refinery:Dictionary,excluded:Vector2=Vector2.INF)->bool:
-	u["haul_repath_at"]=sim.time+5.0
-	var spot:=stage_route(sim,u,refinery,excluded)
-	if spot.is_empty() or sim.issue([u.id],spot.pos)==0:
-		u["haul_retry_at"]=sim.time+1.0
-		return false
-	u.path=spot.path;u["haul_destination"]=spot.pos;u["haul_command"]=u.command_group;u["dock_wait"]=true
-	return true
-
-# Where other friendly harvesters are stopped or headed (a moving hull is
-# planned round as a body, not claimed where it passes).
-static func haul_claims(sim,u:Dictionary)->Array:
-	var claims:Array=[]
-	for other in sim.units:
-		if other.id==u.id or other.kind!="harvester" or other.team!=u.team or not sim.alive(other):continue
-		claims.append(other.pos if other.orders.is_empty() else Vector2(other.orders.back().pos))
-	return claims
-
-static func claimed(point:Vector2,claims:Array)->bool:
-	for claim in claims:
-		if point.distance_squared_to(claim)<HAUL_GAP*HAUL_GAP:return true
-	return false
-
-# Nearest reachable staging spot round the refinery: off every dock, off the
-# ore, clear of bodies and of other harvesters' stops and destinations.
-static func stage_route(sim,u:Dictionary,refinery:Dictionary,excluded:Vector2=Vector2.INF)->Dictionary:
-	var radius:float=sim.definitions[u.kind].radius
-	var avoid:=haul_bodies(sim,u)
-	var claims:=haul_claims(sim,u)
-	var docks:Array=structures(sim,u.team,"refinery")
-	var cells:Array=[]
-	for ring in STAGE_RINGS:
-		for i in 16:
-			var point:Vector2=refinery.pos+Vector2.from_angle(i*TAU/16)*ring
-			if excluded.is_finite() and point.distance_to(excluded)<1.0:continue
-			if claimed(point,claims) or not sim.terrain.traversable(point,"land",radius):continue
-			if docks.any(func(r):return point.distance_to(r.pos)<DOCK_REACH+radius):continue
-			if sim.classic.fields.any(func(f):return f.remaining>0 and point.distance_to(f.pos)<ORE_RINGS[-1][0]+radius):continue
-			var clear:=true
-			for body in avoid:
-				if point.distance_squared_to(body.pos)<(body.radius+0.5)*(body.radius+0.5):clear=false;break
-			if clear:cells.append(point)
-	cells.sort_custom(func(a,b):return a.distance_squared_to(u.pos)<b.distance_squared_to(u.pos))
-	for bodies in [avoid,haul_bodies(sim,u,true)]:
-		for point in cells.slice(0,STAGE_ROUTES):
-			var route:Array=sim.terrain.path(u.pos,point,"land",radius,bodies,"wheeled")
-			if not route.is_empty() and route.back().distance_to(point)<=1.0:return {"pos":point,"path":route}
-	return {}
 
 # Ore deposits. The marker ring is 3.3 m across the ore; a harvester collects
 # from stand points on and round it (its scoop reaches the edge from 5.5 m),
@@ -313,13 +209,12 @@ static func haul_bodies(sim,u:Dictionary,fixed:bool=false)->Array:
 static func ore_route(sim,u:Dictionary,field:Dictionary,excluded:Vector2=Vector2.INF,fixed:bool=false)->Dictionary:
 	var radius:float=sim.definitions[u.kind].radius
 	var avoid:=haul_bodies(sim,u,fixed)
-	var claims:=haul_claims(sim,u)
 	for ring in ORE_RINGS:
 		var cells:Array=[]
 		for i in ring[1]:
 			var point:Vector2=field.pos+Vector2.from_angle(i*TAU/ring[1])*ring[0]
 			if excluded.is_finite() and point.distance_to(excluded)<1.0:continue
-			if claimed(point,claims) or not sim.terrain.traversable(point,"land",radius):continue
+			if not sim.terrain.traversable(point,"land",radius):continue
 			# Half a nav cell of slack: a point grazing a body has no grid route.
 			var clear:=true
 			for body in avoid:
@@ -370,14 +265,11 @@ static func clear_deposit(sim,u:Dictionary,field:Dictionary)->int:
 static func delivery_route(sim,u:Dictionary,refinery:Dictionary,excluded:Vector2=Vector2.INF,approach_radius:float=7.0,fixed:bool=false) -> Dictionary:
 	var radius:float=sim.definitions[u.kind].radius
 	var avoid:=haul_bodies(sim,u,fixed)
-	var claims:=haul_claims(sim,u)
 	var best:Dictionary={}
 	var best_length:=INF
 	for i in 8:
 		var point:Vector2=refinery.pos+Vector2.from_angle(i*TAU/8)*approach_radius
 		if excluded.is_finite() and point.distance_to(excluded)<1.0:continue
-		# Never onto a harvester or where one is headed, even planning round fixed bodies only.
-		if claimed(point,claims):continue
 		if not sim.terrain.traversable(point,"land",radius) or not sim.terrain.avoids_bodies(point,point,avoid):continue
 		var route:Array=sim.terrain.path(u.pos,point,"land",radius,avoid,"wheeled")
 		if route.is_empty():continue
