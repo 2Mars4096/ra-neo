@@ -644,6 +644,19 @@ func _nearest_open(p:Vector2,base:Vector2i,grid:AStarGrid2D,anchors:Dictionary,d
 		distances[pick]=INF
 	return Vector2i(-1,-1)
 
+# A unit pressed against an avoided body (inside its margin) plans with that
+# body shrunk to its current distance: routes may lead away from it, never
+# closer to it or through it. Callers' body records are not modified.
+func _pressed_bodies(from:Vector2,avoid:Array)->Array:
+	var result:=avoid
+	var copied:=false
+	for i in avoid.size():
+		var gap:float=from.distance_to(avoid[i].pos)
+		if gap>=float(avoid[i].radius):continue
+		if not copied:result=avoid.duplicate();copied=true
+		result[i]={"pos":avoid[i].pos,"radius":maxf(gap-0.05,gap*0.9)}
+	return result
+
 # Project a click in open ground that is too tight for a whole unit. Never turn
 # a click inside a solid parcel, water, or outside the map into an implicit move.
 func reachable_destination(from:Vector2, desired:Vector2, domain:String, radius:float, profile:String="default") -> Vector2:
@@ -796,6 +809,7 @@ func _path_begin(from: Vector2, to: Vector2, domain: String, radius: float, avoi
 	var job:={"done":true,"result":result,"work":0}
 	if radius<0: radius=default_radius(domain)
 	if not traversable(from,domain,radius) or not traversable(to,domain,radius): return job
+	avoid=_pressed_bodies(from,avoid)
 	var direct_clear:bool=(domain=="air" or segment_clear(from,to,domain,radius)) and avoids_bodies(from,to,avoid)
 	# Hulls cannot trace a line exactly (and footprints are sampled), so vehicle
 	# shortcuts keep a margin. Every published edge still clears the true radius.
@@ -840,7 +854,7 @@ func _path_begin(from: Vector2, to: Vector2, domain: String, radius: float, avoi
 		raw.clear()
 		for id in ids:raw.append(_anchor(anchors,id))
 		raw.append(to)
-		if ids.is_empty() or anchors.is_empty():break
+		if ids.is_empty() or (anchors.is_empty() and avoid.is_empty()):break
 		var failed:=_first_blocked_edge(from,raw,domain,radius,avoid,skip,edges)
 		if failed<0:break
 		var closed:=false
@@ -848,6 +862,13 @@ func _path_begin(from: Vector2, to: Vector2, domain: String, radius: float, avoi
 		for k in (range(ids.size()) if attempt==3 else [failed-1,failed]):
 			if k<0 or k>=ids.size() or ids[k]==start or ids[k]==end or not anchors.has(ids[k]):continue
 			grid.set_point_solid(ids[k],true);changed.append(ids[k]);closed=true
+		# Both cells of a grid edge can clear an avoided body while the edge
+		# between them clips it: close the cell it enters (or leaves, at the end).
+		if not closed and not avoid.is_empty():
+			for k in [failed,failed-1]:
+				if k<0 or k>=ids.size() or ids[k]==start or ids[k]==end:continue
+				grid.set_point_solid(ids[k],true);changed.append(ids[k]);closed=true
+				break
 		if attempt==3:
 			for id in anchors:
 				if id!=start and id!=end and not grid.is_point_solid(id):grid.set_point_solid(id,true);changed.append(id)
