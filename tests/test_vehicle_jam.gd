@@ -5,6 +5,7 @@ extends SceneTree
 # goal, or a clear spot near it, within a bound, and no tank may stay
 # YIELDING for more than ~8 s at a stretch.
 const Sim=preload("res://scripts/simulation.gd")
+const VehicleDamage=preload("res://scripts/vehicle_damage.gd")
 const CONTACT:=2.45*2.0+0.08 # two tank hulls touching (movement clearance)
 const YIELD_LIMIT:=8.0
 const NEAR_GOAL:=8.0 # "a clear spot near it"
@@ -89,6 +90,20 @@ func _init()->void:
 	run_limited_attack(5,1.0/30.0,2)
 	run_limited_attack(5,0.1,2)
 	run_limited_attack(4,0.1,3,false)
+	# 11. A twelve-tank column attacks the enemy HQ from the west, where the
+	# wrecks of an earlier assault (classic seed 8 at 300 s) leave one narrow
+	# lane: the column takes spots it can reach round the wrecks, and hulls
+	# stopped to fire in the lane press on to their spots or shift aside, so
+	# the column flows through instead of gridlocking in the lane. Over four
+	# column placements and both steps, at least CHOKE_SHARE of the tanks fire
+	# within the limit, and at least CHOKE_RUN of twelve in every run.
+	var through:=0;var sent:=0
+	for dt in [1.0/30.0,0.1]:
+		for offset in CHOKE_OFFSETS:
+			var result:Array=run_choked_column(dt,offset)
+			through+=result[0];sent+=result[1]
+	check(through>=ceili(sent*CHOKE_SHARE),"choked_column: at least %d%% of the tanks fire (%d/%d)" % [roundi(CHOKE_SHARE*100),through,sent])
+	print("choked_column: %d/%d tanks fired" % [through,sent])
 	if checks==0:failures+=1;printerr("FAIL: no cases ran")
 	print("VEHICLE JAM: %d checks, %d failures" % [checks,failures])
 	quit(0 if failures==0 else 1)
@@ -267,3 +282,47 @@ func run_limited_attack(count:int,dt:float,blockers:int,all_fire:bool=true)->voi
 		if all_fire:check(fired[i]>=0.0,"%s: tank %d fires on the HQ within %.0f s" % [label,i,limit])
 		check(respots[i]<=Sim.RESPOT_MAX,"%s: tank %d changes its firing spot at most %d times (%d)" % [label,i,Sim.RESPOT_MAX,respots[i]])
 	print(line)
+
+const SEED8_WRECKS:=[Vector2(30.65,30.63),Vector2(54.21,56.66),Vector2(28.95,23.88),Vector2(43.71,56.77),Vector2(41.05,21.05),Vector2(36.45,41.38),Vector2(41.08,15.32),Vector2(32.53,13.37)]
+const CHOKE_OFFSETS:=[Vector2(0,0),Vector2(2,3),Vector2(0,8),Vector2(4,14)]
+const CHOKE_SHARE:=0.67
+const CHOKE_RUN:=6
+# Returns [tanks that fired, tanks sent].
+func run_choked_column(dt:float,offset:Vector2)->Array:
+	var label:="choked_column_%d_%d_dt%.2f" % [offset.x,offset.y,dt]
+	var sim=Sim.new(true,scenario_index("classic"))
+	var hq:Dictionary={}
+	for u in sim.units:
+		if u.team==1 and u.kind=="hq":hq=u
+		elif u.team==1:u.hp=0.0
+	var hulks:Array=[]
+	for at in SEED8_WRECKS:hulks.append({"id":-1,"kind":"tank","team":1,"pos":at,"facing":Vector2.RIGHT,"radius":2.45,"abandoned":false})
+	sim.set_meta(VehicleDamage.WRECKS,hulks)
+	var tanks:Array=[]
+	for i in 12:
+		var start:=Vector2(8+(i%3)*CONTACT,4+(i/3)*CONTACT)+offset
+		var tank:Dictionary=sim.spawn("tank",0,start)
+		tank.pos=start
+		tank.facing=Vector2.RIGHT
+		tanks.append(tank)
+	sim.rebuild_spatial()
+	hq.seen_by=[true,true];hq.visible=true
+	check(sim.issue(tanks.map(func(t):return t.id),hq.pos,"attack",false,hq.id)==tanks.size(),"%s: every tank accepts the group attack" % label)
+	var fired:Array=[]
+	for tank in tanks:fired.append(-1.0)
+	var limit:=180.0
+	for step in int(limit/dt):
+		hq.hp=hq.max_hp
+		sim.classic.enemy_credits=0.0
+		sim.tick(dt);sim.events.clear()
+		var done:=true
+		for i in tanks.size():
+			if fired[i]<0 and tanks[i].target==hq.id and float(tanks[i].last_shot)>0:fired[i]=sim.time
+			if fired[i]<0:done=false
+		if done:break
+	var through:=fired.filter(func(f):return f>=0.0).size()
+	var line:="%s: %d/%d fired" % [label,through,tanks.size()]
+	for i in tanks.size():line+=" [%d %.1f]" % [i,fired[i]]
+	print(line)
+	check(through>=CHOKE_RUN,"%s: at least %d of %d tanks fire within %.0f s (%d)" % [label,CHOKE_RUN,tanks.size(),limit,through])
+	return [through,tanks.size()]

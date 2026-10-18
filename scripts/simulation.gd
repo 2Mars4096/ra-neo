@@ -496,9 +496,26 @@ func attack_rivals(u:Dictionary,target_id:int,ids:Array,queued:bool)->Array[Dict
 				break
 	return rivals
 
+# A land vehicle cannot pass wrecks: spots in a wreck's margin are out, and a
+# spot counts as reachable only by a route round the wrecks (the hulks of an
+# earlier assault can choke or close an approach: the next one takes another).
+# After WRECK_SPOT_MISSES spots with no such route the far side is taken as
+# closed off: no spot.
+const WRECK_SPOT_MISSES:=4
 func attack_position(u:Dictionary,enemy:Dictionary,taken:Array=[])->Vector2:
 	var d:Dictionary=definitions[u.kind]
 	var reach:float=horizontal_reach(attack_weapon(u,enemy.kind),enemy)*0.9
+	var hulks:Array=[]
+	if has_meta(VehicleDamage.WRECKS) and VehicleDamage.wreck_bound(self,u):
+		var span:float=u.pos.distance_to(enemy.pos)+reach+20.0
+		# The margin of the movement detour round wrecks (a hull's 0.4 u
+		# slack), so a spot is only taken where the drive can actually go; a
+		# hull touching a wreck may still plan away from it.
+		var slack:float=0.4 if u.kind in ["tank","aa","boat"] else 0.0
+		for wreck in VehicleDamage.wrecks(self):
+			var gap:float=wreck.pos.distance_to(u.pos)
+			if gap<span:hulks.append({"pos":wreck.pos,"radius":minf(float(d.radius)+float(wreck.radius)+slack,gap-0.05)})
+	var misses:=0
 	var candidates:Array=[]
 	# Only cells within reach can qualify: scan their bounding box, not the map.
 	var low:Vector2i=terrain.cell(enemy.pos-Vector2.ONE*reach)
@@ -508,6 +525,7 @@ func attack_position(u:Dictionary,enemy:Dictionary,taken:Array=[])->Vector2:
 			var p:Vector2=terrain.center(Vector2i(x,y))
 			if not terrain.traversable(p,d.domain,float(d.radius)) or p.distance_to(enemy.pos)>reach:continue
 			if definitions[enemy.kind].domain!="air" and not terrain.line_clear(p,enemy.pos):continue
+			if not hulks.is_empty() and not terrain.avoids_bodies(p,p,hulks):continue
 			candidates.append({"pos":p,"distance":p.distance_squared_to(u.pos)})
 	candidates.sort_custom(func(a,b):return a.distance<b.distance)
 	var layer:=collision_layer(u)
@@ -522,7 +540,10 @@ func attack_position(u:Dictionary,enemy:Dictionary,taken:Array=[])->Vector2:
 			if ground:
 				var side:Vector2=(enemy.pos-candidate.pos).normalized().orthogonal()*0.75
 				if not terrain.line_clear(candidate.pos+side,enemy.pos) or not terrain.line_clear(candidate.pos-side,enemy.pos):continue
-			if not terrain.path(u.pos,candidate.pos,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind)).is_empty():return candidate.pos
+			if not terrain.path(u.pos,candidate.pos,d.domain,float(d.radius),hulks,terrain.mobility_profile(u.kind)).is_empty():return candidate.pos
+			if not hulks.is_empty():
+				misses+=1
+				if misses>=WRECK_SPOT_MISSES:return Vector2(-1,-1)
 	return Vector2(-1,-1)
 
 
@@ -1378,7 +1399,7 @@ func tick(dt: float) -> void:
 		if u.target>=0:u.aim_time+=dt
 		else:u.aim_time=0.0
 		var moving: bool = not u.orders.is_empty()
-		if moving and u.orders[0].mode not in ["move","retreat"] and not target.is_empty():
+		if moving and u.orders[0].mode not in ["move","retreat"] and not target.is_empty() and not pressing_on(u):
 			moving = false
 		if not u.maneuver.is_empty():moving=not u.maneuver.arrived
 		if Infantry.Cover.seeking(u) or u.get("regroup_active",false) or Garrison.transit(u)!="":moving=false
@@ -2431,7 +2452,9 @@ func standing_bodies(u:Dictionary,from:Vector2,to:Vector2,ignore:Array=[])->Arra
 # too: they back or turn off to such a spot, then resume their own orders.
 # A mover in a fight is not asked (one under threat but not firing, or only
 # shelling a building, is, by an `insistent` hull jammed past JAM_UNDER_FIRE).
-# An immobilised hull is never asked. A vehicle a hand's width from the end of
+# A hull ahead shelling a building is asked to press on to its firing spot
+# (pressing_on), or from its spot to shift to one off the asker's route. An
+# immobilised hull is never asked. A vehicle a hand's width from the end of
 # its only order has all but arrived: a section asks it like a parked one.
 # Where no spot is near, a parked friend pulls on past the end of the asker's
 # next legs. A failed search is retried after GIVE_WAY_RETRY (the asker moves,
@@ -2449,7 +2472,21 @@ func make_way(u:Dictionary,movers:bool=false,insistent:bool=false)->bool:
 		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=collision_layer(u):continue
 		var od:Dictionary=definitions[other.kind]
 		# An immobilised hull cannot pull over: the asker routes round it instead.
-		if not other.maneuver.is_empty() or other.hold_command or od.get("structure",false) or other.has("building_id") or other.get("mobility_kill",false) or time<float(other.get("yield_until",0.0)) or time<float(other.get("give_way_retry",0.0)):continue
+		if not other.maneuver.is_empty() or other.hold_command or od.get("structure",false) or other.has("building_id") or other.get("mobility_kill",false):continue
+		# A hull stopped to shell a building short of its own firing spot,
+		# ahead in the way, presses on to that spot (firing as it goes): a
+		# column does not stall behind the first hulls in range in a gap.
+		# One shelling from its spot in the way shifts to the nearest free
+		# firing spot off the asker's route (at most once per SHIFT_EVERY).
+		if movers and u.members.is_empty() and _shelling(other) and (other.pos-u.pos).dot(u.path[0]-u.pos)>0.0 and _near_legs(other.pos,legs,crowd_radius(u.kind)+crowd_radius(other.kind)+0.5):
+			if _shelling_short(other):
+				if time>=float(other.get("press_on_until",0.0)):other["press_on_until"]=time+PRESS_ON
+			elif time>=float(other.get("shift_at",0.0)):
+				other["shift_at"]=time+SHIFT_EVERY
+				_shift_firing_spot(other,u,legs)
+			asked=true
+			continue
+		if time<float(other.get("yield_until",0.0)) or time<float(other.get("give_way_retry",0.0)):continue
 		var arriving:bool=not u.members.is_empty() and other.members.is_empty() and other.orders.size()==1 and other.orders[0].mode in ["move","attack_move"] and not other.orders[0].get("give_way",false) and not other.path.is_empty() and other.pos.distance_to(other.path.back())<=1.0 and not engaged(other)
 		var parked:bool=other.orders.is_empty() or arriving
 		if not parked:
@@ -2476,6 +2513,44 @@ func make_way(u:Dictionary,movers:bool=false,insistent:bool=false)->bool:
 		asked=true
 		if not movers:return true
 	return asked
+
+# A hull on an attack order shelling a building; _shelling_short: stopped to
+# fire while still PRESS_SLACK or more short of its firing spot, a route on.
+const PRESS_ON:=6.0
+const PRESS_SLACK:=2.0
+const SHIFT_EVERY:=8.0
+func _shelling(u:Dictionary)->bool:
+	return u.members.is_empty() and not u.orders.is_empty() and u.orders[0].mode=="attack" and shelling(u)
+func _shelling_short(u:Dictionary)->bool:
+	return _shelling(u) and not u.path.is_empty() and u.pos.distance_to(u.orders[0].pos)>PRESS_SLACK
+
+# The hull takes the nearest free firing spot on its target clear of `asker`'s
+# next `legs` (a doorway it holds), routed round the asker, and presses on to
+# it. No such spot: it stays.
+func _shift_firing_spot(u:Dictionary,asker:Dictionary,legs:Array)->void:
+	var enemy:=get_unit(int(u.orders[0].target))
+	if not alive(enemy):return
+	var d:Dictionary=definitions[u.kind]
+	var layer:=collision_layer(u)
+	var crowd:=crowd_radius(u.kind)
+	var clearance:float=crowd+crowd_radius(asker.kind)+0.5
+	var taken:=attack_rivals(u,enemy.id,[],true)
+	for k in range(1,legs.size()):
+		var steps:=ceili(legs[k-1].distance_to(legs[k])/2.0)
+		for j in steps+1:taken.append({"pos":legs[k-1].lerp(legs[k],float(j)/maxf(1,steps)),"radius":clearance-crowd-0.7,"layer":layer})
+	var spot:=attack_position(u,enemy,taken)
+	if spot.x<0 or _near_legs(spot,legs,clearance) or taken.any(func(slot):return spot.distance_to(slot.pos)<crowd+float(slot.radius)+0.7):return
+	var keep_off:Array=[{"pos":asker.pos,"radius":minf(clearance,u.pos.distance_to(asker.pos)-0.05)}]
+	var route:=terrain.path(u.pos,spot,d.domain,float(d.radius),keep_off,terrain.mobility_profile(u.kind))
+	if route.is_empty():return
+	u.orders[0].pos=spot
+	u.path=route
+	u["press_on_until"]=time+PRESS_ON
+	u.reason="Making room at the firing line"
+
+# Asked to press on (make_way), it keeps closing on its spot while it fires.
+func pressing_on(u:Dictionary)->bool:
+	return time<float(u.get("press_on_until",0.0)) and _shelling_short(u)
 
 # A jammed hull with no lower-priority friend to ask backs (or turns) off to
 # the nearest clear spot off the next legs of the friendly vehicles pressing
