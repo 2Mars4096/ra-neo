@@ -28,6 +28,9 @@ var nodes: Dictionary = {}
 var objective_nodes: Array[Node3D] = []
 var dragging := false
 var drag_start := Vector2.ZERO
+# Middle-mouse drag grabs the map: the last pointer position while held.
+var middle_panning := false
+var middle_pan_last := Vector2.ZERO
 var attack_mode := false
 # FPV strike targeting: armed from the reinforcement panel, the next map click aims it.
 var strike_mode := false
@@ -211,19 +214,39 @@ func view_ground_offsets() -> Rect2:
 	camera.size=camera_size
 	camera.position=camera_focus+Vector3(26,64,46)
 	camera.look_at(camera_focus,Vector3.UP)
-	var view:Rect2=Rect2(Vector2.ZERO,get_viewport().get_visible_rect().size)
-	if is_instance_valid(hud) and hud.size.x>268:view=hud.battlefield_rect()
-	var bounds:=Rect2()
-	var first:=true
-	for corner in [view.position,Vector2(view.end.x,view.position.y),view.end,Vector2(view.position.x,view.end.y)]:
-		var origin:Vector3=camera.project_ray_origin(corner)
-		var direction:Vector3=camera.project_ray_normal(corner)
-		if absf(direction.y)<0.001:continue
-		var hit:Vector3=origin-direction*(origin.y/direction.y)
-		var offset:=Vector2(hit.x-camera_focus.x,hit.z-camera_focus.z)
-		if first:bounds=Rect2(offset,Vector2.ZERO);first=false
-		else:bounds=bounds.expand(offset)
+	var corners:=view_ground_polygon()
+	var bounds:=Rect2(corners[0]-Vector2(camera_focus.x,camera_focus.z),Vector2.ZERO)
+	for corner in corners:bounds=bounds.expand(corner-Vector2(camera_focus.x,camera_focus.z))
 	return bounds
+
+func view_rect() -> Rect2:
+	if is_instance_valid(hud) and hud.size.x>268:return hud.battlefield_rect()
+	return Rect2(Vector2.ZERO,get_viewport().get_visible_rect().size)
+
+# Ground point under a screen point for view geometry. The camera is
+# orthographic, so the whole line meets the ground: zoomed far out, the bottom
+# corners' ray origins sit below the ground and Plane.intersects_ray misses them.
+# Rays that graze the horizon stop at the far plane so the point stays finite.
+func ground_point(p:Vector2) -> Vector2:
+	var origin:=camera.project_ray_origin(p)
+	var direction:=camera.project_ray_normal(p)
+	var reach:=camera.far
+	if direction.y<-0.001:reach=minf(-origin.y/direction.y,reach)
+	var hit:=origin+direction*reach
+	return Vector2(hit.x,hit.z)
+
+# Visible battlefield on the ground: corners in screen order (TL, TR, BR, BL).
+func view_ground_polygon() -> PackedVector2Array:
+	var view:=view_rect()
+	return PackedVector2Array([ground_point(view.position),ground_point(Vector2(view.end.x,view.position.y)),ground_point(view.end),ground_point(Vector2(view.position.x,view.end.y))])
+
+# Grab-the-map pan: the ground under the previous pointer follows the pointer.
+func middle_pan(p:Vector2) -> void:
+	var shift:=ground_point(middle_pan_last)-ground_point(p)
+	middle_pan_last=p
+	camera_focus.x+=shift.x
+	camera_focus.z+=shift.y
+	update_camera()
 
 func clamp_focus() -> void:
 	if huge_world():
@@ -260,6 +283,9 @@ func world_pos(p: Vector2) -> Vector2:
 	var direction:=camera.project_ray_normal(p)
 	var ground=Plane(Vector3.UP,0).intersects_ray(origin,direction)
 	if ground==null:
+		# At the widest zoom the orthographic ray for the bottom screen strip
+		# starts below the ground: it still points at a real ground spot.
+		if origin.y<0.0 and direction.y<-0.001:return ground_point(p)
 		return Vector2(-1,-1)
 	return Vector2(ground.x,ground.z)
 
@@ -407,7 +433,8 @@ func _process(dt: float) -> void:
 		if Input.is_physical_key_pressed(KEY_DOWN): movement.y+=1
 		var mouse:=get_viewport().get_mouse_position()
 		var view:=get_viewport().get_visible_rect().size
-		var over_battlefield:bool=hud.action_at(mouse)==""
+		# Edge scrolling pauses while the map is grabbed with the middle button.
+		var over_battlefield:bool=hud.action_at(mouse)=="" and not middle_panning
 		if over_battlefield and mouse.y>0 and mouse.y<view.y:
 			if mouse.x>=0 and mouse.x<10: movement.x-=1
 			if mouse.x<=view.x and mouse.x>view.x-10: movement.x+=1
@@ -1094,6 +1121,15 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouse:pointer=event.position
 	if event is InputEventMouse or event is InputEventKey:hint_dirty=true
+	if event is InputEventMouseMotion and middle_panning:
+		if event.button_mask&MOUSE_BUTTON_MASK_MIDDLE:middle_pan(event.position)
+		else:middle_panning=false
+		return
+	if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_MIDDLE:
+		# Middle drag only moves the camera: no orders, no selection changes.
+		middle_panning=event.pressed and not show_help and sim.result=="" and hud.action_at(event.position)==""
+		if middle_panning:middle_pan_last=event.position
+		return
 	if event is InputEventMagnifyGesture:
 		if not show_help and sim.result=="" and hud.action_at(event.position)=="":
 			request_zoom(1.0/maxf(event.factor,0.01))

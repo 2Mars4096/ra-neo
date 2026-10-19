@@ -814,15 +814,27 @@ func draw_minimap(sim) -> void:
 	for obj in sim.objectives:
 		var p: Vector2=minimap.position+obj.pos/sim.terrain.world_size*minimap.size
 		cv.draw_rect(Rect2(p-Vector2(3,3),Vector2(6,6)),TEAL if obj.owner==0 else ORANGE,false,1)
-	var footprint:=PackedVector2Array()
-	var view:=battlefield_rect()
-	for corner in [view.position,Vector2(view.end.x,view.position.y),view.end,Vector2(view.position.x,view.end.y),view.position]:
-		var pos: Vector2 = battle.world_pos(corner)/sim.terrain.world_size
-		pos=pos.clamp(Vector2.ZERO,Vector2.ONE)
-		footprint.append(minimap.position+pos*minimap.size)
-	cv.draw_polyline(footprint,WHITE,1,true)
+	var footprint:=minimap_view_outline(sim)
+	if footprint.size()>=3:
+		footprint.append(footprint[0])
+		cv.draw_polyline(footprint,WHITE,1,true)
 	cv.draw_rect(minimap,LINE,false,1)
 	text_at("THEATER / CLICK TO PAN",minimap.position+Vector2(0,minimap.size.y+17),9,MUTED)
+
+# Camera view on the minimap: the ground quad under the battlefield corners,
+# clipped to the minimap. Clamping corners one by one folds an overhanging view
+# into a skewed triangle.
+func minimap_view_outline(sim) -> PackedVector2Array:
+	var quad:=PackedVector2Array()
+	var inside:=true
+	for pos in battle.view_ground_polygon():
+		var p:Vector2=minimap.position+pos/sim.terrain.world_size*minimap.size
+		inside=inside and minimap.grow(0.01).has_point(p)
+		quad.append(p)
+	if inside:return quad
+	var frame:=PackedVector2Array([minimap.position,Vector2(minimap.end.x,minimap.position.y),minimap.end,Vector2(minimap.position.x,minimap.end.y)])
+	var clipped:Array=Geometry2D.intersect_polygons(quad,frame)
+	return clipped[0] if clipped.size()==1 else PackedVector2Array()
 
 # Small action tag beside the pointer (battle.refresh_cursor_hint sets the text).
 func draw_cursor_hint() -> void:
