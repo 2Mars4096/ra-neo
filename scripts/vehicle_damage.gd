@@ -505,7 +505,10 @@ static func _route_round_wrecks(sim,u:Dictionary)->void:
 	var legs:Array=[u.pos]
 	legs.append_array(u.path.slice(0,3))
 	var crossing:=false
+	# A pusher drives on into light wrecks and shoves them (push_wreck).
+	var can_push:bool=pusher(sim,u)
 	for wreck in sim.get_meta(WRECKS):
+		if can_push and not solid_wreck(sim,wreck,true):continue
 		var clearance:float=float(d.radius)+float(wreck.radius)
 		if u.pos.distance_to(wreck.pos)>clearance+60.0:continue
 		for k in range(1,legs.size()):
@@ -515,6 +518,7 @@ static func _route_round_wrecks(sim,u:Dictionary)->void:
 	u["wreck_route_at"]=sim.time+0.5
 	var bodies:Array=[]
 	for wreck in sim.get_meta(WRECKS):
+		if can_push and not solid_wreck(sim,wreck,true):continue
 		var clearance:float=float(d.radius)+float(wreck.radius)
 		var gap:float=u.pos.distance_to(wreck.pos)
 		if gap>clearance+60.0:continue
@@ -601,6 +605,212 @@ static func wreck_blocks(sim,u:Dictionary,to:Vector2)->bool:
 		var gap:float=to.distance_squared_to(wreck.pos)
 		if gap<clearance*clearance and gap<u.pos.distance_squared_to(wreck.pos):return true
 	return false
+
+# Shoving wrecks. A heavy tracked hull (a tank, ~60-70 t) can nose a LIGHT
+# wreck (an IFV/AA hull ~25-30 t, a truck or harvester, a downed helicopter)
+# aside at a crawl; a tank wreck is too heavy for a tank to move. Masses are
+# assumed typical values for each hull class (t); unlisted kinds count as
+# WRECK_DEFAULT_TONNES (heavy enough not to be shoved, too light to shove).
+const TONNES:={"tank":62.0,"aa":28.0,"harvester":18.0,"helo":8.0}
+const WRECK_DEFAULT_TONNES:=40.0
+const PUSHER_TONNES:=50.0
+const PUSHABLE_TONNES:=35.0
+# A real shove runs at 1-2 m/s; on the game's compressed scale (a tank cruises
+# at 5.4 u/s) that is about 1 u/s, after PUSH_DELAY s of taking up the slack.
+const PUSH_SPEED:=1.0
+const PUSH_DELAY:=0.6
+# The wreck slews a little as it is shoved off-centre (rad/s).
+const PUSH_SLEW:=0.25
+# A wreck that cannot be shoved anywhere is planned round for a while.
+const PUSH_STUCK_SECONDS:=4.0
+# Field nav follows a shoved wreck in steps of this many units (field_ops
+# sync_obstacles re-keys on WRECK_REVISION), not every tick.
+const PUSH_NAV_STEP:=0.5
+# A hull nosing into a wreck shoves it within PUSH_TOUCH of its margin; one
+# that is already stopped shoves within PUSH_REACH, as the wreck's field nav
+# block (which also holds the hull off) trails it by up to PUSH_NAV_STEP and
+# its box corners stand a little proud of the margin.
+const PUSH_TOUCH:=0.15
+const PUSH_REACH:=PUSH_NAV_STEP+0.2
+const WRECK_REVISION:="vehicle_wreck_revision"
+const PUSH_NOTE_GAP:=6.0
+const PUSH_SOUND_GAP:=1.5
+
+static func tonnes(kind:String)->float:
+	return float(TONNES.get(kind,WRECK_DEFAULT_TONNES))
+
+static func light_wreck(wreck:Dictionary)->bool:
+	return tonnes(str(wreck.kind))<=PUSHABLE_TONNES
+
+# A mobile heavy tracked hull that can shove light wrecks.
+static func pusher(sim,u:Dictionary)->bool:
+	if not u.members.is_empty() or u.get("mobility_kill",false) or tonnes(str(u.kind))<PUSHER_TONNES:return false
+	var d:Dictionary=sim.definitions[u.kind]
+	return d.domain=="land" and not d.get("structure",false) and sim.terrain.mobility_profile(u.kind)=="tracked"
+
+# Whether a wreck stops a hull's route (`can_push`: pusher(sim,u)). A pusher
+# plans through a light wreck unless engineers are working on it or it was
+# found jammed a moment ago.
+static func solid_wreck(sim,wreck:Dictionary,can_push:bool)->bool:
+	return not (can_push and light_wreck(wreck) and not wreck.has("cleared_by") and sim.time>=float(wreck.get("stuck_until",-INF)))
+
+# Movement step (simulation hull_step / move_unit): a pusher whose step `to`
+# (heading `axis`) noses into light wrecks ahead shoves the nearest aside.
+# Returns PUSH_NONE, PUSH_HOLD (taking up the slack: the hull holds) or
+# PUSH_SHOVE (the wreck moved: the hull may creep after it at PUSH_SPEED);
+# while pushing the caller does not count the hull jammed. Off-centre wrecks go
+# out to their side; a centred one to whichever side is open; straight ahead
+# only when the hull has no way to slip past. A wreck that cannot move anywhere
+# is marked stuck (planned round) and the hull is left blocked.
+enum {PUSH_NONE,PUSH_HOLD,PUSH_SHOVE}
+static func push_wreck(sim,u:Dictionary,to:Vector2,axis:Vector2,dt:float,slack:float=PUSH_TOUCH)->int:
+	if not sim.has_meta(WRECKS) or u.get("reversing",false) or not pusher(sim,u):return PUSH_NONE
+	var radius:float=float(sim.definitions[u.kind].radius)
+	var wreck:Dictionary={}
+	var nearest:=INF
+	for other in sim.get_meta(WRECKS):
+		var gap:float=to.distance_squared_to(other.pos)
+		if gap>=u.pos.distance_squared_to(other.pos) or (other.pos-u.pos).dot(axis)<=0.0:continue
+		var clearance:float=radius+float(other.radius)
+		# Any heavy or unmovable wreck in the way stops the shove.
+		if solid_wreck(sim,other,true):
+			if gap<clearance*clearance:return PUSH_NONE
+			continue
+		var reach:float=clearance+slack
+		if gap<reach*reach and gap<nearest:wreck=other;nearest=gap
+	if wreck.is_empty():return PUSH_NONE
+	var now:float=sim.time
+	if int(u.get("push_id",-2))!=int(wreck.id) or now-float(u.get("push_seen",-INF))>0.5:u["push_since"]=now
+	u["push_id"]=int(wreck.id)
+	u["push_seen"]=now
+	if now-float(u.push_since)<PUSH_DELAY:
+		_pushing(sim,u,wreck,axis,false)
+		return PUSH_HOLD
+	var left:=Vector2(-axis.y,axis.x)
+	var offset:float=(wreck.pos-u.pos).dot(left)
+	var sides:Array=[signf(offset)] if absf(offset)>0.3 else [1.0,-1.0]
+	var shove:float=PUSH_SPEED*dt
+	for side in sides:
+		var heading:Vector2=(axis*0.5+left*side).normalized()
+		if _wreck_spot_clear(sim,u,wreck,wreck.pos+heading*shove):
+			_move_wreck(sim,wreck,heading*shove,side*PUSH_SLEW*dt)
+			_pushing(sim,u,wreck,heading,true)
+			return PUSH_SHOVE
+	# Straight ahead only when the hull cannot slip past (it pivots instead).
+	var neighbors:Array=sim.movement_neighbors(u)
+	var reach:float=maxf(0.3,radius*0.6)
+	for angle in [0.55,-0.55,1.05,-1.05]:
+		if sim.movement_clear(u,u.pos+axis.rotated(angle)*reach,neighbors):return PUSH_NONE
+	if _wreck_spot_clear(sim,u,wreck,wreck.pos+axis*shove):
+		_move_wreck(sim,wreck,axis*shove,0.0)
+		_pushing(sim,u,wreck,axis,true)
+		return PUSH_SHOVE
+	wreck["stuck_until"]=now+PUSH_STUCK_SECONDS
+	# Re-plan now: the route round it must not wait for the half-second throttle.
+	u.erase("wreck_route_at")
+	return PUSH_NONE
+
+static func _pushing(sim,u:Dictionary,wreck:Dictionary,heading:Vector2,moved:bool)->void:
+	u.state="PUSHING WRECK"
+	u.reason="Shoving a wreck aside"
+	u.speed_now=minf(float(u.speed_now),0.0 if not moved else PUSH_SPEED)
+	# A shove is headway: the stall and jam clocks (simulation move_unit) must
+	# not take the crawl for a jam and back the hull off mid-push.
+	if u.has("stall_seen"):u.stall_at=sim.time
+	if u.has("jam_seen"):u.jam_at=sim.time
+	if not moved:return
+	if sim.time>=float(u.get("push_sound_at",-INF)):
+		u["push_sound_at"]=sim.time+PUSH_SOUND_GAP
+		sim.events.append({"type":"crushed","prop":-1,"id":"wreck","heading":heading,"pos":wreck.pos,"visible":u.get("visible",true)})
+	if u.team==0 and sim.time>=float(u.get("push_note_at",-INF)):
+		u["push_note_at"]=sim.time+PUSH_NOTE_GAP
+		sim.events.append({"type":"warning","text":"%s shoving a %s wreck aside" % [LABEL.get(u.kind,str(u.kind).capitalize()),LABEL.get(wreck.kind,str(wreck.kind).capitalize()).to_lower()]})
+
+# A shoved wreck may not go into buildings, walls, water or off the map, nor
+# into other wrecks, units or field works (a body it would close on). Kerbside
+# furniture does not stop it (the wreck flattens it, like a tank).
+static func _wreck_spot_clear(sim,u:Dictionary,wreck:Dictionary,p:Vector2)->bool:
+	var body:float=float(wreck.radius)*0.7
+	var terrain=sim.terrain
+	if not terrain.inside(p) or terrain.is_water(p):return false
+	# The wreck's own field nav block must not count against it.
+	var blocks:Array=terrain.dynamic_blocks
+	var at:int=blocks.find(wreck.get("nav_rect",Rect2())) if wreck.has("nav_rect") else -1
+	if at>=0:blocks.remove_at(at)
+	var saved:bool=terrain.crush_pass
+	terrain.crush_pass=true
+	var open:bool=terrain.traversable(p,"land",body)
+	terrain.crush_pass=saved
+	if at>=0:blocks.insert(at,wreck.nav_rect)
+	if not open:return false
+	for other in sim.get_meta(WRECKS):
+		if is_same(other,wreck):continue
+		var clearance:float=(float(wreck.radius)+float(other.radius))*0.7
+		var gap:float=p.distance_squared_to(other.pos)
+		if gap<clearance*clearance and gap<wreck.pos.distance_squared_to(other.pos):return false
+	for other in sim.units:
+		if other.id==u.id or not sim.alive(other) or sim.definitions[other.kind].domain!="land":continue
+		if other.members.is_empty():
+			var clearance:float=float(wreck.radius)+float(sim.definitions[other.kind].radius)
+			var gap:float=p.distance_squared_to(other.pos)
+			if gap<clearance*clearance and gap<wreck.pos.distance_squared_to(other.pos):return false
+			continue
+		if p.distance_squared_to(other.pos)>pow(body+8.0,2):continue
+		for member in other.members:
+			if member.hp<=0:continue
+			var reach:float=body+float(member.get("body_radius",0.8))+0.3
+			var gap:float=p.distance_squared_to(member.pos)
+			if gap<reach*reach and gap<wreck.pos.distance_squared_to(member.pos):return false
+	return true
+
+static func _move_wreck(sim,wreck:Dictionary,shift:Vector2,slew:float)->void:
+	wreck.pos+=shift
+	wreck.facing=Vector2(wreck.facing).rotated(slew)
+	for record in sim.terrain.crush_props(wreck.pos,float(wreck.radius)*0.7+0.1):
+		sim.events.append({"type":"crushed","prop":record.prop,"id":record.id,"heading":shift.normalized(),"pos":record.rect.get_center(),"visible":true})
+	# The dead hull carries the wreck's place (presentation, re-crewing).
+	var hull:Dictionary=sim.get_unit(int(wreck.id))
+	if not hull.is_empty() and hull.get("wrecked",false):
+		hull.pos=wreck.pos
+		hull.facing=wreck.facing
+	if wreck.pos.distance_to(wreck.get("nav_at",Vector2.INF))>=PUSH_NAV_STEP:
+		wreck["nav_at"]=wreck.pos
+		sim.set_meta(WRECK_REVISION,int(sim.get_meta(WRECK_REVISION,0))+1)
+
+# Engineers clearing a wreck (field_ops clear_wreck): a recovery job, longer
+# for heavier hulls (assumed compressed times: a tank about 47 s, an IFV 27 s,
+# a downed helicopter 15 s; field works take 4-10 s).
+const CLEAR_BASE_SECONDS:=10.0
+const CLEAR_SECONDS_PER_TONNE:=0.6
+static func clear_seconds(wreck:Dictionary)->float:
+	return CLEAR_BASE_SECONDS+CLEAR_SECONDS_PER_TONNE*tonnes(str(wreck.kind))
+
+# The wreck whose hull lies under a ground point (within its radius + slack).
+static func wreck_under(sim,pos:Vector2,slack:float=1.0)->Dictionary:
+	var best:Dictionary={}
+	var nearest:=INF
+	for wreck in wrecks(sim):
+		var gap:float=pos.distance_to(wreck.pos)
+		if gap<=float(wreck.radius)+slack and gap<nearest:best=wreck;nearest=gap
+	return best
+
+static func wreck_by_id(sim,id:int)->Dictionary:
+	if id<0:return {}
+	for wreck in wrecks(sim):
+		if int(wreck.id)==id:return wreck
+	return {}
+
+# A cleared wreck is hauled off: it stops blocking (field nav refreshed now)
+# and its node hides; the scorch of its destruction stays on the ground.
+static func remove_wreck(sim,wreck:Dictionary)->void:
+	var list:Array=wrecks(sim)
+	for k in range(list.size()-1,-1,-1):
+		if is_same(list[k],wreck):list.remove_at(k)
+	var hull:Dictionary=sim.get_unit(int(wreck.id))
+	if not hull.is_empty():
+		hull.wrecked=false
+		hull["abandoned_hp"]=0.0
+	if not sim.field_ops.is_empty():sim.FieldOps.sync_obstacles(sim)
 
 # Hard cover behind a wreck: within `reach` of the hull and the hull lies
 # between the position and the threat. For the infantry damage path to consult.

@@ -744,17 +744,22 @@ static func work_plan(sim,kind:String,pos:Vector2,engineer:Dictionary,known_only
 	var rect:=footprint(sim,kind,pos,rotated)
 	var radius:float=sim.definitions.engineer.radius
 	var avoid:Array=[{"pos":pos,"radius":rect.size.length()*0.5+radius+0.27}]
-	var candidates:Array[Vector2]=[]
 	# Non-solid works use small body radii, so stand clear of the whole footprint.
 	var reach:float=float(sim.definitions[kind].radius)+radius+0.5
 	if not sim.definitions[kind].get("solid",true):reach=rect.size.length()*0.5+radius+0.5
+	return _work_route(sim,pos,reach,avoid,engineer,known_only,[engineer.id,structure_id])
+
+# The nearest work point on rings round `pos` that the engineer can reach.
+static func _work_route(sim,pos:Vector2,reach:float,avoid:Array,engineer:Dictionary,known_only:bool,ignore:Array)->Dictionary:
+	var radius:float=sim.definitions.engineer.radius
+	var candidates:Array[Vector2]=[]
 	# Wider rings rescue sites hemmed in by trees, walls or neighbouring segments.
 	for ring in [0.0,1.5,3.0]:
 		for index in 16:candidates.append(pos+Vector2.from_angle((index+ring)*TAU/16.0)*(reach+ring))
 	# Preserve near-side-first routing for both initial work and manual resume.
 	candidates.sort_custom(func(a,b):return a.distance_squared_to(engineer.pos)<b.distance_squared_to(engineer.pos))
 	for work in candidates:
-		if not occupied_clear(sim,work,"engineer",known_only,[engineer.id,structure_id]):continue
+		if not occupied_clear(sim,work,"engineer",known_only,ignore):continue
 		var route:Array=sim.terrain.path(engineer.pos,work,"land",radius,avoid,"infantry")
 		if not route.is_empty():return {"reason":"","work_point":work,"route":route}
 	return {"reason":"No clear engineer work route"}
@@ -867,6 +872,7 @@ static func can_clear(sim,site:Dictionary)->bool:
 static func clear_site(sim,site_id:int,engineer_id:int)->bool:
 	var site:Dictionary=sim.get_unit(site_id)
 	var engineer:Dictionary=sim.get_unit(engineer_id)
+	if not sim.alive(site) and site.get("wrecked",false):return clear_wreck(sim,site_id,engineer_id)
 	if not can_clear(sim,site):return fail(sim,"Only wire, obstacles, sandbags, berms, nets and trenches can be cleared")
 	if not sim.alive(engineer) or engineer.kind!="engineer" or engineer.team!=0 or sim.comms_blocked(engineer):return fail(sim,"Select a living engineer section")
 	if engineer.get("combat_ineffective",false):return fail(sim,sim.DOWNED_NOTE)
@@ -885,6 +891,54 @@ static func clear_site(sim,site_id:int,engineer_id:int)->bool:
 	site["clear_point"]=plan.work_point
 	sim.field_ops.last_build_error=""
 	return true
+
+# Engineers clear any vehicle wreck (a tank's too, given time): they work
+# from beside the hull for VehicleDamage.clear_seconds (cut up, winched and
+# dragged off), then the wreck is gone and the road opens. `hull_id` is the
+# wrecked unit's id.
+static func clear_wreck(sim,hull_id:int,engineer_id:int)->bool:
+	var wreck:Dictionary=sim.VehicleDamage.wreck_by_id(sim,hull_id)
+	var engineer:Dictionary=sim.get_unit(engineer_id)
+	if wreck.is_empty():return fail(sim,"No wreck to clear")
+	if not sim.alive(engineer) or engineer.kind!="engineer" or engineer.team!=0 or sim.comms_blocked(engineer):return fail(sim,"Select a living engineer section")
+	if engineer.get("combat_ineffective",false):return fail(sim,sim.DOWNED_NOTE)
+	var radius:float=sim.definitions.engineer.radius
+	var avoid:Array=[{"pos":wreck.pos,"radius":float(wreck.radius)*0.7*1.415+radius+0.27}]
+	var plan:=_work_route(sim,wreck.pos,float(wreck.radius)+radius+0.5,avoid,engineer,true,[engineer.id])
+	if plan.reason!="":return fail(sim,"No route to the wreck")
+	pause_builder(sim,engineer.id)
+	sim.Director.cancel(engineer)
+	for member in engineer.members:sim.Infantry.Cover.clear(member)
+	engineer.orders=[{"mode":"move","pos":plan.work_point,"target":-1}]
+	engineer.intent=engineer.orders[0].duplicate()
+	engineer.path=plan.route
+	engineer.hold_command=false
+	engineer["clearing_id"]=hull_id
+	wreck["cleared_by"]=engineer.id
+	wreck["clear_point"]=plan.work_point
+	sim.field_ops.last_build_error=""
+	return true
+
+# Per tick (progress_clearing): engineers beside a wreck haul it off.
+static func progress_wreck_clearing(sim,dt:float)->void:
+	for wreck in sim.VehicleDamage.wrecks(sim).duplicate():
+		if not wreck.has("cleared_by"):continue
+		var engineer:Dictionary=sim.get_unit(wreck.cleared_by)
+		if not sim.alive(engineer) or int(engineer.get("clearing_id",-1))!=int(wreck.id):
+			wreck.erase("cleared_by");continue
+		var point:Vector2=wreck.clear_point
+		var working:bool=engineer.orders.is_empty() and engineer.pos.distance_to(point)<1.5 and engineer.suppression<=0.6
+		working=working and engineer.members.any(func(m):return m.hp>0 and m.pos.distance_to(point)<3.5)
+		if not working:continue
+		var total:float=sim.VehicleDamage.clear_seconds(wreck)
+		wreck["clear_done"]=float(wreck.get("clear_done",0.0))+dt
+		engineer.state="CLEARING"
+		engineer.reason="Clearing wreck %d%%" % int(100.0*minf(1.0,float(wreck.clear_done)/total))
+		if float(wreck.clear_done)<total:continue
+		engineer.erase("clearing_id")
+		engineer.reason="Wreck cleared"
+		sim.VehicleDamage.remove_wreck(sim,wreck)
+		sim.events.append({"type":"warning","text":"Wreck cleared by engineers"})
 
 # Enemy assault units jammed against the player's obstacles breach them by
 # fire, then resume their wave order (pushed back behind the breach).
@@ -975,8 +1029,8 @@ static func cancel(sim,structure_id:int)->bool:
 
 static func sync_obstacles(sim)->void:
 	var structures:Array=sim.units.filter(func(u):return sim.alive(u) and u.get("structure",false))
-	# New wrecks must change the key too, so they block routes immediately.
-	var key:String=str(structures.map(func(u):return [u.id,u.get("build_left",0.0)<=0]))+"|"+str(sim.VehicleDamage.wrecks(sim).size())
+	# New, cleared and shoved wrecks must change the key too, so routes follow at once.
+	var key:String=str(structures.map(func(u):return [u.id,u.get("build_left",0.0)<=0]))+"|"+str(sim.VehicleDamage.wrecks(sim).size())+"|"+str(sim.get_meta(sim.VehicleDamage.WRECK_REVISION,0))
 	if key==sim.field_ops.obstacle_key:return
 	sim.field_ops.obstacle_key=key
 	var blocks:Array=[]
@@ -991,12 +1045,16 @@ static func sync_obstacles(sim)->void:
 			zones.append({"rect":rect,"speed":zone.get("speed",{}),"cover":zone.get("cover",[]),"conceal":float(zone.get("conceal",1.0)),"dug":unit.kind=="fighting_trench","front":Vector2.LEFT if unit.get("rotated",false) else Vector2.UP})
 		if unit.kind=="tactical_cover" and unit.build_left<=0:covers.append(rect)
 	# Burnt-out and abandoned vehicles block the road for everyone (local nav
-	# refresh only) and give hard cover to infantry beside them.
+	# refresh only) and give hard cover to infantry beside them. Tracked
+	# planning may pass light wrecks (tanks shove them aside).
+	var pushable:Array=[]
 	for wreck in sim.VehicleDamage.wrecks(sim):
 		var half:float=float(wreck.radius)*0.7
 		var rect:=Rect2(wreck.pos-Vector2(half,half),Vector2(half,half)*2.0)
+		wreck["nav_rect"]=rect
 		blocks.append(rect);covers.append(rect)
-	var changed:bool=sim.terrain.update_field_geometry(blocks,covers)
+		if sim.VehicleDamage.light_wreck(wreck):pushable.append(rect)
+	var changed:bool=sim.terrain.update_field_geometry(blocks,covers,pushable)
 	if sim.terrain.update_field_zones(zones) or changed:sim.visibility_cache.clear()
 
 # Tracked vehicles of either side flatten wire they drive across.
@@ -1022,6 +1080,7 @@ static func tick(sim,dt:float)->void:
 	sim.VehicleDamage.enemy_recrew(sim)
 	idle_engineers_continue(sim)
 	progress_clearing(sim,dt)
+	progress_wreck_clearing(sim,dt)
 	enemy_breach(sim)
 	for unit in sim.units:
 		if not sim.alive(unit) or not unit.get("structure",false):continue

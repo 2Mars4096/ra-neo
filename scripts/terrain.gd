@@ -406,7 +406,7 @@ func traversable(p: Vector2, domain: String, radius: float = -1) -> bool:
 	for rect in _static_candidates("solid",p,radius+0.12):
 		if circle_rect(p,radius+0.12,rect) and not (crush_pass and crushables.has(rect)):return false
 	for rect in dynamic_blocks:
-		if circle_rect(p,radius+0.12,rect):return false
+		if circle_rect(p,radius+0.12,rect) and not (crush_pass and pushable_blocks.has(rect)):return false
 	var tree_distance_squared:=pow(radius+1.2,2)
 	for tree in _static_candidates("tree",p,radius+1.2):
 		if p.distance_squared_to(tree)<tree_distance_squared:return false
@@ -420,7 +420,10 @@ func circle_rect(p: Vector2, radius: float, rect: Rect2) -> bool:
 # Apply physical field reservations without discarding cached obstacle grids.
 # Call outside an in-flight path query (path's local exclusions are synchronous).
 # Rectangle order/duplicates do not change their physical union.
-func update_field_geometry(blocks:Array,covers:Array)->bool:
+# `pushable`: blocks (light wrecks) tracked planning passes, as crushables.
+func update_field_geometry(blocks:Array,covers:Array,pushable:Array=[])->bool:
+	var next_pushable:Dictionary={}
+	for rect in pushable:next_pushable[rect]=true
 	var next_blocks:Array[Rect2]=[]
 	var next_covers:Array[Rect2]=[]
 	for rect in blocks:
@@ -437,8 +440,12 @@ func update_field_geometry(blocks:Array,covers:Array)->bool:
 		if not next_covers.has(rect):cover_changed=true
 	for rect in next_covers:
 		if not field_cover.has(rect):cover_changed=true
+	# A block whose pushability flips is refreshed like a new one.
+	for rect in next_blocks:
+		if next_pushable.has(rect)!=pushable_blocks.has(rect) and not changed.has(rect):changed.append(rect)
 	dynamic_blocks=next_blocks
 	field_cover=next_covers
+	pushable_blocks=next_pushable
 	if not changed.is_empty():
 		for key in navigation:
 			if str(key).get_slice(":",0)!="land":continue
@@ -995,7 +1002,7 @@ func _corners_clear(a:Vector2,b:Vector2,domain:String,radius:float)->bool:
 		var limit:=margin*margin
 		for rect in group[0]:
 			if not rect.grow(margin).intersects(box,true) or circle_rect(a,margin,rect):continue
-			if crush_pass and crushables.has(rect):continue
+			if crush_pass and (crushables.has(rect) or pushable_blocks.has(rect)):continue
 			for corner in [rect.position,Vector2(rect.end.x,rect.position.y),rect.end,Vector2(rect.position.x,rect.end.y)]:
 				if Geometry2D.get_closest_point_to_segment(corner,a,b).distance_squared_to(corner)<limit:return false
 	if domain=="sea":return true
@@ -1080,6 +1087,7 @@ func avoids_bodies(a:Vector2,b:Vector2,bodies:Array) -> bool:
 const CRUSHABLE:=["lamp","trolley_pole","bench","fence","tree","broken_tree","laundry_line","bus_stop","dumpster","kiosk","playground","pergola","haystack","car","pickup"]
 var crushables:Dictionary={}  # prop_blocks rect -> {"block":int,"prop":int,"id":String}
 var crush_pass:=false  # set while planning for tracked vehicles
+var pushable_blocks:Dictionary={}  # dynamic_blocks rect -> true: light wrecks tanks shove aside
 
 func _index_crushables()->void:
 	crushables.clear()

@@ -9,6 +9,7 @@
 - Firing spots must be reachable around wrecks; shelling friends press on or shift off a jammed tank's route (seed-8 gridlock behind a wreck wall fixed).
 - The post-order "cover search spike" was a one-time soldier-grid build that battle.gd already does at load; `test_cover_search_cost` guards cover cost per tick.
 - Harvesters never share or block spots (claims, dock queue, staging, idle parking) and avoid deposits each side knows are threatened; hit harvesters abort and return (`test_harvester_dock`, `test_harvester_threat`).
+- Wrecks can be cleared: tanks (>=50 t) shove light wrecks (<=35 t: IFV/AA, harvester, helicopter) aside at a crawl, never into buildings, water or units; engineers clear any wreck (10 s + 0.6 s/t, ~47 s for a tank wreck) via right-click, reopening the road (`test_wreck_clearing`).
 - Classic check is a smoke test: 4 seeds must play to an end with fighting; the scripted bot's wins/losses are reported, not judged.
 
 ## 2026-10-18 — Realistic armour and Javelin, vehicle traffic, section tactics, spikes

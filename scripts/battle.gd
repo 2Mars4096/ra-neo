@@ -507,6 +507,10 @@ func sync_units(dt: float) -> void:
 		if not sim.alive(u) and u.get("wrecked",false):
 			node.visible=true
 			if not node.has_meta("wreck_shown"):show_wreck(node,u)
+			# A light wreck shoved aside by a tank slides to its new spot.
+			elif node.position.x!=u.pos.x or node.position.z!=u.pos.y:
+				node.position=Vector3(u.pos.x,0.0,u.pos.y)
+				node.get_meta("model").rotation.y=atan2(-u.facing.x,-u.facing.y)
 			continue
 		# A lost boat that was on screen slips under over SINK_SECONDS of sim time, then hides.
 		if u.kind=="boat" and not sim.alive(u):
@@ -824,6 +828,11 @@ func special_plan(p:Vector2,enemy:int,attack:bool,ids:Array) -> Dictionary:
 			return {"action":"clear","target":work_id,"units":engineers.slice(0,1),"label":"Clear","name":HUD.FIELD_LABELS.get(work.kind,"obstacle")}
 		if enemy<0 and unfinished and is_structure(work):
 			return {"action":"resume","target":work_id,"units":engineers.slice(0,1),"label":"Build"}
+		# Any vehicle wreck: engineers haul it off (FieldOps.clear_site -> clear_wreck).
+		if enemy<0 and not engineers.is_empty():
+			var hulk:Dictionary=sim.VehicleDamage.wreck_under(sim,world_pos(p))
+			if not hulk.is_empty() and int(hulk.id)>=0:
+				return {"action":"clear","target":int(hulk.id),"units":engineers.slice(0,1),"label":"Clear","name":"the wreck"}
 	if enemy>=0:return {}
 	var building:int=building_under(p)
 	if building<0:return {}

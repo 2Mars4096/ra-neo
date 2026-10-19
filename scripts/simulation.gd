@@ -512,7 +512,9 @@ func attack_position(u:Dictionary,enemy:Dictionary,taken:Array=[])->Vector2:
 		# slack), so a spot is only taken where the drive can actually go; a
 		# hull touching a wreck may still plan away from it.
 		var slack:float=0.4 if u.kind in ["tank","aa","boat"] else 0.0
+		var can_push:bool=VehicleDamage.pusher(self,u)
 		for wreck in VehicleDamage.wrecks(self):
+			if can_push and not VehicleDamage.solid_wreck(self,wreck,true):continue
 			var gap:float=wreck.pos.distance_to(u.pos)
 			if gap<span:hulks.append({"pos":wreck.pos,"radius":minf(float(d.radius)+float(wreck.radius)+slack,gap-0.05)})
 	var misses:=0
@@ -1810,8 +1812,9 @@ func move_unit(u: Dictionary, dt: float) -> void:
 		# Wrecks are solid for vehicles: a detour round a live body must not
 		# squeeze past one (the wreck re-route ignores live bodies in turn).
 		if u.members.is_empty() and d.domain=="land":
+			var can_push:bool=VehicleDamage.pusher(self,u)
 			for wreck in VehicleDamage.wrecks(self):
-				if wreck.pos.distance_to(u.pos)<60.0:avoid.append({"pos":wreck.pos,"radius":float(d.radius)+float(wreck.radius)+(0.4 if hull else 0.0)})
+				if wreck.pos.distance_to(u.pos)<60.0 and VehicleDamage.solid_wreck(self,wreck,can_push):avoid.append({"pos":wreck.pos,"radius":float(d.radius)+float(wreck.radius)+(0.4 if hull else 0.0)})
 		# A hull already inside a body's margin may still plan away from it.
 		if hull:
 			for body in avoid+keep_right:body.radius=minf(body.radius,u.pos.distance_to(body.pos)-0.05)
@@ -1937,6 +1940,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 				best=candidate
 		# The crowd cost only steers; it never turns real progress into a stop.
 		if best==u.pos or distance-best.distance_to(next)<=0.00001:
+			if u.members.is_empty() and VehicleDamage.push_wreck(self,u,u.pos+desired*step,desired,dt,VehicleDamage.PUSH_REACH)!=VehicleDamage.PUSH_NONE:break
 			u.blocked_time+=dt
 			u.state="YIELDING"
 			u.speed_now=0.0
@@ -1955,7 +1959,8 @@ func move_unit(u: Dictionary, dt: float) -> void:
 		spatial[old_bucket].erase(u)
 		if not spatial.has(new_bucket): spatial[new_bucket]=[]
 		spatial[new_bucket].append(u)
-	if u.blocked_time<=0:
+	# A hull shoving a wreck this tick keeps its PUSHING WRECK state.
+	if u.blocked_time<=0 and float(u.get("push_seen",-1.0))<time:
 		u.state = "RETREATING" if order.mode=="retreat" else ("ADVANCING" if order.mode == "attack_move" else "MOVING")
 	if u.path.is_empty():
 		finish_order(u)
@@ -1972,6 +1977,12 @@ func hull_step(u:Dictionary,next:Vector2,distance:float,step:float,dt:float,neig
 		# ...and push over collision trees whose canopy the hull would hit.
 		for record in terrain.fell_trees(candidate,float(definitions[u.kind].radius)+terrain.TREE_CLEARANCE+0.05,axis):
 			events.append({"type":"crushed","prop":-1,"id":"tree","tree":record.index,"heading":axis,"pos":record.pos,"visible":true})
+	# A tank nosing into a light wreck shoves it aside at a crawl and follows it
+	# (held, not jammed, while it takes up the slack or the wreck closes it in).
+	var ahead:Vector2=candidate
+	var shove:int=VehicleDamage.push_wreck(self,u,ahead,axis,dt) if has_meta(VehicleDamage.WRECKS) else VehicleDamage.PUSH_NONE
+	if shove==VehicleDamage.PUSH_HOLD:return false
+	if shove==VehicleDamage.PUSH_SHOVE:candidate=u.pos+axis*minf(step,VehicleDamage.PUSH_SPEED*dt)
 	# Never drive away from the waypoint while turning toward it.
 	if movement_clear(u,candidate,neighbors) and distance-candidate.distance_to(next)>-step*0.3:
 		var previous:Vector2=u.pos
@@ -1979,6 +1990,8 @@ func hull_step(u:Dictionary,next:Vector2,distance:float,step:float,dt:float,neig
 		relocate_actor(u,u,previous)
 		u.blocked_time=0.0
 		return true
+	if shove==VehicleDamage.PUSH_NONE and has_meta(VehicleDamage.WRECKS):shove=VehicleDamage.push_wreck(self,u,ahead,axis,dt,VehicleDamage.PUSH_REACH)
+	if shove!=VehicleDamage.PUSH_NONE:return false
 	u.blocked_time+=dt
 	u.state="YIELDING"
 	u.speed_now=0.0
