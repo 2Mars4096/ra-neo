@@ -29,7 +29,7 @@ GROUPS = {
     'probes': [('probe_engage.gd', 'ENGAGE: PASS'), ('probe_crossing.gd', 'CROSSING: PASS'), ('probe_crowd.gd', 'CROWD: PASS'), ('probe_tank_crush_clear.gd', 'TANK CRUSH CLEAR: PASS'), ('probe_vehicle_path.gd', 'VEHICLE PATH:'), ('probe_resume.gd', 'RESUME: PASS'), ('probe_resume_harbor.gd', 'RESUME HARBOR: PASS'), ('probe_lethality.gd', 'LETHALITY: PASS')],
 }
 # Seconds; everything else gets DEFAULT_TIMEOUT.
-LONG = {'classic_playthrough.gd': 600, 'test_city_urban.gd': 180}
+LONG = {'classic_playthrough.gd': 300, 'test_city_urban.gd': 180}
 DEFAULT_TIMEOUT = 90
 args = sys.argv[1:]
 groups = [args[i + 1] for i, a in enumerate(args) if a == '--group' and i + 1 < len(args)]
