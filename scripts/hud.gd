@@ -17,7 +17,7 @@ const FIELD_EFFECTS := {"tactical_cover":"Cover for infantry behind it","observa
 const SITE_STATUS := {"queued":"QUEUED · Built next · RESUME = now","paused":"PAUSED · Press RESUME to continue","lost":"BUILDER LOST · RESUME with engineer","en_route":"EN ROUTE · Engineers heading to site","off_site":"OFF SITE · Engineers short of site","pinned":"PINNED · Work resumes as fire eases","regrouping":"REGROUPING · Engineers gathering","building":"BUILDING · Engineers at work"}
 const SITE_LABELS := {"queued":"QUEUED","paused":"PAUSED","lost":"NO BUILDER","en_route":"EN ROUTE","off_site":"OFF SITE","pinned":"PINNED","regrouping":"REGROUPING"}
 # Building states from UnitAnimation.state shown over a selected section/vehicle.
-const BUILDING_STATES := ["ENTERING","GARRISONED","EXITING","BOMBARDING"]
+const BUILDING_STATES := ["ENTERING","GARRISONED","GARRISON FIRING","EXITING","BOMBARDING"]
 # Guide rows for field-ops scenarios: right-click and A-click special actions.
 const FIELD_ORDERS := [
 	["GARRISON","Infantry: right-click a building. Fire from windows; move to leave."],

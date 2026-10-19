@@ -11,7 +11,7 @@ static func state(u:Dictionary,sim,moving:bool=false) -> String:
 	if u.recovering:return "RECOVERING"
 	if not u.orders.is_empty() and u.orders[0].mode=="retreat":return "WITHDRAWING"
 	if u.suppression>0.6:return "PINNED"
-	if int(u.get("garrison",-1))>=0:return "GARRISONED"
+	if int(u.get("garrison",-1))>=0:return "GARRISON FIRING" if sim.time-float(u.get("last_shot",-100))<1.5 else "GARRISONED"
 	if u.has("bombard") and u.orders.is_empty():return "BOMBARDING"
 	if sim.time-float(u.get("last_hit",-100))<0.5:return "BRACING"
 	if sim.time-float(u.get("last_shot",-100))<0.24:return "FIRING"

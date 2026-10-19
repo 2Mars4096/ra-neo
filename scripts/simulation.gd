@@ -674,7 +674,12 @@ func update_visibility() -> void:
 			continue
 		var d: Dictionary = definitions[observer.kind]
 		var sight_radius:float=float(d.sight)*float(weather.sight_scale)+(Garrison.SIGHT_BONUS if sheltered_any.has(observer.id) else 0.0)
-		var candidates:Array=range_candidates(observer.pos,sight_radius) if indexed else units
+		# A garrison watches every face of its building, not just from the
+		# doorway anchor (the building itself would hide the other faces).
+		var posts:Array=Garrison.lookouts(self,observer)
+		var reach:float=sight_radius
+		for post in posts:reach=maxf(reach,sight_radius+observer.pos.distance_to(post))
+		var candidates:Array=range_candidates(observer.pos,reach) if indexed else units
 		for target in candidates:
 			if not alive(target) or target.team == observer.team:
 				continue
@@ -688,7 +693,14 @@ func update_visibility() -> void:
 				radius *= 0.7
 			if sheltered_all.has(target.id) and time-float(target.get("last_shot",-100.0))>=3.0:radius*=0.6
 			if land and time-float(target.get("last_shot",-100.0))>=3.0:radius*=ground[1]
-			if observer.pos.distance_squared_to(target.pos) <= radius * radius:
+			if not posts.is_empty():
+				if target.seen_by[observer.team]:continue
+				var air:bool=definitions[target.kind].domain == "air"
+				for post in posts:
+					if post.distance_squared_to(target.pos) <= radius * radius and (air or terrain.line_clear(post, target.pos)):
+						target.seen_by[observer.team] = true
+						break
+			elif observer.pos.distance_squared_to(target.pos) <= radius * radius:
 				if d.domain == "air" or definitions[target.kind].domain == "air" or terrain.line_clear(observer.pos, target.pos):
 					target.seen_by[observer.team] = true
 		if observer.team == 0:
@@ -1363,6 +1375,7 @@ func tick(dt: float) -> void:
 		if u.get("combat_ineffective",false):hold_downed(u)
 		var move_lap:int=Time.get_ticks_usec() if profiling else 0
 		if not Garrison.inside(u) and Garrison.transit(u)=="":Infantry.move(u,self,dt)
+		else:Garrison.tick_members(u,dt)
 		if profiling:_lap("infantry_move",move_lap)
 		u.suppression = maxf(0, u.suppression-dt*0.12)
 		var target_lap:int=Time.get_ticks_usec() if profiling else 0

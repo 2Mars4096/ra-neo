@@ -10,3 +10,4 @@ artifacts/*.html
 output/
 .team-leader/
 .claude/
+.diane-team-*/

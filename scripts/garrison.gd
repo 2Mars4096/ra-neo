@@ -309,6 +309,36 @@ static func evict(sim,u:Dictionary)->void:
 		if m.hp>0:centre+=m.pos;count+=1
 	if count>0:u.pos=centre/count
 
+# Per-soldier clocks that Infantry.move keeps for sections outside: the sim
+# skips Infantry.move while a section is garrisoned or filing through the wall,
+# so weapon cooldown, suppression and the resting state are kept here (else
+# each soldier fires one round from the windows and never again).
+static func tick_members(u:Dictionary,dt:float)->void:
+	var seated:=inside(u)
+	for member in u.members:
+		if member.hp<=0:continue
+		member.cooldown-=dt
+		member.suppression=maxf(0,member.suppression-dt*0.12)
+		# At rest unless infantry_combat sets a fighting state this tick
+		# (step_transit owns the states of a section filing in or out).
+		if seated:member.state="HOLDING"
+
+# Where a garrisoned section watches from: every face of its building (the
+# defenders move room to room, man_windows) and the soldiers' own window posts.
+# Empty when the section is not inside.
+static func lookouts(sim,u:Dictionary)->Array:
+	if not inside(u):return []
+	var building:Dictionary=index(sim).buildings[int(u.garrison)]
+	if not building.has("lookouts"):
+		var r:Rect2=building.bounds.grow(0.7)
+		var c:Vector2=r.get_center()
+		building["lookouts"]=[r.position,Vector2(r.end.x,r.position.y),r.end,Vector2(r.position.x,r.end.y),
+			Vector2(c.x,r.position.y),Vector2(r.end.x,c.y),Vector2(c.x,r.end.y),Vector2(r.position.x,c.y)]
+	var posts:Array=building.lookouts.duplicate()
+	for member in u.members:
+		if member.hp>0:posts.append(member.pos)
+	return posts
+
 static func inside(u:Dictionary)->bool:
 	return u.get("garrison",-1)>=0
 

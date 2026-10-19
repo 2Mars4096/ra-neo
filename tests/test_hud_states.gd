@@ -55,10 +55,12 @@ func garrison_states()->void:
 		if Garrison.inside(squad):break
 	check(seen.has("ENTERING"),"walking through the door reads ENTERING: %s" % [seen.keys()])
 	check(Motion.state(squad,sim)=="GARRISONED","inside reads GARRISONED (was %s)" % Motion.state(squad,sim))
-	# Firing from the windows keeps the building state on the panel.
+	# Firing from the windows says so while keeping the building context.
 	squad.last_shot=sim.time
 	squad.cooldown=1.0
-	check(Motion.state(squad,sim)=="GARRISONED","firing from windows still reads GARRISONED")
+	check(Motion.state(squad,sim)=="GARRISON FIRING","firing from windows reads GARRISON FIRING")
+	squad.last_shot=sim.time-3.0
+	check(Motion.state(squad,sim)=="GARRISONED","a quiet garrison reads GARRISONED")
 	squad.suppression=0.9
 	check(Motion.state(squad,sim)=="PINNED","a pinned garrison reads PINNED")
 	squad.suppression=0.0
