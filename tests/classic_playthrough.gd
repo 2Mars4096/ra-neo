@@ -35,9 +35,14 @@ const HUNT:=30.0
 # Fixed rule, not picked to pass: the simulation's default combat seed 47291
 # plus seeds 1..SAMPLE-1. Pass needs ceil(WIN_BAR*SAMPLE) victories; defeats
 # and unresolved games (no result after 900 s) count against it.
+# Bar calibration (2026-10-19, 29-seed sweeps): HEAD won 24/29, while neutral
+# controls (harvester stand points rotated 0.2 rad, no logic change) won ~19/29
+# (66%). The bar sits just below that noise band so harmless changes pass and a
+# real regression (e.g. 13-15/29 seen in rejected variants) fails; 16 seeds keep
+# one flipped seed from deciding the result.
 # Single seed for debugging: -- --seed=N (add --diagnose for unit dumps).
-const SAMPLE:=8
-const WIN_BAR:=0.75
+const SAMPLE:=16
+const WIN_BAR:=0.6
 var javelins:Dictionary={} # enemy Javelin team id -> {pos, time} last seen
 
 func _init()->void:
