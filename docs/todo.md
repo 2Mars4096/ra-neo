@@ -61,7 +61,7 @@
 - [x] Test failures fixed (garrison cover search; regroup counts occupying/in-contact cover within leash): garrison "halted section takes cover against buildings (1 of 3)"; regroup recovery (3) - design call: halted cover distance vs 2.8 m regroup limit.
 - [x] Timing checks made load-robust (test_audio calibrated, test_presentation_cache controlled clock).
 - [x] Large group orders: click resolves 8 slots, rest per tick (40-unit click ~5 ms idle).
-- [ ] Harvester jam fix + threat-aware deposits: ready but held (classic win-rate trade-off; see bugs.md).
+- [x] Harvester jam fix + threat-aware deposits merged (see bugs.md for the trade-off).
 - [ ] Testing economy: restore normal supply (1600, 3/s) when testing ends (player: keep doubled for now).
 - [x] Infantry sections sent to one point spread to distinct spots; stacked idle sections step apart.
 - [ ] Deferred by player: wounded marker / bleed-out countdown, rescue of stranded wounded.

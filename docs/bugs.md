@@ -152,6 +152,6 @@ Full linear conversion of the batched palette made units and trim too dark in th
 
 ## 2026-10-18 leftovers
 
-- Harvester jam fix (claimed spots, dock queue, staging) plus threat-aware deposits is ready in worker worktree cff8a4a1 but NOT merged. It removes shared-spot jams and cuts player harvester deaths 82 -> 58 over 29 seeds, but wins drop 24 -> 20 of 29 and the 8-seed classic check fails (5/8). A dock-spot unload rule lost loads; a fixed "enemy half" territory rule and avoiding sightings on home ground both wrecked the economy. Needs a player decision.
-- The classic 8-seed check is fragile: neutral controls (rotating harvester stand points 0.2 rad) drop main from 24/29 to ~19/29 and can fail it. Judge classic changes on 29+ seeds against such controls.
+- Harvester jam fix + threat-aware deposits merged 2026-10-19 (693388e) on judgement: realism and harvester losses (82 -> 58, enemy-side 26 -> 1) over scripted-player win rate (24 -> 20 of 29, inside the neutral-control band). Rejected along the way: a dock-spot unload rule (lost loads), a fixed "enemy half" territory rule, and avoiding sightings on home ground (both wrecked the economy).
+- The classic check is now 16 seeds with a 60% bar calibrated below the neutral-control band (~66%). It was fragile at 8 seeds/75%: neutral controls (rotating harvester stand points 0.2 rad) drop main from 24/29 to ~19/29 and can fail it. Judge classic changes on 29+ seeds against such controls.
 - Wrecks are permanent and solid; a fully wreck-sealed pocket traps tanks (no shove-aside). Single-lane approaches still leave ~20% of a 12-tank column unfired within 180 s.
