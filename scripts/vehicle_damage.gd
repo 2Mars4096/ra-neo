@@ -455,10 +455,10 @@ const ENEMY_NOTICE_GAP:=3.0
 static func _report(sim,target:Dictionary,effect:String,text:String,penetrated:bool=true)->void:
 	_event(sim,target,effect,penetrated)
 	var label:String=LABEL.get(target.kind,str(target.kind).capitalize())
-	if target.team==0:sim.events.append({"type":"warning","text":text % label})
+	if target.team==0:sim.events.append({"type":"warning","text":text % label,"notice":"vehicle","effect":effect,"kind":target.kind})
 	elif target.get("visible",false) and effect in ENEMY_NOTICE and sim.time>=float(sim.get_meta("enemy_vehicle_notice",-INF)):
 		sim.set_meta("enemy_vehicle_notice",sim.time+ENEMY_NOTICE_GAP)
-		sim.events.append({"type":"warning","text":"Enemy "+text % label.to_lower()})
+		sim.events.append({"type":"warning","text":"Enemy "+text % label.to_lower(),"notice":"low"})
 
 # can_fire gate. A knocked-out gun cannot fire. An injured crew reloads and
 # acquires more slowly, and a buttoned-up crew acquires more slowly; both are
@@ -724,7 +724,7 @@ static func _pushing(sim,u:Dictionary,wreck:Dictionary,heading:Vector2,moved:boo
 		sim.events.append({"type":"crushed","prop":-1,"id":"wreck","heading":heading,"pos":wreck.pos,"visible":u.get("visible",true)})
 	if u.team==0 and sim.time>=float(u.get("push_note_at",-INF)):
 		u["push_note_at"]=sim.time+PUSH_NOTE_GAP
-		sim.events.append({"type":"warning","text":"%s shoving a %s wreck aside" % [LABEL.get(u.kind,str(u.kind).capitalize()),LABEL.get(wreck.kind,str(wreck.kind).capitalize()).to_lower()]})
+		sim.events.append({"type":"warning","text":"%s shoving a %s wreck aside" % [LABEL.get(u.kind,str(u.kind).capitalize()),LABEL.get(wreck.kind,str(wreck.kind).capitalize()).to_lower()],"notice":"drop"})
 
 # A shoved wreck may not go into buildings, walls, water or off the map, nor
 # into other wrecks, units or field works (a body it would close on). Kerbside
@@ -975,7 +975,7 @@ static func tick_recrew(sim,dt:float)->void:
 				job.idle=float(job.idle)+dt
 				if float(job.idle)>=RECREW_GIVE_UP:
 					jobs.remove_at(i)
-					if section.team==0:sim.events.append({"type":"warning","text":"Section could not reach the %s" % LABEL.get(hull.kind,str(hull.kind).capitalize())})
+					if section.team==0:sim.events.append({"type":"warning","text":"Section could not reach the %s" % LABEL.get(hull.kind,str(hull.kind).capitalize()),"notice":"info"})
 			continue
 		if float(section.suppression)>=RECREW_SUPPRESSION or sim.time-float(section.last_hit)<RECREW_QUIET:
 			section.reason="Re-crewing · pinned by fire"
@@ -1085,5 +1085,5 @@ static func _board(sim,section:Dictionary,hull:Dictionary)->Dictionary:
 	sim.events[-1].merge({"from":hull.id,"section":section.id})
 	if fresh.team==0:
 		var label:String=LABEL.get(fresh.kind,str(fresh.kind).capitalize())
-		sim.events.append({"type":"warning","text":("Enemy %s captured · %d crew aboard" if captured else "%s re-crewed · %d crew aboard") % [label,count]})
+		sim.events.append({"type":"warning","text":("Enemy %s captured · %d crew aboard" if captured else "%s re-crewed · %d crew aboard") % [label,count],"notice":"info"})
 	return fresh

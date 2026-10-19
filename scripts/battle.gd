@@ -6,6 +6,7 @@ const Effects = preload("res://scripts/effects.gd")
 const HUD = preload("res://scripts/hud.gd")
 const Motion = preload("res://scripts/unit_animation.gd")
 const StructureDamage = preload("res://scripts/structure_damage.gd")
+const Notice = preload("res://scripts/notice_feed.gd")
 var sim := Sim.new()
 var art := Visuals.new()
 var effects := Effects.new()
@@ -51,8 +52,9 @@ const HINT_INTERVAL_MSEC:=100
 var site_watch:Dictionary={}
 var paused := true
 var show_help := true
+# Player messages (scripts/notice_feed.gd); toast is the latest one shown.
+var notices:=Notice.new()
 var toast := ""
-var toast_time := 0.0
 var hud: Control
 var fx: Array[Dictionary] = []
 var fog_image := Image.create(48,36,false,Image.FORMAT_RGBA8)
@@ -419,7 +421,7 @@ func _process(dt: float) -> void:
 	if shown_fog_density!=density:
 		shown_fog_density=density
 		atmosphere.fog_density=density
-	toast_time=maxf(0,toast_time-dt)
+	notices.advance(dt)
 	if hint_dirty and Time.get_ticks_msec()-hint_msec>=HINT_INTERVAL_MSEC:refresh_cursor_hint()
 	marker_time=maxf(0,marker_time-dt)
 	marker.visible=marker_time>0
@@ -641,9 +643,13 @@ var audio:Node3D=null
 func consume_events() -> void:
 	for event in sim.events:
 		if event.type=="destroyed" and event.get("abandoned",false):continue
+		if event.type=="warning":
+			if notify(event.text,notices.event_level(event)) and audio!=null:audio.ui("warn")
+			continue
 		if audio!=null:audio.event(event)
-		if event.type in ["warning","order_report"]:
-			notify(event.text)
+		if event.type=="order_report":
+			# The real count of a large order: a tag, or a banner when some found no room.
+			notify(event.text,Notice.CURSOR if not event.text.contains("no room") and not event.text.begins_with("No ") else Notice.INFO)
 		elif event.type=="crushed":
 			if harbor_props==null:harbor_props=find_child("HarborProps",true,false)
 			if harbor_props!=null:preload("res://scripts/harbor_props.gd").crush(harbor_props,int(event.prop),event.heading)
@@ -679,9 +685,11 @@ func recrew_list(list:Array,fresh:int,sources:Array,gone:Array)->Array:
 	if not out.has(fresh):out.append(fresh)
 	return out
 
-func notify(message: String) -> void:
-	toast=message
-	toast_time=4
+# Shows message at level (Notice.ALERT ... DROP); true for a fresh alert, which
+# chimes when it comes from the sim.
+func notify(message: String,level:int=Notice.INFO) -> bool:
+	if level!=Notice.DROP and message!="":toast=message
+	return notices.push(message,level)
 
 func ping() -> void:
 	if audio!=null:audio.ui("order")
@@ -739,7 +747,7 @@ func building_under(p:Vector2) -> int:
 
 func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 	if selected.is_empty():
-		notify("Select a section first")
+		notify("Select a section first",Notice.CURSOR)
 		return
 	var enemy:=pick(p,true)
 	var destination:=world_pos(p)
@@ -747,7 +755,7 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		var facility:Dictionary=sim.get_unit(selected[0])
 		if sim.definitions[facility.kind].get("structure",false):
 			facility.rally=destination
-			notify("Production rally point set")
+			notify("Production rally point set",Notice.CURSOR)
 			return
 	var ids:=orderable()
 	if ids.is_empty():
@@ -786,7 +794,7 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		else:
 			note=action_note(plan,acted.size(),later.size())
 			if rest.is_empty():
-				notify(note)
+				notify(note,Notice.CURSOR)
 				ping()
 				attack_mode=false
 				return
@@ -824,9 +832,12 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 		var status:=lead+("Nearest accessible position" if sim.order_adjusted else ("Queued" if queued else "Order confirmed"))
 		# A large group's last targets resolve over the next ticks: the real count follows.
 		if sim.order_resolving>0:sim.report_resolution(status,ids.size())
-		notify((lead+"Order issued • resolving %d…" % sim.order_resolving if sim.order_resolving>0 else status+" • %d / %d sections" % [count,ids.size()])+release_note(before))
-		if stuck_note!="":notify(lead+stuck_note+" • %d / %d moving" % [count,ids.size()+stuck.size()])
-		if downed_note!="":notify(lead+downed_note+" • %d / %d moving" % [count,ids.size()+stuck.size()+downed.size()])
+		# Acknowledged at the pointer; a banner only when the order paused a build site.
+		var paused_sites:=release_note(before)
+		notify((lead+"Order issued • resolving %d…" % sim.order_resolving if sim.order_resolving>0 else status+" • %d / %d sections" % [count,ids.size()])+paused_sites,Notice.CURSOR if paused_sites=="" else Notice.INFO)
+		# The rest moved: the hold-outs are named in the pointer tag, not a banner.
+		if stuck_note!="":notify(lead+stuck_note+" • %d / %d moving" % [count,ids.size()+stuck.size()],Notice.CURSOR)
+		if downed_note!="":notify(lead+downed_note+" • %d / %d moving" % [count,ids.size()+stuck.size()+downed.size()],Notice.CURSOR)
 		ping()
 	attack_mode=false
 
@@ -967,12 +978,14 @@ func ui_action(action: String, p: Vector2) -> void:
 		"stop":
 			var before:=active_sites()
 			var stopped:=sim.stop(orderable())
-			notify("Stop acknowledged by %d / %d sections • disconnected units keep orders" % [stopped,orderable().size()]+release_note(before))
+			var paused_sites:=release_note(before)
+			notify("Stop acknowledged by %d / %d sections • disconnected units keep orders" % [stopped,orderable().size()]+paused_sites,Notice.CURSOR if paused_sites=="" else Notice.INFO)
 		"retreat":
 			attack_mode=false
 			var before:=active_sites()
 			var withdrawn:=sim.retreat(orderable())
-			notify(("Withdrawing %d sections • Recovery at landing zone costs supply" if sim.field_ops.is_empty() else "Withdrawing %d sections • Heal at aid posts and repair points") % withdrawn+release_note(before))
+			var paused_sites:=release_note(before)
+			notify(("Withdrawing %d sections • Recovery at landing zone costs supply" if sim.field_ops.is_empty() else "Withdrawing %d sections • Heal at aid posts and repair points") % withdrawn+paused_sites,Notice.CURSOR if paused_sites=="" else Notice.INFO)
 		"all": selected=all_sections()
 		"minimap":
 			var target: Vector2=(p-hud.minimap.position)/hud.minimap.size*sim.terrain.world_size
@@ -991,22 +1004,22 @@ func ui_action(action: String, p: Vector2) -> void:
 				else:
 					build_mode=kind
 					build_rotated=false
-					notify("Place %s • %s • Esc cancels" % [field_choice(kind).get("name",kind.capitalize()),HUD.FIELD_FUNCTIONS.get(kind,"")])
+					notify("Place %s • %s • Esc cancels" % [field_choice(kind).get("name",kind.capitalize()),HUD.FIELD_FUNCTIONS.get(kind,"")],Notice.CURSOR)
 			elif action.begins_with("build:"):
 				build_mode=action.trim_prefix("build:")
 				attack_mode=false
-				notify("Place "+build_mode+" near your base • Esc cancels")
+				notify("Place "+build_mode+" near your base • Esc cancels",Notice.CURSOR)
 			elif action=="cancel_build" and selected.size()==1:
 				var site:Dictionary=sim.get_unit(selected[0])
 				var refund:int=hud.cancel_refund(sim,site) if sim.alive(site) and site.get("structure",false) else 0
 				if sim.FieldOps.cancel(sim,selected[0]):
-					notify("%s cancelled • %d supply refunded" % [HUD.FIELD_LABELS.get(site.kind,"Site"),refund])
+					notify("%s cancelled • %d supply refunded" % [HUD.FIELD_LABELS.get(site.kind,"Site"),refund],Notice.CURSOR)
 					selected.clear()
 				else:notify("Only unfinished field structures can be cancelled")
 			elif action=="resume_build" and selected.size()==1:
 				var site:Dictionary=sim.get_unit(selected[0])
 				if sim.FieldOps.resume(sim,selected[0]):
-					notify("%s resumed • engineers en route • no charge" % HUD.FIELD_LABELS.get(site.kind,"Site"))
+					notify("%s resumed • engineers en route • no charge" % HUD.FIELD_LABELS.get(site.kind,"Site"),Notice.CURSOR)
 					ping()
 				else:notify(build_error("Unable to resume construction"))
 			elif action=="cancel_queue" and selected.size()==1:
@@ -1017,16 +1030,16 @@ func ui_action(action: String, p: Vector2) -> void:
 				if strike_mode:
 					attack_mode=false
 					build_mode=""
-				notify("FPV strike armed • click a seen enemy • Esc cancels" if strike_mode else reason)
+				notify("FPV strike armed • click a seen enemy • Esc cancels" if strike_mode else reason,Notice.CURSOR if strike_mode else Notice.INFO)
 			elif action.begins_with("buy:"):
 				var kind:=action.trim_prefix("buy:")
 				if sim.recruit(kind):
 					if not sim.field_ops.is_empty():
 						var waiting:int=sim.FieldOps.queue(sim).size()
 						if sim.field_ops.get("last_deployed",false) and waiting==0:
-							notify("Reinforcement deployed at %s" % ("forward supply point" if sim.field_ops.get("last_entry_forward",false) else "landing zone"))
-						else:notify("%s queued • %d waiting • right-click tile to remove" % [HUD.UNIT_NAMES.get(kind,kind.capitalize()),waiting])
-					else:notify("Production queued")
+							notify("Reinforcement deployed at %s" % ("forward supply point" if sim.field_ops.get("last_entry_forward",false) else "landing zone"),Notice.CURSOR)
+						else:notify("%s queued • %d waiting • right-click tile to remove" % [HUD.UNIT_NAMES.get(kind,kind.capitalize()),waiting],Notice.CURSOR)
+					else:notify("Production queued",Notice.CURSOR)
 					ping()
 				elif not sim.classic.is_empty():notify(sim.Classic.production_reason(sim,kind,0))
 				else:notify(recruit_reason(kind))
@@ -1041,7 +1054,7 @@ func launch_strike(p:Vector2) -> void:
 		if sim.FieldOps.strike_reason(sim)!="":strike_mode=false
 		return
 	strike_mode=false
-	notify("FPV STRIKE LAUNCHED • %d drones • %d supply" % [ids.size(),sim.FieldOps.PLAYER_STRIKE_COST])
+	notify("FPV STRIKE LAUNCHED • %d drones • %d supply" % [ids.size(),sim.FieldOps.PLAYER_STRIKE_COST],Notice.CURSOR)
 	ping()
 
 func place_field_structure(site:Vector2) -> void:
@@ -1051,7 +1064,7 @@ func place_field_structure(site:Vector2) -> void:
 		notify("Placement cancelled • select a living engineer section")
 		return
 	if sim.FieldOps.build(sim,build_mode,site,engineer,build_rotated):
-		notify("%s site marked • engineers stay on site to build" % HUD.FIELD_LABELS.get(build_mode,"Field"))
+		notify("%s site marked • engineers stay on site to build" % HUD.FIELD_LABELS.get(build_mode,"Field"),Notice.CURSOR)
 		build_mode=""
 		ping()
 	# Commit can fail on bodies the preview may not reveal; report the sim's result.
@@ -1070,7 +1083,7 @@ func finish_field_drag(release:Vector2) -> void:
 	var plan:Array=sim.FieldOps.drag_plan(sim,build_mode,build_drag_start,release)
 	var count:int=sim.FieldOps.build_many(sim,build_mode,plan,engineer)
 	if count>0:
-		notify("%d × %s marked • %d supply • engineers build them in turn" % [count,HUD.FIELD_LABELS.get(build_mode,"Field"),count*int(sim.definitions[build_mode].cost)])
+		notify("%d × %s marked • %d supply • engineers build them in turn" % [count,HUD.FIELD_LABELS.get(build_mode,"Field"),count*int(sim.definitions[build_mode].cost)],Notice.CURSOR)
 		build_mode=""
 		ping()
 	else:notify(build_error("Line blocked or insufficient supply"))
@@ -1143,15 +1156,16 @@ func _input(event: InputEvent) -> void:
 			if action!="":
 				if action.begins_with("buy:") and event.button_index==MOUSE_BUTTON_RIGHT and not sim.field_ops.is_empty():
 					var kind:=action.trim_prefix("buy:")
-					if sim.FieldOps.cancel_queued(sim,kind):notify("%s removed from queue • %d supply refunded" % [HUD.UNIT_NAMES.get(kind,kind.capitalize()),int(sim.definitions[kind].cost)])
-					else:notify("No %s queued" % HUD.UNIT_NAMES.get(kind,kind))
+					if sim.FieldOps.cancel_queued(sim,kind):notify("%s removed from queue • %d supply refunded" % [HUD.UNIT_NAMES.get(kind,kind.capitalize()),int(sim.definitions[kind].cost)],Notice.CURSOR)
+					else:notify("No %s queued" % HUD.UNIT_NAMES.get(kind,kind),Notice.CURSOR)
 					return
 				if action=="minimap" and event.button_index==MOUSE_BUTTON_RIGHT:
 					var target: Vector2=(p-hud.minimap.position)/hud.minimap.size*sim.terrain.world_size
 					var before:=active_sites()
 					var count:=sim.issue(orderable(),target,"attack_move" if attack_mode else "move",event.shift_pressed)
 					if sim.order_resolving>0:sim.report_resolution("Minimap order",count)
-					notify(("Minimap order • resolving %d…" % sim.order_resolving if sim.order_resolving>0 else "Minimap order • %d sections" % count)+release_note(before))
+					var paused_sites:=release_note(before)
+					notify(("Minimap order • resolving %d…" % sim.order_resolving if sim.order_resolving>0 else "Minimap order • %d sections" % count)+paused_sites,Notice.CURSOR if paused_sites=="" else Notice.INFO)
 					attack_mode=false
 				if event.button_index==MOUSE_BUTTON_LEFT:
 					ui_action(action,p)
@@ -1172,7 +1186,7 @@ func _input(event: InputEvent) -> void:
 					return
 				if build_mode!="":
 					if sim.Classic.build(sim,build_mode,0,world_pos(p)):
-						notify("Construction started")
+						notify("Construction started",Notice.CURSOR)
 						build_mode=""
 					else:notify("Placement blocked, too far from base, busy construction, or insufficient funds")
 					return
@@ -1183,7 +1197,7 @@ func _input(event: InputEvent) -> void:
 					dragging=true
 			elif event.button_index==MOUSE_BUTTON_RIGHT and strike_mode:
 				strike_mode=false
-				notify("FPV strike cancelled")
+				notify("FPV strike cancelled",Notice.CURSOR)
 			elif event.button_index==MOUSE_BUTTON_RIGHT:
 				give_order(p,false,event.shift_pressed)
 		elif event.button_index==MOUSE_BUTTON_LEFT and build_drag:
@@ -1212,10 +1226,10 @@ func _input(event: InputEvent) -> void:
 		if event.keycode==KEY_ESCAPE:
 			if build_mode!="":
 				build_mode=""
-				notify("Placement cancelled")
+				notify("Placement cancelled",Notice.CURSOR)
 			elif strike_mode:
 				strike_mode=false
-				notify("FPV strike cancelled")
+				notify("FPV strike cancelled",Notice.CURSOR)
 			elif show_help: show_help=false
 			elif attack_mode: attack_mode=false
 			else: paused=not paused
@@ -1227,14 +1241,15 @@ func _input(event: InputEvent) -> void:
 			KEY_T:
 				if build_mode in sim.FieldOps.ROTATABLE and not sim.field_ops.is_empty():
 					build_rotated=not build_rotated
-					notify("Placement turned %s" % ("across" if build_rotated else "along"))
+					notify("Placement turned %s" % ("across" if build_rotated else "along"),Notice.CURSOR)
 			KEY_A:
 				attack_mode=not selected.is_empty()
 				if attack_mode:strike_mode=false
 			KEY_S:
 				var before:=active_sites()
 				var stopped:=sim.stop(orderable())
-				notify("Stop acknowledged by %d / %d sections" % [stopped,orderable().size()]+release_note(before))
+				var paused_sites:=release_note(before)
+				notify("Stop acknowledged by %d / %d sections" % [stopped,orderable().size()]+paused_sites,Notice.CURSOR if paused_sites=="" else Notice.INFO)
 			KEY_R: ui_action("retreat",Vector2.ZERO)
 			KEY_SPACE: paused=not paused
 			KEY_F:
@@ -1248,13 +1263,13 @@ func _input(event: InputEvent) -> void:
 				effects.muted=not effects.muted
 				sound.volume_db=-80 if effects.muted else -19
 				if audio!=null:audio.set_muted(effects.muted)
-				notify("Audio muted" if effects.muted else "Audio enabled")
+				notify("Audio muted" if effects.muted else "Audio enabled",Notice.CURSOR)
 			KEY_TAB: selected=all_sections()
 		if event.keycode>=KEY_1 and event.keycode<=KEY_9:
 			var key:int=event.keycode-KEY_0
 			if event.ctrl_pressed or event.meta_pressed:
 				groups[key]=selected.duplicate()
-				notify("Control group %d assigned" % key)
+				notify("Control group %d assigned" % key,Notice.CURSOR)
 			elif groups.has(key):
 				selected=groups[key].filter(func(id): return sim.alive(sim.get_unit(id)))
 

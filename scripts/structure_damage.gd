@@ -180,7 +180,7 @@ static func damage_building(sim,building_id:int,points:float,source:Vector2,impa
 	building.state=state
 	if state>=COLLAPSED:collapse(sim,building_id,exempt)
 	elif before<state and not Garrison.occupants(sim,building_id,0).is_empty():
-		sim.events.append({"type":"warning","text":"Garrisoned building %s" % ("damaged · protection reduced" if state==DAMAGED else "breached · fragments inside")})
+		sim.events.append({"type":"warning","text":"Garrisoned building %s" % ("damaged · protection reduced" if state==DAMAGED else "breached · fragments inside"),"notice":"info"})
 
 static func collapse(sim,building_id:int,exempt:int=-1)->void:
 	var building:Dictionary=Garrison.index(sim).buildings[building_id]
@@ -219,8 +219,8 @@ static func collapse(sim,building_id:int,exempt:int=-1)->void:
 	blast_props(sim,center,maxf(building.bounds.size.x,building.bounds.size.y)*0.5+1.5,center)
 	sim.events.append({"type":"building_collapse","building":building_id,"pos":center,"bounds":building.bounds,"height":float(building.height),"killed":killed,"survivors":survivors,"visible":true})
 	sim.events.append({"type":"world_blast","kind":"collapse","pos":center,"radius":maxf(building.bounds.size.x,building.bounds.size.y)*0.5,"visible":true})
-	if player:sim.events.append({"type":"warning","text":"Building collapsed · %d buried, %d dug out" % [killed,survivors]})
-	elif killed>0:sim.events.append({"type":"warning","text":"Enemy-held building collapsed"})
+	if player:sim.events.append({"type":"warning","text":"Building collapsed · %d buried, %d dug out" % [killed,survivors],"notice":"alert"})
+	elif killed>0:sim.events.append({"type":"warning","text":"Enemy-held building collapsed","notice":"low"})
 
 # Sections garrisoned in, bound for or filing out of this building (which of
 # their soldiers are inside: Garrison.member_building).
@@ -316,7 +316,7 @@ static func start_cook_off(sim,depot:Dictionary)->void:
 	if spec.is_empty() or depot.get("cooking",false):return
 	depot["cooking"]=true
 	_state(sim).cookoffs.append({"unit":depot.id,"pos":depot.pos,"team":depot.team,"next":sim.time+0.6,"left":int(spec.blasts),"spec":spec})
-	sim.events.append({"type":"warning","text":"Ammunition depot hit · cooking off"})
+	sim.events.append({"type":"warning","text":"Ammunition depot hit · cooking off","notice":"alert" if int(depot.team)==0 else "low"})
 
 # --- Force-attack on a building --------------------------------------------------
 # Orders HE-armed vehicles/emplacements to shell a building until it collapses
@@ -347,7 +347,7 @@ static func bombard(sim,ids:Array,building_id:int)->int:
 		u["bombard_replans"]=0
 		if not _state(sim).bombard.has(u):_state(sim).bombard.append(u)
 		accepted+=1
-	if accepted==0 and stranded>0:sim.events.append({"type":"warning","text":NO_POSITION})
+	if accepted==0 and stranded>0:sim.events.append({"type":"warning","text":NO_POSITION,"notice":"info"})
 	return accepted
 
 # Clear line from `from` to the building wall it faces (aircraft fire over roofs).
@@ -420,7 +420,7 @@ static func _bombard_tick(sim,list:Array)->void:
 			if replans<BOMBARD_REPLANS and _take_position(sim,u,building):
 				u["bombard_replans"]=replans+1
 				continue
-			if u.team==0:sim.events.append({"type":"warning","text":NO_POSITION})
+			if u.team==0:sim.events.append({"type":"warning","text":NO_POSITION,"notice":"info"})
 			_end_mission(u);list.remove_at(i);continue
 		u.last_shot=sim.time
 		u.cooldown=float(d.interval)

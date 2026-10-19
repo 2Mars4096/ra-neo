@@ -1118,7 +1118,7 @@ func section_weapon(u:Dictionary,member:Dictionary) -> String:
 func spend_missile(u:Dictionary) -> void:
 	u["missiles"]=maxi(0,missiles_left(u)-1)
 	u.erase("resupply_done")
-	if u.missiles==0 and u.team==0:events.append({"type":"warning","text":"Javelin team out of missiles · resupply at HQ or a supply point"})
+	if u.missiles==0 and u.team==0:events.append({"type":"warning","text":"Javelin team out of missiles · resupply at HQ or a supply point","notice":"low"})
 
 # Nearest friendly supply source: {pos, reach} (reach: distance to stand within).
 func supply_source(u:Dictionary) -> Dictionary:
@@ -1361,7 +1361,7 @@ func tick(dt: float) -> void:
 			continue
 		var blocked:=comms_blocked(u)
 		if blocked!=u.jammed and u.team==0:
-			events.append({"type":"warning","text":"LINK LOST • Last orders and local defense continue" if blocked else "RADIO RESTORED • New orders available"})
+			events.append({"type":"warning","text":"LINK LOST • Last orders and local defense continue" if blocked else "RADIO RESTORED • New orders available","notice":"info" if blocked else "low"})
 		u.jammed=blocked
 		var d: Dictionary = definitions[u.kind]
 		if d.get("structure",false):
@@ -1470,7 +1470,7 @@ func tick(dt: float) -> void:
 		if wave <= 4:
 			var reinforcement := spawn("rifle" if wave % 2 else "tank", 1, Vector2(76, 7))
 			if not reinforcement.is_empty() and not objectives.is_empty():issue([reinforcement.id], objectives[wave%objectives.size()].pos, "attack_move")
-			events.append({"type":"warning","text":"Enemy reserves approaching from the north"})
+			events.append({"type":"warning","text":"Enemy reserves approaching from the north","notice":"alert"})
 	income_clock += dt
 	if income_clock >= 1.0 and classic.is_empty() and field_ops.is_empty():
 		income_clock -= 1.0
@@ -2068,7 +2068,7 @@ func update_objectives(dt: float) -> void:
 		if obj.progress >= capture_time and obj.owner != 0:
 			obj.owner = 0
 			credits += (100 if field_ops.is_empty() else 0)
-			events.append({"type":"warning","text":obj.name+(" secured • +100 supply" if field_ops.is_empty() else " secured")})
+			events.append({"type":"warning","text":obj.name+(" secured • +100 supply" if field_ops.is_empty() else " secured"),"notice":"info"})
 		elif obj.progress <= 0:
 			obj.owner = 1
 	if not objectives.is_empty() and objectives.all(func(obj):return obj.owner==0 and not obj.get("enemy_present",false)):
@@ -2768,7 +2768,7 @@ func showcase_mission() -> void:
 	if not scenario.get("autonomy",false) or objectives.size()<2:return
 	if counterattack_at<0 and objectives[0].owner==0:
 		counterattack_at=time+12.0
-		events.append({"type":"warning","text":"VILLAGE secured • Enemy counterattack approaching in 12 seconds"})
+		events.append({"type":"warning","text":"VILLAGE secured • Enemy counterattack approaching in 12 seconds","notice":"alert"})
 	if counterattack_at<0 or time<counterattack_at or counterattack_sent:return
 	counterattack_sent=true
 	var force:Array=[]
@@ -2781,7 +2781,7 @@ func showcase_mission() -> void:
 		for friendly in living(0):
 			if contact_known(enemy,friendly) and friendly.pos.distance_to(objectives[1].pos)<12:destination=objectives[1].pos
 	issue(force,destination,"attack_move")
-	events.append({"type":"warning","text":"COUNTERATTACK • Mixed enemy force moving on secured ground"})
+	events.append({"type":"warning","text":"COUNTERATTACK • Mixed enemy force moving on secured ground","notice":"alert"})
 
 # Local collision index stores actual soldier bodies, not just squad anchors.
 # Entries reference authoritative dictionaries; moving actors relocate immediately

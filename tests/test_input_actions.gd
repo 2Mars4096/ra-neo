@@ -43,6 +43,10 @@ func look_at(pos:Vector2)->void:
 	battle.camera_focus=Vector3(pos.x,0,pos.y)
 	battle.update_camera()
 
+# The last order acknowledgement went to the pointer tag (notice_feed CURSOR), not a banner.
+func acked_at_pointer()->bool:
+	return battle.notices.cursor_left>0 and battle.notices.cursor_text==battle.toast and not battle.notices.banners.any(func(b):return b.text==battle.toast)
+
 func spawn_near(kind:String,pos:Vector2)->Dictionary:
 	var u:Dictionary=sim.spawn(kind,0,pos)
 	if not u.is_empty():sim.update_visibility()
@@ -98,6 +102,7 @@ func run()->void:
 	check(not tank.orders.is_empty() and tank.orders[0].mode=="move","tank in mixed selection moves (orders %s)" % [tank.orders])
 	check(not tank.orders.is_empty() and tank.orders[-1].pos.distance_to(b.bounds.get_center())<16.0,"tank closes up beside the building")
 	check(str(battle.toast).contains("entering building") and str(battle.toast).contains("1 / 1"),"mixed garrison toast: %s" % battle.toast)
+	check(acked_at_pointer(),"garrison acknowledgement is a pointer tag, not a banner")
 	# Cursor hints for the same selection.
 	battle.pointer=fix.click
 	battle.refresh_cursor_hint()
@@ -129,6 +134,7 @@ func run()->void:
 	check(int(tank.get("bombard",-1))==b.id,"tank in mixed selection shells the building")
 	check(not rifle.orders.is_empty() and rifle.orders[0].mode=="attack_move","rifle attack-moves alongside (orders %s)" % [rifle.orders])
 	check(str(battle.toast).contains("shelling the building"),"shell toast: %s" % battle.toast)
+	check(acked_at_pointer(),"shell acknowledgement is a pointer tag, not a banner")
 	check(not battle.attack_mode,"attack mode clears after shell order")
 	sim.stop([rifle.id,tank.id])
 	tank.erase("bombard")
@@ -178,6 +184,7 @@ func run()->void:
 	check(jobs.size()==1 and int(jobs[0].section)==rifle.id,"infantry sent to re-crew")
 	check(not tank.orders.is_empty(),"tank in mixed selection moves to the hull")
 	check(str(battle.toast).contains("re-crew"),"re-crew toast: %s" % battle.toast)
+	check(acked_at_pointer(),"re-crew acknowledgement is a pointer tag, not a banner")
 	sim.stop([rifle.id,tank.id])
 	sim.tick(DT)
 	if sim.has_meta(VehicleDamage.RECREW):sim.remove_meta(VehicleDamage.RECREW)

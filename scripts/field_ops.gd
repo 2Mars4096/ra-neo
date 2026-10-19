@@ -338,7 +338,7 @@ static func enemy_mortar(sim)->void:
 	for k in MORTAR_ROUNDS:
 		var p:Vector2=best+Vector2.RIGHT.rotated(rng.randf()*TAU)*MORTAR_SCATTER*sqrt(rng.randf())
 		state.rounds.append({"at":sim.time+MORTAR_FLIGHT+k*MORTAR_SPACING,"pos":p})
-	sim.events.append({"type":"warning","text":"Incoming mortar fire"})
+	sim.events.append({"type":"warning","text":"Incoming mortar fire","notice":"alert"})
 
 # Per objective, the buildings within GARRISON_RADIUS that have a doorway,
 # best first. Score: share of clear sight lines from the windows facing the
@@ -384,13 +384,13 @@ static func enemy_offensive(sim)->void:
 		for id in alive:hp+=float(sim.get_unit(id).hp)
 		if alive.is_empty() or hp<state.strength*0.3:
 			if not alive.is_empty():sim.issue(alive,sim.field_ops.enemy_insertion,"retreat")
-			sim.events.append({"type":"warning","text":"Enemy assault broken • survivors falling back"})
+			sim.events.append({"type":"warning","text":"Enemy assault broken • survivors falling back","notice":"info"})
 			state.active=[]
 	local_counterattacks(sim,state)
 	swarm_strikes(sim,state,plan)
 	if not state.get("warned",false) and sim.time>=state.next-20.0 and state.index<int(plan.get("max_wave",8)) and enemy_logistics_alive(sim):
 		state.warned=true
-		sim.events.append({"type":"warning","text":"Enemy assault forming in the north-east • ~20 s"})
+		sim.events.append({"type":"warning","text":"Enemy assault forming in the north-east • ~20 s","notice":"alert"})
 	if sim.time<state.next or state.index>=int(plan.get("max_wave",8)) or not enemy_logistics_alive(sim):return
 	state.warned=false
 	state.next=sim.time+float(plan.get("interval",120.0))
@@ -424,7 +424,7 @@ static func enemy_offensive(sim)->void:
 		sim.issue(flank,target,"attack_move",true)
 		break
 	if flank.size()>0 and sim.get_unit(flank[0]).orders.is_empty():sim.issue(flank,target,"attack_move")
-	sim.events.append({"type":"warning","text":"ENEMY ASSAULT WAVE %d • %d units inbound" % [state.index,state.active.size()]})
+	sim.events.append({"type":"warning","text":"ENEMY ASSAULT WAVE %d • %d units inbound" % [state.index,state.active.size()],"notice":"info"})
 
 # Re-crew follows the wave: a vehicle boarded by a wave section joins the wave
 # (its integrity adds to the wave's strength, while the boarders have already
@@ -489,7 +489,7 @@ static func launch_swarm(sim,aim:Vector2,count:int,team:int=1)->Array:
 	var origin:Vector2=aim+axis.normalized()*minf(axis.length(),SWARM_STANDOFF)
 	var ids:=spawn_swarm(sim,origin,victims,count,team)
 	if not ids.is_empty() and team==1:
-		sim.events.append({"type":"warning","text":"FPV SWARM INBOUND • %d strike drones • AA and massed rifles can shoot them down" % ids.size()})
+		sim.events.append({"type":"warning","text":"FPV SWARM INBOUND • %d strike drones • AA and massed rifles can shoot them down" % ids.size(),"notice":"alert"})
 	return ids
 
 # Player FPV strike: bought from the reinforcement panel, aimed with a map click
@@ -938,7 +938,7 @@ static func progress_wreck_clearing(sim,dt:float)->void:
 		engineer.erase("clearing_id")
 		engineer.reason="Wreck cleared"
 		sim.VehicleDamage.remove_wreck(sim,wreck)
-		sim.events.append({"type":"warning","text":"Wreck cleared by engineers"})
+		sim.events.append({"type":"warning","text":"Wreck cleared by engineers","notice":"low"})
 
 # Enemy assault units jammed against the player's obstacles breach them by
 # fire, then resume their wave order (pushed back behind the breach).
@@ -977,7 +977,7 @@ static func progress_clearing(sim,dt:float)->void:
 			site.state="CLEARED"
 			engineer.erase("clearing_id")
 			if site.team==0:sim.credits+=float(sim.definitions[site.kind].cost)*0.5
-			sim.events.append({"type":"warning","text":"%s cleared by engineers" % str(sim.definitions[site.kind].get("name",site.kind)).capitalize()})
+			sim.events.append({"type":"warning","text":"%s cleared by engineers" % str(sim.definitions[site.kind].get("name",site.kind)).capitalize(),"notice":"low"})
 			sim.events.append({"type":"destroyed","kind":site.kind,"pos":site.pos,"visible":true})
 
 static func resume(sim,structure_id:int,engineer_id:int=-1)->bool:
@@ -1066,7 +1066,7 @@ static func crush_wire(sim,wire:Dictionary)->void:
 		if rect.grow(float(sim.definitions[vehicle.kind].radius)*0.5).has_point(vehicle.pos):
 			wire.hp=0.0
 			wire.state="CRUSHED"
-			sim.events.append({"type":"warning","text":"Wire crushed by armour"})
+			sim.events.append({"type":"warning","text":"Wire crushed by armour","notice":"drop"})
 			return
 
 static func tick(sim,dt:float)->void:

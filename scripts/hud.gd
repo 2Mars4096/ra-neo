@@ -8,6 +8,7 @@ const MUTED := Color("a5ab98")
 const TEAL := Color("b8ca83")
 const ORANGE := Color("dab273")
 const RED := Color("df8066")
+const Notice := preload("res://scripts/notice_feed.gd")
 const SCENARIO_LABELS := {"coast":"COAST","fields":"FIELDS","urban":"URBAN","showcase":"SHOWCASE","classic":"SKIRMISH","riverside_town":"TOWN"}
 # Player-facing summaries of the effects FieldOps.tick applies.
 const FIELD_FUNCTIONS := {"tactical_cover":"Infantry cover barrier once complete · T rotates","observation_post":"Raised post with 24 m sight","repair_point":"Repairs land vehicles within 10 m out of combat","aid_post":"Treats wounded living soldiers within 10 m; no revival","concertina_wire":"Slows infantry to a crawl; tracked vehicles crush it · T rotates","tank_obstacles":"Hedgehogs stop tracked and wheeled vehicles; infantry pass with cover · T rotates","fighting_trench":"Dug-in infantry cover inside the trench · T rotates","vehicle_berm":"Armoured vehicles: 40% less ground fire damage from front/sides","camouflage_net":"Land units spotted at half range; firing reveals them for 3s","forward_supply_point":"Land entry needs a connected route and no seen enemy within 18 m; otherwise uses rear","bunker":"Concrete MG pillbox: pins and cuts down infantry; needs tanks or AT fire to destroy","at_gun":"Dug-in anti-tank gun: long-range fire against armour and boats","command_post":"Radio command post: 28 m observation; enemy reserves stage from command posts","ammo_depot":"Ammunition dump: enemy counterattacks need a depot or command post"}
@@ -360,16 +361,19 @@ func draw_top(sim) -> void:
 	if not badge_row.is_empty() and badge_row[-1].intersects(pause_rect.grow(6)):pause_rect.position.y=86
 	var toast_y:=90.0 if pause_rect.position.y<86 else 122.0
 	if battle.strike_mode:draw_strike_reticle(sim)
-	if battle.attack_mode or battle.strike_mode or battle.toast_time>0:
-		var message:String="ATTACK-MOVE · Choose destination · Esc cancels" if battle.attack_mode else battle.toast
-		if battle.strike_mode and battle.toast_time<=0:message="FPV STRIKE · Click a seen enemy · vehicles first · Esc cancels"
-		var width:=font.get_string_size(message,HORIZONTAL_ALIGNMENT_LEFT,-1,13).x+28
+	# The attack-move / strike mode banner first, then the notice stack under it.
+	if battle.attack_mode or battle.strike_mode:
+		var mode:String="ATTACK-MOVE · Choose destination · Esc cancels" if battle.attack_mode else "FPV STRIKE · Click a seen enemy · vehicles first · Esc cancels"
+		var width:=font.get_string_size(mode,HORIZONTAL_ALIGNMENT_LEFT,-1,13).x+28
 		console_panel(Rect2(w/2-width/2,toast_y,width,30))
-		text_at(message,Vector2(w/2-width/2+14,toast_y+20),13,ORANGE if battle.attack_mode or battle.strike_mode else WHITE)
+		text_at(mode,Vector2(w/2-width/2+14,toast_y+20),13,ORANGE)
+		toast_y+=34
+	draw_notices(toast_y)
 	if battle.paused and not battle.show_help and sim.result=="":
 		console_panel(pause_rect)
 		text_at("TACTICAL PAUSE",pause_rect.position+Vector2(21,20),13,TEAL,true)
 	if battle.cursor_hint!="" and not battle.show_help and sim.result=="":draw_cursor_hint()
+	if battle.notices.cursor_left>0 and not battle.show_help and sim.result=="":draw_cursor_notice()
 	if battle.show_help:draw_guide()
 	if sim.result!="":draw_result()
 
@@ -843,6 +847,29 @@ func draw_cursor_hint() -> void:
 	# Drawn without console_panel: the tag follows the pointer and must not block clicks.
 	panel(Rect2(at,Vector2(width,22)),INK)
 	text_at(battle.cursor_hint,at+Vector2(8,16),12,ORANGE if battle.cursor_hint=="Shell" else TEAL,true)
+
+# Notice banners (battle.notices), oldest on top: alerts orange, info white,
+# low dim and smaller. They do not block clicks.
+func draw_notices(y:float) -> void:
+	var w:=size.x
+	for item in battle.notices.banners:
+		var low:bool=item.level==Notice.LOW
+		var message:String=Notice.line(item)
+		var size_px:=12 if low else 13
+		var height:=24.0 if low else 30.0
+		var width:=font.get_string_size(message,HORIZONTAL_ALIGNMENT_LEFT,-1,size_px).x+28
+		panel(Rect2(w/2-width/2,y,width,height),INK)
+		cv.draw_line(Vector2(w/2-width/2+2,y+2),Vector2(w/2+width/2-2,y+2),Color("626956"),1)
+		text_at(message,Vector2(w/2-width/2+14,y+height-10),size_px,ORANGE if item.level==Notice.ALERT else (MUTED if low else WHITE))
+		y+=height+4
+
+# Order acknowledgement (Notice.CURSOR): a tag under the pointer, below the action hint.
+func draw_cursor_notice() -> void:
+	var text:String=battle.notices.cursor_text
+	var at:=pointer()+Vector2(16,18+(24 if battle.cursor_hint!="" else 0))
+	var width:=font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,11).x+14
+	panel(Rect2(at,Vector2(width,20)),INK)
+	text_at(text,at+Vector2(7,14),11,MUTED)
 
 func draw_guide() -> void:
 	var w:=size.x

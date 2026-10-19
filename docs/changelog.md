@@ -9,6 +9,8 @@
 - Firing spots must be reachable around wrecks; shelling friends press on or shift off a jammed tank's route (seed-8 gridlock behind a wreck wall fixed).
 - The post-order "cover search spike" was a one-time soldier-grid build that battle.gd already does at load; `test_cover_search_cost` guards cover cost per tick.
 - Harvesters never share or block spots (claims, dock queue, staging, idle parking) and avoid deposits each side knows are threatened; hit harvesters abort and return (`test_harvester_dock`, `test_harvester_threat`).
+- Notifications: one feed with ALERT/INFO/LOW/CURSOR/DROP levels; acknowledgements become pointer tags, repeats merge (xN), max 3 banners, alert chime only for fresh alerts (banners -81..93% in 300 s runs) (`test_notifications`).
+- Camera: minimap view outline is a proper 4-corner shape at every zoom; middle-mouse drag pans; bottom-strip clicks at max zoom hit the ground (`test_minimap_view`, `test_middle_pan`).
 - Garrisons fire properly: soldiers' weapon cooldowns now count down inside buildings (they used to fire once and freeze, Javelins too), and a garrison spots from its building's corners, faces and window posts, not just the doorway. The panel reads GARRISON FIRING while they shoot (`test_garrison_fire`).
 - Wrecks can be cleared: tanks (>=50 t) shove light wrecks (<=35 t: IFV/AA, harvester, helicopter) aside at a crawl, never into buildings, water or units; engineers clear any wreck (10 s + 0.6 s/t, ~47 s for a tank wreck) via right-click, reopening the road (`test_wreck_clearing`).
 - Classic check is a smoke test: 4 seeds must play to an end with fighting; the scripted bot's wins/losses are reported, not judged.
