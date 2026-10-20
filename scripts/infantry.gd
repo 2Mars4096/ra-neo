@@ -255,7 +255,9 @@ static func drag_spot(u:Dictionary,casualty:Dictionary,sim) -> Vector2:
 	return best
 
 static func move(u:Dictionary,sim,dt:float) -> void:
-	if not u.members.is_empty() and sim.scenario.get("autonomy",false):update_regroup(u,sim)
+	if not u.members.is_empty() and sim.scenario.get("autonomy",false):
+		update_regroup(u,sim)
+		if not u.hold_command:yield_to_hulls(u,sim)
 	# The threat scan (line-of-fire checks against every nearby enemy) runs ~3x a
 	# second per section, staggered by id, instead of every 30 Hz tick. A new
 	# order still clears stale cover immediately.
@@ -298,7 +300,10 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 				desired=casualty.pos+(casualty.drag_to-casualty.pos).normalized()*0.75
 		elif sim.scenario.get("autonomy",false):
 			var phase:String=member.get("cover_phase","")
+			var yielding:Dictionary=member.get("hull_yield",{})
+			if not yielding.is_empty() and sim.time>=float(yielding.until):member.erase("hull_yield");yielding={}
 			if u.hold_command:desired=member.pos
+			elif not yielding.is_empty():desired=yielding.spot
 			elif u.get("regroup_active",false):desired=regroup_destination(u,member,sim,desired)
 			elif phase=="OVERWATCH":desired=member.pos
 			elif phase in ["SEEKING","SETTLING","SHELTERED"]:
@@ -359,6 +364,13 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 				for angle in [0.65,-0.65,1.2,-1.2]:
 					var step:Vector2=old+(desired-old).normalized().rotated(angle)*minf(speed*dt,old.distance_to(desired))
 					if actor_clear(u,member,step,sim):member.pos=step;break
+				# Still stuck against a vehicle: walk round the hull.
+				# (Kept up for a moment once started, so the walk round is continuous.)
+				if member.pos==old and (member.get("regroup_blocked",0.0)>0.5 or sim.time<float(member.get("hull_round_until",0.0))):
+					var around:=hull_sidestep(u,member,sim,old,desired,minf(speed*dt,old.distance_to(desired)))
+					if around!=Vector2.INF:
+						member.pos=around
+						member["hull_round_until"]=sim.time+0.5
 		sim.relocate_actor(u,member,old)
 		member.travel=old.distance_to(member.pos)
 		member["regroup_blocked"]=member.get("regroup_blocked",0.0)+dt if member.travel<0.001 and old.distance_to(desired)>0.3 else 0.0
@@ -462,14 +474,19 @@ static func held_shelter(u:Dictionary,member:Dictionary) -> bool:
 	return member.get("occupying",false) or (member.get("cover_phase","") in ["SETTLING","SHELTERED"] and member.cover_goal.distance_to(u.pos)<=Cover.LEASH)
 
 static func regroup_destination(u:Dictionary,member:Dictionary,sim,goal:Vector2) -> Vector2:
+	var stalled:=regroup_stalled(member,sim) and not hull_beside(member,sim).is_empty()
+	goal=clear_of_hulls(u,member,sim,goal,stalled)
 	var route:Array=member.get("regroup_path",[])
 	if goal.distance_to(member.get("regroup_goal",goal))>1.0:
 		route=[];member["regroup_after"]=0.0
 	while not route.is_empty() and member.pos.distance_to(route[0])<0.15:route.pop_front()
 	var radius:float=member.get("body_radius",0.8)
 	# The obstruction test only matters once the re-plan timer allows a search.
-	if sim.time>=member.get("regroup_after",0.0) and (member.get("regroup_blocked",0.0)>0.5 or not sim.terrain.segment_clear(member.pos,goal,"land",radius)):
+	# A stall (no headway, e.g. dithering against a hull parked on the old
+	# route) or walking round a hull also re-plans.
+	if sim.time>=member.get("regroup_after",0.0) and (member.get("regroup_blocked",0.0)>0.5 or stalled or sim.time<float(member.get("hull_round_until",0.0)) or not sim.terrain.segment_clear(member.pos,goal,"land",radius)):
 		member["regroup_after"]=sim.time+1.0
+		member["regroup_best_at"]=sim.time
 		member["regroup_goal"]=goal
 		var avoid:Array=[]
 		for entry in sim.actor_candidates(member.pos,goal,Cover.LEASH):
@@ -478,6 +495,9 @@ static func regroup_destination(u:Dictionary,member:Dictionary,sim,goal:Vector2)
 			var clearance:float=radius+(float(sim.definitions[other.kind].radius) if other.members.is_empty() else float(peer.get("body_radius",0.8)))-0.04
 			# Match actor_clear: soldiers of other sections squeeze past shoulder to shoulder.
 			if not other.members.is_empty() and other.id!=u.id:clearance*=0.7
+			# A soldier pressed against a hull is already inside its ring: keep the
+			# ring just short of him so the search can start (and leads away).
+			elif other.members.is_empty():clearance=minf(clearance,member.pos.distance_to(peer.pos)-0.05)
 			avoid.append({"pos":peer.pos,"radius":clearance})
 		var candidate:Array=sim.terrain.path(member.pos,goal,"land",radius,avoid,"infantry")
 		if candidate.is_empty():
@@ -506,7 +526,127 @@ static func regroup_destination(u:Dictionary,member:Dictionary,sim,goal:Vector2)
 			length+=previous.distance_to(point);previous=point
 		if bounded and length<=28.0:route=candidate
 	member["regroup_path"]=route
-	return goal if route.is_empty() else route[0]
+	var aim:Vector2=goal if route.is_empty() else route[0]
+	if aim.distance_to(member.get("regroup_aim",Vector2.INF))>0.3:
+		member["regroup_aim"]=aim
+		member["regroup_best"]=member.pos.distance_to(aim)
+		member["regroup_best_at"]=sim.time
+	return aim
+
+# No headway on the current aim point for a second while still away from it.
+# Side-steps keep `regroup_blocked` at zero, so travel alone cannot show this.
+static func regroup_stalled(member:Dictionary,sim) -> bool:
+	if not member.has("regroup_aim"):return false
+	var gap:float=member.pos.distance_to(member.regroup_aim)
+	if gap<float(member.regroup_best)-0.25:
+		member.regroup_best=gap
+		member.regroup_best_at=sim.time
+	return gap>0.5 and sim.time-float(member.regroup_best_at)>1.0
+
+# Only a stall pressed against a vehicle hull re-plans (a parked hull on the
+# old route); other waits keep their usual triggers. Checked once a second.
+static func hull_beside(member:Dictionary,sim) -> Dictionary:
+	member.regroup_best_at=sim.time
+	var radius:float=member.get("body_radius",0.8)
+	for entry in sim.actor_candidates(member.pos,member.pos,radius+0.5):
+		var other:Dictionary=entry.unit
+		if other.members.is_empty() and not other.get("structure",false) and sim.alive(other) and member.pos.distance_to(other.pos)<float(sim.definitions[other.kind].radius)+radius+0.5:return other
+	return {}
+
+# Infantry give way to a friendly vehicle held up by their bodies (it waits
+# on them while they wait on its hull, e.g. a section halted for a regroup on
+# the tank's route): a soldier on one of its next legs steps just off that
+# line, on his own side, for a moment. Scanned twice a second per section.
+const HULL_YIELD:=2.5
+static func yield_to_hulls(u:Dictionary,sim) -> void:
+	if sim.time<float(u.get("hull_scan_at",0.0)):return
+	u["hull_scan_at"]=sim.time+0.5+float(u.id%5)*0.02
+	for hull in sim.range_candidates(u.pos,Cover.LEASH+6.0):
+		if hull.team!=u.team or not hull.members.is_empty() or hull.get("structure",false) or hull.path.is_empty() or float(hull.blocked_time)<=0.0:continue
+		var reach:float=float(sim.definitions[hull.kind].radius)+0.8
+		var legs:Array=[hull.pos]+hull.path.slice(0,2)
+		for member in u.members:
+			if member.hp<=0 or member.get("aiding",-1)>=0 or sim.time<float(member.get("hull_yield",{}).get("until",0.0)):continue
+			for k in range(1,legs.size()):
+				var spot:=yield_spot(u,member,sim,legs[k-1],legs[k],reach)
+				if spot.x==INF:continue
+				member["hull_yield"]={"spot":spot,"until":sim.time+HULL_YIELD}
+				break
+
+# A clear spot just off the leg a->b on the soldier's own side, or Vector2.INF
+# when the soldier is not on that leg or no such spot is clear.
+static func yield_spot(u:Dictionary,member:Dictionary,sim,a:Vector2,b:Vector2,reach:float) -> Vector2:
+	var leg:Vector2=b-a
+	if leg.length()<0.1:return Vector2.INF
+	var ahead:Vector2=leg.normalized()
+	var relative:Vector2=member.pos-a
+	var along:float=relative.dot(ahead)
+	var across:Vector2=Vector2(-ahead.y,ahead.x)
+	var offset:float=relative.dot(across)
+	if along<0.0 or along>leg.length()+reach or absf(offset)>=reach:return Vector2.INF
+	var side:float=1.0 if offset>=0.0 else -1.0
+	for slide in [0.0,1.0,-1.0]:
+		var spot:Vector2=a+ahead*(along+slide)+across*side*(reach+0.4)
+		if spot.distance_to(u.pos)<=Cover.LEASH and sim.terrain.segment_clear(member.pos,spot,"land",member.get("body_radius",0.8)):return spot
+	return Vector2.INF
+
+# A formation slot under a vehicle's hull (a tank parked on it) can never be
+# reached. Once blocked, the soldier takes the nearest clear spot beside that
+# hull instead and keeps it while the same hull still covers the slot. Only
+# blocked soldiers (or ones already shifted) query the hulls around the slot.
+static func clear_of_hulls(u:Dictionary,member:Dictionary,sim,goal:Vector2,stalled:bool=false) -> Vector2:
+	var held:Dictionary=member.get("hull_slot",{})
+	if held.is_empty():
+		if not stalled and member.get("regroup_blocked",0.0)<=0.5:return goal
+	else:
+		var parked:Dictionary=sim.get_unit(int(held.id))
+		if sim.alive(parked) and parked.pos==held.hull and goal.distance_to(held.goal)<0.05:return held.spot
+		member.erase("hull_slot")
+	var radius:float=member.get("body_radius",0.8)
+	var hulls:Array=[]
+	for entry in sim.actor_candidates(goal,goal,radius+0.15):
+		var other:Dictionary=entry.unit
+		if other.members.is_empty() and not other.get("structure",false) and sim.alive(other):
+			hulls.append({"unit":other,"reach":float(sim.definitions[other.kind].radius)+radius+0.15})
+	for hull in hulls:
+		var at:Vector2=hull.unit.pos
+		if goal.distance_to(at)>=hull.reach:continue
+		var away:Vector2=goal-at if goal.distance_to(at)>0.01 else member.pos-at
+		away=away.normalized()
+		# Nearest point of the hull's ring first, then alternately further round.
+		for i in 13:
+			var spot:Vector2=at+away.rotated(0.3*ceili(i/2.0)*(1.0 if i%2==1 else -1.0))*hull.reach
+			if spot.distance_to(u.pos)>Cover.LEASH or not sim.terrain.traversable(spot,"land",radius):continue
+			if hulls.any(func(other):return spot.distance_to(other.unit.pos)<other.reach-0.01):continue
+			member["hull_slot"]={"id":hull.unit.id,"goal":goal,"hull":at,"spot":spot}
+			return spot
+		break
+	return goal
+
+# A soldier pressed against a vehicle hull with every forward step refused
+# walks round it: a step along the hull's tangent (toward the destination),
+# eased slightly outward, always opens distance from that hull.
+static func hull_sidestep(u:Dictionary,member:Dictionary,sim,old:Vector2,desired:Vector2,length:float) -> Vector2:
+	var radius:float=member.get("body_radius",0.8)
+	var nearest:Dictionary={}
+	var gap:=INF
+	for entry in sim.actor_candidates(old,old,radius+0.3):
+		var other:Dictionary=entry.unit
+		if not other.members.is_empty() or other.get("structure",false) or not sim.alive(other):continue
+		var clearance:float=old.distance_to(other.pos)-float(sim.definitions[other.kind].radius)-radius
+		if clearance<0.3 and clearance<gap:gap=clearance;nearest=other
+	if nearest.is_empty():return Vector2.INF
+	var normal:Vector2=(old-nearest.pos).normalized()
+	var tangent:=Vector2(-normal.y,normal.x)
+	# Keep going round the same way once started (no dithering on the hull).
+	var sign:float=float(member.get("hull_side",0.0)) if sim.time<float(member.get("hull_round_until",0.0)) else 0.0
+	if sign==0.0:sign=1.0 if tangent.dot(desired-old)>=0.0 else -1.0
+	for side in [sign,-sign]:
+		var step:Vector2=old+(tangent*side*0.95+normal*0.3).normalized()*length
+		if actor_clear(u,member,step,sim):
+			member["hull_side"]=side
+			return step
+	return Vector2.INF
 
 static func hit(u:Dictionary,amount:float,source:Vector2,now:float) -> void:
 	reconcile(u)

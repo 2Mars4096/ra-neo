@@ -41,13 +41,18 @@ func _init()->void:
 	check(sim.get_unit(2).pos.distance_to(Vector2(16.6,30))>6,"squad two escapes the reproduced cafe stall")
 	# Sections caught mid-regroup at the 60 s check (contact just ended, so its
 	# shelters stopped counting) are judged when that regroup ends instead.
+	# Likewise a straggler caught routing back to a section that has just
+	# halted (under the regroup trigger, so no regroup) must be back within the
+	# same bound.
 	var reunion_due:Dictionary={}
+	var return_due:Dictionary={}
 	var aid_reunion_due:Dictionary={}
 	for id in [1,2,3]:
 		var u:Dictionary=sim.get_unit(id)
 		check(u.hp>0,"mission section survives recovery: %s"%id)
 		if u.members.all(func(m):return reunited(sim,m,u)):check(true,"all live section members reunite after contact: %s"%id)
 		elif u.get("regroup_active",false):reunion_due[id]=sim.time
+		elif u.members.all(func(m):return reunited(sim,m,u) or returning(m,u)):return_due[id]=sim.time
 		else:
 			# A medic can legitimately stand just beyond the formation radius to
 			# finish aid beside a casualty already with the section. Verify that
@@ -66,7 +71,13 @@ func _init()->void:
 		check(regroups[id].missed<0.5,"separated section starts a regroup: %s"%id)
 		check(regroups[id].longest<=REGROUP_BOUND,"section regroup is bounded: %s"%id)
 	check([1,2,3].filter(func(id):return sim.get_unit(id).get("regroup_count",0)>0).size()>=2,"mission exercises regroup recovery")
-	check(sim.get_unit(1).orders.is_empty(),"first section completes its village order without reissue")
+	# A section still trading fire en route at 60 s (the attack-move contract of
+	# completed_attack_move) must consume the same order within the recovery
+	# bound; a section that is neither done nor fighting fails now.
+	var village_due:=-1.0
+	if sim.get_unit(1).orders.is_empty():check(true,"first section completes its village order without reissue")
+	elif completed_attack_move(sim,sim.get_unit(1)):village_due=sim.time
+	else:check(false,"first section completes its village order without reissue")
 	check(sim.get_unit(3).pos.x>30,"AT section escapes villa and advances toward village")
 	for frame in 900:
 		sim.tick(1.0/30.0);sim.events.clear()
@@ -79,6 +90,17 @@ func _init()->void:
 			check(not u.get("regroup_active",false) and u.members.all(func(m):return reunited(sim,m,u)),"all live section members reunite after contact: %s"%id)
 			print("REUNION DEFERRED squad=",id," from t=",snappedf(reunion_due[id],0.1)," to t=",snappedf(sim.time,0.1))
 			reunion_due.erase(id)
+		for id in return_due.keys():
+			var u:Dictionary=sim.get_unit(id)
+			var complete:bool=u.members.all(func(m):return reunited(sim,m,u))
+			if not complete and sim.time-float(return_due[id])<=REGROUP_BOUND:continue
+			check(complete,"all live section members reunite after contact: %s"%id)
+			print("REUNION AFTER RETURN squad=",id," from t=",snappedf(return_due[id],0.1)," to t=",snappedf(sim.time,0.1))
+			return_due.erase(id)
+		if village_due>=0 and (sim.get_unit(1).orders.is_empty() or sim.time-village_due>REGROUP_BOUND):
+			check(sim.get_unit(1).orders.is_empty(),"first section completes its village order without reissue")
+			print("VILLAGE ORDER DEFERRED from t=",snappedf(village_due,0.1)," to t=",snappedf(sim.time,0.1))
+			village_due=-1.0
 		for id in aid_reunion_due.keys():
 			var u:Dictionary=sim.get_unit(id)
 			var pending:Dictionary=aid_reunion_due[id]
@@ -94,6 +116,7 @@ func _init()->void:
 			print("REUNION AFTER AID squad=",id," from t=",snappedf(pending.since,0.001)," treated t=",snappedf(pending.treated_at,0.001)," reunited t=",snappedf(sim.time,0.001)," bound=",snappedf(float(pending.bound),0.01))
 			aid_reunion_due.erase(id)
 	check(aid_reunion_due.is_empty(),"deferred buddy-aid reunion completes during follow-up")
+	check(return_due.is_empty(),"deferred straggler return completes during follow-up")
 	for id in [1,2,3]:
 		check(regroups[id].missed<0.5 and regroups[id].longest<=REGROUP_BOUND,"late regroups start and stay bounded: %s"%id)
 		check(completed_attack_move(sim,sim.get_unit(id)),"all sections complete single attack-move: %s"%id)
@@ -256,6 +279,11 @@ func reunited(sim,m:Dictionary,u:Dictionary)->bool:
 	if m.pos.distance_to(u.pos)>Actors.Cover.LEASH:return false
 	if m.get("occupying",false):return true
 	return m.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] and m.cover_goal.distance_to(u.pos)<=Actors.Cover.LEASH and in_contact(sim,u)
+
+# A live straggler inside the leash with a planned way back to his slot (not
+# in cover, not giving aid): he is returning, not left behind.
+func returning(m:Dictionary,u:Dictionary)->bool:
+	return m.hp>0 and m.pos.distance_to(u.pos)<=Actors.Cover.LEASH and m.get("cover_phase","")=="" and m.get("aiding",-1)<0 and not m.get("regroup_path",[]).is_empty()
 
 # Only actual medics beside an unstabilised, nearby casualty qualify for this
 # deferred assertion. Other stragglers must satisfy the original 60 s check.
