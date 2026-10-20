@@ -1559,12 +1559,14 @@ func space_engaged(u:Dictionary,target:Dictionary,dt:float)->void:
 		var p:Vector2=entry.pos
 		if not terrain.traversable(p,"land",radius) or not terrain.segment_clear(u.pos,p,"land",radius) or not terrain.line_clear(p,target.pos):continue
 		# Soldiers reach their new slots without filing through the other section.
+		# A trailing soldier whose current slot already lies beyond it passes
+		# anyway: only a path that newly crosses the footprint counts.
 		var through:=false
 		for member in u.members:
 			if member.hp<=0:continue
 			for at in anchors:
 				var gap:float=minf(Infantry.Cover.FOOTPRINT,member.pos.distance_to(at)-0.1)
-				if Geometry2D.get_closest_point_to_segment(at,member.pos,p+member.offset).distance_to(at)<gap:through=true
+				if Geometry2D.get_closest_point_to_segment(at,member.pos,p+member.offset).distance_to(at)<gap and Geometry2D.get_closest_point_to_segment(at,member.pos,u.pos+member.offset).distance_to(at)>=gap:through=true
 		if through:continue
 		u["engage_shift"]=p
 		u["shift_until"]=time+u.pos.distance_to(p)/maxf(0.5,float(definitions[u.kind].speed))+1.0
