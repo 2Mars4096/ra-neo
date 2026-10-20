@@ -56,7 +56,7 @@ Retreat orders use existing footprint-aware routing and group formation slots, m
 
 ## Scenario and weapon presentation
 
-`resources/scenarios.json` defines six selectable fictional landscapes/modes, obstruction/wood/ruins/mud rectangles, sector names, and hold duration. Scenario selection on the briefing reloads the scene; restart retains the selection. Ruins give infantry cover; soft ground halves ground movement speed. Ground shader patches use those same rectangles. Navigation grids use terrain travel-time weights; direct shortcuts and smoothing compare sampled travel costs as well as footprint clearance.
+`resources/scenarios.json` defines seven fictional landscapes/modes, obstruction/wood/ruins/mud rectangles, sector names, and hold duration. Black Sea Harbor is the default and only scenario visible in the normal selector; six legacy configurations remain hidden for development and regression checks. Scenario selection on the briefing reloads the scene; restart retains the selection. Ruins give infantry cover; soft ground halves ground movement speed. Ground shader patches use those same rectangles. Navigation grids use terrain travel-time weights; direct shortcuts and smoothing compare sampled travel costs as well as footprint clearance.
 
 Shots require initial target acquisition. Each rifle soldier fires separately with a fraction of the old section damage; the AT team consists of a launcher operator and rifle assistant. Damage and casualties resolve at the shot event. A bounded 128-entry projectile presentation queue renders travel and delayed impacts within three fixed pools (480 volume, 256 glow, 48 ground instances); it does not implement physical projectile hit detection. Benchmark runs ignore command input and report simulated time/sample count to distinguish active simulation from accidental pauses.
 
@@ -156,7 +156,9 @@ Effects use volume/glow/ground MultiMesh pools, 128 projectiles, 96 delayed cues
 
 ## Field Operations mode
 
-Riverside (scenario5, now the default) uses `field_ops.gd` and `field_units.json`. `sim.field_ops` is populated while `sim.classic` stays empty. One supply balance funds off-map reinforcement spawning and engineer construction. The old classic mode remains as hidden scenario4 and frozen legacy test fixtures.
+Black Sea Harbor (scenario6, the default) and the hidden Riverside fixture (scenario5) use `field_ops.gd` and `field_units.json`. `sim.field_ops` is populated while `sim.classic` stays empty. One supply balance funds off-map reinforcement spawning and engineer construction. The old classic mode remains as hidden scenario4 and frozen legacy test fixtures.
+
+Field-operations victory requires every objective to be owned and free of enemies for the authored hold duration. Autonomous missions also wait until more than 20 seconds after the scheduled reserve dispatch, with `counterattack_sent` true. If all authored enemy command posts and ammo depots are destroyed before dispatch, the reserve cannot form and that reserve requirement is satisfied without changing `counterattack_sent`. Destroying logistics after dispatch does not bypass the existing delay; maps without authored logistics retain the normal reserve rule. Objective resolution preserves an existing terminal result, including defeat recorded earlier in the same tick when every player mobile unit is lost.
 
 Engineers use three articulated infantry actors and explicit construction assignments. Field units are stationary, destroyable structures with `build_left`, builder/work-point state and shared rectangle blockers. Completed sandbags provide terrain cover; observation adds normal sight; repair/aid apply disengaged healing without resurrecting soldiers. Construction appearance is synchronized by `field_models.gd` from authoritative progress.
 

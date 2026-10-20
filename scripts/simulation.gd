@@ -2073,8 +2073,14 @@ func update_objectives(dt: float) -> void:
 			obj.owner = 1
 	if not objectives.is_empty() and objectives.all(func(obj):return obj.owner==0 and not obj.get("enemy_present",false)):
 		score_hold += dt
-		if score_hold >= float(scenario.hold) and (not scenario.get("autonomy",false) or (counterattack_sent and time>counterattack_at+20)):
-			result = "VICTORY"
+		if score_hold >= float(scenario.hold):
+			var reserve_resolved:bool=counterattack_sent and time>counterattack_at+20
+			# Destroyed field logistics prevent an unsent reserve from ever forming.
+			# An already-dispatched reserve still keeps its normal grace period.
+			if not field_ops.is_empty() and not counterattack_sent:
+				reserve_resolved=not FieldOps.enemy_logistics_alive(self)
+			if result=="" and (not scenario.get("autonomy",false) or reserve_resolved):
+				result = "VICTORY"
 	else:
 		score_hold = 0
 

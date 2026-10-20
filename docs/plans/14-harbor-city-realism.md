@@ -18,6 +18,7 @@ Design contract: [harbor-city-design.md](../harbor-city-design.md).
   - [x] 7-1. Codex cross-review ([report](../../output/team-briefs/engineer-review-codex.md)); fixes plus hard vehicle barrier for hedgehogs.
   - [ ] 7-2. Clear obstacle / breach / mines / fortify building (tier 2; map-prop clearing needs instanced-prop removal).
 - [ ] 8. Integrate, native capture, Codex/Claude realism cross-review, performance check.
+- [x] 9. Fix Harbor victory when enemy logistics is destroyed before reserve dispatch; preserve objective/hold requirements and existing reserve timing, add a focused regression, and correct current-game documentation.
 
 ## Decisions
 - Keep current water polygons, arterials, objectives and insertion points; the user accepted the overall map.
@@ -54,3 +55,7 @@ Worker briefs and launcher: `output/team-briefs/` (`compiler.txt`, `urban.txt`, 
 ## Notes
 - Non-Git workspace: workers share files by strict ownership.
 - `tests/test_field_geometry.gd` ends by writing `/private/tmp/field-geometry-proof.json`, which the sandbox denies; it then hangs. Environment issue, not a regression.
+
+## Mission correctness verification — 2026-10-20
+
+The initial `test_field_victory.gd` reproduced the early-logistics victory failure on unchanged main (38 checks, only that assertion failed). Final review added a full-tick regression for all player mobile units lost while a friendly support structure survives; the victory assignment now preserves an already-recorded defeat. The expanded suite passes all 43 checks, including all logistics destroyed, either logistics type surviving, incomplete or contested objectives, the hold duration, the strict reserve grace boundary, defeat precedence, and legacy missions. Seven focused suites pass on Godot 4.5.1: Harbor gameplay, field operations, field-operations edges, field victory, Showcase, wave strength, and enemy defences (1,141 checks, 0 failures). These controlled headless checks do not complete the separate native review or performance tasks above.

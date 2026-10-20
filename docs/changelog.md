@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-20 — Harbor victory and current-game documentation
+
+- Harbor can now end in victory after every enemy command post and ammo depot is destroyed before the reserve launches. All objectives must still be held uncontested for the authored duration; an already-dispatched reserve keeps its existing delay, and legacy mission rules remain intact.
+- Objective resolution preserves a defeat already recorded in the same tick, including when all player mobile units are lost but a friendly support structure survives.
+- Added `test_field_victory.gd` to the core check runner. The initial regression reproduces the original failure on unchanged main; the expanded suite verifies neutralized/partial logistics, objective ownership and contesting, hold duration, reserve timing, defeat precedence, and legacy outcomes.
+- Corrected README and scenario architecture/limitations to describe the current Harbor default, three objectives, doubled testing economy, assault timing, garrisons/destruction/casualty movement, and six hidden legacy fixtures. Restored the continuous field-works table. Gameplay balance is unchanged.
+- Validation: Godot 4.5.1, 7 focused suites / 1,141 checks / 0 failures (`test_harbor_gameplay`, `test_field_ops`, `test_field_ops_edges`, `test_field_victory`, `test_showcase`, `test_wave_strength`, `test_enemy_defences`); `git diff --check` clean. These headless checks do not establish native performance or human playtest acceptance.
+
 ## 2026-10-18 (later) — Leftover fixes
 
 - Engaged sections keep ~4 u apart: the later arrival shifts to a clear fire position and soldiers avoid the other section's footprint (`test_engaged_spacing`).

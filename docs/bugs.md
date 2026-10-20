@@ -7,7 +7,7 @@
 
 - The original tactical missions remain short under scripted policies. Canal Watch adds a counterattack and autonomy; classic skirmish adds production/economy, but supply networks and a broader strategic planner are still absent. Enemy tactical repairs currently have no resource budget.
 
-- Five fictional scenarios on a common battlefield extent; Canal Watch is the fourth and classic skirmish the fifth. No multiplayer, campaign, save/load, or standalone export packaging.
+- Seven scenario configurations share a map framework with authored extents; Black Sea Harbor is the only one visible in normal play, and six earlier configurations remain hidden fixtures. No multiplayer, campaign, save/load, or standalone export packaging.
 - Squad formations use conservative circular envelopes and local avoidance. This sacrifices tight formations and can cause yielding in congested areas; arbitrary crowd deadlocks are not exhaustively tested.
 - Infantry have individual combat/health/position records and procedural articulation, but share squad routing and stable formation slots. The showcase adds local cover selection and procedural flat-ground foot placement; independent long-range paths, uneven-ground foot IK and skeletal animation remain unimplemented.
 - Flight uses fixed altitude bands; no takeoff, landing, terrain following, or projectile ballistics.
@@ -155,3 +155,10 @@ Full linear conversion of the batched palette made units and trim too dark in th
 - Harvester jam fix + threat-aware deposits merged 2026-10-19 (693388e) on judgement: realism and harvester losses (82 -> 58, enemy-side 26 -> 1) over scripted-player win rate (24 -> 20 of 29, inside the neutral-control band). Rejected along the way: a dock-spot unload rule (lost loads), a fixed "enemy half" territory rule, and avoiding sightings on home ground (both wrecked the economy).
 - Don't gate on the scripted classic bot's win rate (player direction 2026-10-19): the check is now a smoke test. Background: win-rate bars were fragile at 8 seeds/75%: neutral controls (rotating harvester stand points 0.2 rad) drop main from 24/29 to ~19/29 and can fail it. Judge classic changes on 29+ seeds against such controls.
 - Wrecks: tanks shove light wrecks and engineers clear any wreck (2026-10-19). Open: AI engineers don't clear wrecks on their own; classic mode has no engineer wreck clearing (like barricades); IFVs can't shove. Single-lane approaches still leave ~20% of a 12-tank column unfired within 180 s.
+
+## 2026-10-20 — Harbor victory after logistics destruction (resolved)
+
+- Destroying all enemy command posts and ammo depots before reserve dispatch correctly prevented the reserve from forming, but also left `counterattack_sent` false forever. The autonomous victory check still required that flag, so holding every objective for the full 90 seconds could never finish the mission.
+- The victory check now accepts neutralized authored field logistics as satisfying an unsent reserve requirement. It keeps the full uncontested objective hold, the existing delay for a reserve already dispatched, and the normal rules for maps without authored logistics and legacy missions. No reserve flag or spawning behavior changes.
+- Final review reproduced a related full-tick outcome bug: with all player mobile units dead but a friendly support structure alive, objective resolution could replace the defeat set by field operations. Victory assignment now preserves an existing terminal result, with a regression that retains a completed aid post.
+- The initial `test_field_victory.gd` fails only the original victory assertion on unchanged main. The expanded suite passes all 43 checks after both fixes and is registered in `tools/check.py`. Seven focused suites pass (1,141 checks, 0 failures) on Godot 4.5.1. The new test uses controlled mission states, not a complete combat playthrough.
