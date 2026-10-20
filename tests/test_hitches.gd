@@ -206,7 +206,9 @@ func routes()->void:
 # 40 units to a crowded quay corner: many find no formation slot or no route,
 # the costly case (~330 ms idle before batch memos, ~42 ms with them, ~5 ms
 # with formation slots past the first CLICK_SLOTS units queued).
-func large_order()->void:
+const LARGE_ORDER_AT:=Vector2(860,200)
+# The harbor with the order's 40 units on their earlier (short) orders: [sim, group, prior].
+func large_order_setup()->Array:
 	var sim=Sim.new(false,harbor_index())
 	for kind in ["rifle","tank"]:
 		var definition:Dictionary=sim.definitions[kind]
@@ -222,8 +224,31 @@ func large_order()->void:
 		var u:Dictionary=sim.get_unit(id)
 		sim.issue([id],u.pos+Vector2(10,0),"move")
 		prior[id]={"orders":u.orders.map(func(o):return [o.mode,o.pos]),"path":u.path.duplicate()}
+	return [sim,group,prior]
+
+# The same order with every slot resolved in the click (no queued slots):
+# [unit id, order pos] of each unit it places.
+func large_order_reference()->Array:
+	var setup:=large_order_setup()
+	var sim=setup[0]
+	var group:Array=setup[1]
+	sim.click_slots=group.size()
+	sim.issue(group,LARGE_ORDER_AT,"move")
+	check(sim.slot_queue.is_empty() and sim.order_resolving==0,"reference order resolves every slot in the click")
+	var placed:Array=[]
+	for id in group:
+		var u:Dictionary=sim.get_unit(id)
+		if u.command_group==sim.command_serial:placed.append([id,u.orders[0].pos])
+	return placed
+
+func large_order()->void:
+	var reference:=large_order_reference()
+	var setup:=large_order_setup()
+	var sim=setup[0]
+	var group:Array=setup[1]
+	var prior:Dictionary=setup[2]
 	var started:=Time.get_ticks_usec()
-	var accepted:int=sim.issue(group,Vector2(860,200),"move")
+	var accepted:int=sim.issue(group,LARGE_ORDER_AT,"move")
 	var issue_ms:=(Time.get_ticks_usec()-started)/1000.0
 	var slots_queued:int=sim.slot_queue.size()
 	check(accepted>=16 and sim.route_queue.size()>0 and slots_queued>0 and sim.order_resolving==slots_queued,"40-unit order accepts the units that fit and queues their routes and slots")
@@ -276,7 +301,15 @@ func large_order()->void:
 		for b in fitted:
 			if a[0]<b[0] and a[1]==b[1] and Vector2(a[3]).distance_to(b[3])<a[2]+b[2]+0.3-0.001:apart=false
 	check(apart,"queued formation slots keep clear of each other (%d placed)" % fitted.size())
-	# The final count is the one the click itself gave before slots queued.
-	check(fitted.size()==17 and kept==group.size()-17,"as many units fit as when the click resolved every slot (17 / 40): %d" % fitted.size())
-	check(reports==["Order confirmed • 17 / 40 sections (23 no room)"],"one follow-up toast gives the real count: %s" % [reports])
-	print("HITCH large order: issue=%.1fms slots_queued=%d placed=%d kept=%d slots_after=%d drained_after=%d ticks worst_tick=%.1fms" % [issue_ms,slots_queued,fitted.size(),kept,slotted,drained,worst])
+	# The final placement is the one the click itself gives resolving every
+	# slot: the same units on the same slots.
+	var count:=reference.size()
+	check(count>0 and count<group.size(),"the reference order leaves some units without room (%d / %d)" % [count,group.size()])
+	var placed:=fitted.map(func(f):return [f[0],f[3]])
+	placed.sort_custom(func(a,b):return a[0]<b[0])
+	check(fitted.size()==count and kept==group.size()-count,"as many units fit as when the click resolved every slot (%d / %d): %d" % [count,group.size(),fitted.size()])
+	check(placed==reference,"queued slots match the all-at-click slots unit for unit")
+	if placed!=reference:printerr("  deferred %s\n  reference %s" % [placed,reference])
+	var expected:="Order confirmed • %d / %d sections (%d no room)" % [count,group.size(),group.size()-count]
+	check(reports==[expected],"one follow-up toast gives the real count: %s (want %s)" % [reports,expected])
+	print("HITCH large order: issue=%.1fms slots_queued=%d placed=%d (reference %d) kept=%d slots_after=%d drained_after=%d ticks worst_tick=%.1fms" % [issue_ms,slots_queued,fitted.size(),count,kept,slotted,drained,worst])

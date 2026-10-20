@@ -188,7 +188,7 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 		# A large group's click records its orders only: past the first
 		# CLICK_SLOTS units, targets (formation slots, reachability) resolve in
 		# command order over the next ticks while the units hold their orders.
-		if mode!="attack" and resolved>=CLICK_SLOTS:
+		if mode!="attack" and resolved>=click_slots:
 			if queued and u.orders.size()>=12:continue
 			if is_same(command.ids,ids):command.ids=ids.duplicate()
 			if not u.members.is_empty() and domain=="land" and not command.held.has(u.team):command.held[u.team]=held_spots(u,destination,ids)
@@ -242,6 +242,7 @@ func _slot_resolved(command:Dictionary,placed:bool)->void:
 
 # Units a group command resolves in the click; the rest queue (slot_queue).
 const CLICK_SLOTS:=8
+var click_slots:=CLICK_SLOTS # (tests raise it to resolve a whole group in the click)
 
 # Where a commanded unit goes: {"pos", "planned" (route below, or queue it),
 # "route"}, or {} when it cannot go. In the click (`deferred` false) a route
