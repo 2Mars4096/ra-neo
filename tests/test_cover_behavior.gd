@@ -41,16 +41,20 @@ func _init()->void:
 	# Halted sections may take local cover on their own; an unseen enemy must not
 	# trigger threat-driven shelter (only the halt-in-cover kind is allowed).
 	check(scout.members.all(func(m):return m.get("cover_phase","") not in ["SEEKING","SETTLING"] or m.get("occupying",false)),"unseen distant enemy does not trigger shelter")
-	var settled=squad.members[0]
 	# Holding a valid shelter must not periodically trigger another run.
 	var stable=Sim.new(false,3)
 	var section=stable.spawn("rifle",0,Vector2(17,33))
 	var contact=stable.spawn("rifle",1,Vector2(17,21))
-	stable.update_visibility()
-	settled=section.members[0]
-	settled.cover_goal=settled.pos;settled.cover_phase="SHELTERED"
-	settled.cover_deadline=-1.0
-	Cover.update(section,stable)
-	check(settled.cover_phase=="SHELTERED","valid shelter does not expire into repeated running")
+	for actor in contact.members:actor.cooldown=1000
+	for frame in 120:stable.tick(0.1);stable.events.clear()
+	var shelters:Array=section.members.filter(func(m):return m.hp>0 and m.get("cover_phase","")=="SHELTERED")
+	check(not shelters.is_empty(),"retention fixture reaches a real shelter")
+	if not shelters.is_empty():
+		var settled:Dictionary=shelters[0]
+		check(stable.terrain.cover(settled.pos),"retention fixture is physically in cover")
+		var goal:Vector2=settled.cover_goal
+		settled.cover_deadline=-1.0
+		Cover.update(section,stable)
+		check(settled.cover_phase=="SHELTERED" and settled.cover_goal==goal,"valid shelter does not expire into repeated running")
 	print("COVER BEHAVIOR: ",failures," failures; maximum individual movement=",maximum_travel," settled=",arrived)
 	quit(0 if failures==0 else 1)

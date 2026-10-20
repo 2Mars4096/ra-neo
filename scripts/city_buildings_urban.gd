@@ -1,6 +1,7 @@
 extends RefCounted
 # Local, width-driven architecture. No placement, collision or runtime state.
 const Kit = preload("res://scripts/parcel_kit.gd")
+const Geometry=preload("res://scripts/city_building_geometry.gd")
 
 static func build(art, parent:Node3D, spec:Dictionary)->void:
 	var b = Builder.new(art,parent,spec)
@@ -126,6 +127,9 @@ class Builder:
 		box(x-1,x+1,2.25,2.4,z-0.75,z+0.1,trim)
 	func construct()->void:
 		var x0:=-w/2+0.6;var x1:=w/2-0.6;var z0:=-d/2+1.0;var z1:=d/2-1.2
+		if not Geometry.profile(design).is_empty():
+			var body:=Geometry.shell_rect(design,Vector2(w,d))
+			x0=body.position.x;x1=body.end.x;z0=body.position.y;z1=body.end.y
 		match design:
 			"classic_row","stalin_block":
 				# Perimeter-block rows fill their plot so neighbours meet at a party wall,

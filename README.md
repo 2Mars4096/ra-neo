@@ -107,11 +107,13 @@ Town-sized warfare with thousands of individual troops is the later target. Curr
 
 Individual shelter movement is implemented in the current harbor operation and the hidden **Canal Watch** and **Frontier Skirmish** fixtures: idle/attack-moving infantry react to known threats, run to separate nearby shelter slots and settle before firing. Select the section to see shelter routes. Explicit Move, Hold and Retreat constrain this behavior. See the [request audit](docs/request-audit.md) for remaining work.
 
+Halted soldiers can occupy friendly sandbags and trenches at reachable, separated positions. They abandon destroyed shelter and retry failed approaches; squadmates with valid cover can stay in place. Harbor's common rectangular building families use the visible ground walls for exterior cover and movement clearance. Low steps and loading docks block walking without acting as full-height protective walls. Custom compound buildings still use conservative parcel boundaries; see the [cover-contact review](docs/plans/14-1-cover-contact.md) for verified scope and before/after measurements.
+
 The authentic-diorama material pass adds weathered plaster/masonry, varied tile roofs, oxidized sheet metal and equipment dust while preserving the miniature presentation. [Preview](artifacts/diorama-materials.png).
 
 The current HUD uses a right command sidebar with minimap, reinforcements, engineer construction and selection orders. Wheel/pinch zoom operates over the battlefield, including tactical pause. Normal rendering is capped at 60 FPS; benchmark mode is uncapped. The legacy Canal Watch and Frontier Skirmish fixtures use connected road definitions shared with movement costs. This remains a procedural-art prototype; performance and art acceptance are open.
 
-Tight open-ground move clicks resolve to a nearby reachable position when possible; the HUD reports “Nearest accessible position.” Solid buildings/yards block ordinary ground routes; infantry can enter eligible harbor buildings through garrison orders.
+Tight open-ground move clicks resolve to a nearby reachable position when possible; the HUD reports “Nearest accessible position.” Solid building bodies and authored obstacles block ordinary ground routes; infantry can enter eligible harbor buildings through garrison orders.
 
 Performance diagnostics: `--headless --script tests/profile_simulation.gd` measures deterministic simulation CPU work. `--script tests/showcase_launch.gd -- --benchmark` measures the rendered stress scene after first-frame startup. Render benchmarks report VSync/MSAA so differently paced runs are not confused. Distant infantry use instanced contact shadows; close zoom restores detailed animated shadows.
 

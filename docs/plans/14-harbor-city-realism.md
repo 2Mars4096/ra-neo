@@ -11,14 +11,15 @@ Design contract: [harbor-city-design.md](../harbor-city-design.md).
 - [x] 3. Urban families (centre, microdistrict, civic) — `scripts/city_buildings_urban.gd`; 13 families, damage 0–2, ≤7.9k triangles.
 - [x] 4. Works families (private sector, port, rural, misc) — `scripts/city_buildings_works.gd`; 14 families, damage 0–2, ≤5.8k triangles.
 - [x] 5. Decor models, MultiMesh/chunk rendering of decor and buildings (38 decor ids; 400 props → 5 MultiMesh nodes; buildings in 96 u tiles).
-- [x] 6. District-based compiler: 473 buildings, 1,920 decor placements, 958 oriented collision rects; reproducible `--check`.
+- [x] 6. District-based compiler: 478 buildings, 1,894 decor placements, 5,649 collision rectangles after physical-body emission; reproducible `--check`.
   - [ ] 6-1. Old town: continuous street walls (touching rows, corner buildings, closed courtyards) instead of isolated boxes.
-  - [ ] 6-2. Microdistrict: denser 5/9-storey slab groups forming yards (currently 9 panel_5 + 5 panel_9).
+  - [ ] 6-2. Microdistrict: denser 5/9-storey slab groups forming yards (currently 14 panel_5 + 3 panel_9 across Harbor).
 - [x] 7. Tier-1 engineer tasks: wire, anti-tank obstacles, trench, vehicle berm, camouflage net, forward supply point (`tests/test_engineer_works.gd`).
   - [x] 7-1. Codex cross-review ([report](../../output/team-briefs/engineer-review-codex.md)); fixes plus hard vehicle barrier for hedgehogs.
   - [ ] 7-2. Clear obstacle / breach / mines / fortify building (tier 2; map-prop clearing needs instanced-prop removal).
 - [ ] 8. Integrate, native capture, Codex/Claude realism cross-review, performance check.
 - [x] 9. Fix Harbor victory when enemy logistics is destroyed before reserve dispatch; preserve objective/hold requirements and existing reserve timing, add a focused regression, and correct current-game documentation.
+- [x] 10. [Soldiers reach physical cover](14-1-cover-contact.md): reachable sandbag positions, shared building wall geometry, blocked-route and destroyed-shelter recovery; 24 selected integration suites pass. Complex profiles and overall performance acceptance remain open.
 
 ## Decisions
 - Keep current water polygons, arterials, objectives and insertion points; the user accepted the overall map.
@@ -59,3 +60,7 @@ Worker briefs and launcher: `output/team-briefs/` (`compiler.txt`, `urban.txt`, 
 ## Mission correctness verification — 2026-10-20
 
 The initial `test_field_victory.gd` reproduced the early-logistics victory failure on unchanged main (38 checks, only that assertion failed). Final review added a full-tick regression for all player mobile units lost while a friendly support structure survives; the victory assignment now preserves an already-recorded defeat. The expanded suite passes all 43 checks, including all logistics destroyed, either logistics type surviving, incomplete or contested objectives, the hold duration, the strict reserve grace boundary, defeat precedence, and legacy missions. Seven focused suites pass on Godot 4.5.1: Harbor gameplay, field operations, field-operations edges, field victory, Showcase, wave strength, and enemy defences (1,141 checks, 0 failures). These controlled headless checks do not complete the separate native review or performance tasks above.
+
+## Physical cover verification — 2026-10-20
+
+The [cover-contact fix](14-1-cover-contact.md) passes all 24 selected integration suites on Godot 4.5.1, including the seven prior mission-fix suites. Identical native fixtures show soldiers reaching sandbags and the supported building walls through normal movement. Shared profiles now cover 381 of 478 buildings; the other 97 retain explicit fallback geometry. The unchanged cover-cost benchmark still fails two timing checks versus one on the baseline, so task 8 and broader performance acceptance remain open. This completes the scoped cover-placement work, not the full district-level visual review above.

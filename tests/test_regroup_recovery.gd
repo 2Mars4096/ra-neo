@@ -42,12 +42,20 @@ func _init()->void:
 	# Sections caught mid-regroup at the 60 s check (contact just ended, so its
 	# shelters stopped counting) are judged when that regroup ends instead.
 	var reunion_due:Dictionary={}
+	var aid_reunion_due:Dictionary={}
 	for id in [1,2,3]:
 		var u:Dictionary=sim.get_unit(id)
 		check(u.hp>0,"mission section survives recovery: %s"%id)
 		if u.members.all(func(m):return reunited(sim,m,u)):check(true,"all live section members reunite after contact: %s"%id)
 		elif u.get("regroup_active",false):reunion_due[id]=sim.time
-		else:check(false,"all live section members reunite after contact: %s"%id)
+		else:
+			# A medic can legitimately stand just beyond the formation radius to
+			# finish aid beside a casualty already with the section. Verify that
+			# pairing now, then require both treatment and reunion within the same
+			# recovery bound; never waive the later return to formation/cover.
+			var pairs:=aid_reunion_pairs(sim,u)
+			if pairs.is_empty():check(false,"all live section members reunite after contact: %s"%id)
+			else:aid_reunion_due[id]={"since":sim.time,"pairs":pairs,"treated_at":-1.0}
 		# Whether a section separates in the mission depends on how the seeded
 		# fight unfolds; every separation must start a regroup and finish in time.
 		check(not regroups[id].separated or u.get("regroup_count",0)>0,"separated section completed a bounded regroup: %s"%id)
@@ -67,6 +75,21 @@ func _init()->void:
 			check(not u.get("regroup_active",false) and u.members.all(func(m):return reunited(sim,m,u)),"all live section members reunite after contact: %s"%id)
 			print("REUNION DEFERRED squad=",id," from t=",snappedf(reunion_due[id],0.1)," to t=",snappedf(sim.time,0.1))
 			reunion_due.erase(id)
+		for id in aid_reunion_due.keys():
+			var u:Dictionary=sim.get_unit(id)
+			var pending:Dictionary=aid_reunion_due[id]
+			var treated:=true
+			for pair in pending.pairs:
+				var casualty:Dictionary=u.members[pair.casualty]
+				var medic:Dictionary=u.members[pair.medic]
+				treated=treated and casualty.wound==Actors.SEVERE and casualty.stable and casualty.aid>=Actors.AID_SECONDS and casualty.medic<0 and medic.aiding<0
+			if treated and pending.treated_at<0:pending.treated_at=sim.time
+			var complete:bool=treated and u.members.all(func(m):return reunited(sim,m,u))
+			if not complete and sim.time-float(pending.since)<=REGROUP_BOUND:continue
+			check(complete,"buddy aid finishes and all live members reunite within recovery bound: %s"%id)
+			print("REUNION AFTER AID squad=",id," from t=",snappedf(pending.since,0.001)," treated t=",snappedf(pending.treated_at,0.001)," reunited t=",snappedf(sim.time,0.001))
+			aid_reunion_due.erase(id)
+	check(aid_reunion_due.is_empty(),"deferred buddy-aid reunion completes during follow-up")
 	for id in [1,2,3]:
 		check(regroups[id].missed<0.5 and regroups[id].longest<=REGROUP_BOUND,"late regroups start and stay bounded: %s"%id)
 		check(completed_attack_move(sim,sim.get_unit(id)),"all sections complete single attack-move: %s"%id)
@@ -229,6 +252,20 @@ func reunited(sim,m:Dictionary,u:Dictionary)->bool:
 	if m.pos.distance_to(u.pos)>Actors.Cover.LEASH:return false
 	if m.get("occupying",false):return true
 	return m.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] and m.cover_goal.distance_to(u.pos)<=Actors.Cover.LEASH and in_contact(sim,u)
+
+# Only actual medics beside an unstabilised, nearby casualty qualify for this
+# deferred assertion. Other stragglers must satisfy the original 60 s check.
+func aid_reunion_pairs(sim,u:Dictionary)->Array:
+	var pairs:Array=[]
+	for m in u.members:
+		if reunited(sim,m,u):continue
+		var index:int=m.get("aiding",-1)
+		if index<0 or index>=u.members.size():return []
+		var casualty:Dictionary=u.members[index]
+		if m.hp<=0 or casualty.wound!=Actors.SEVERE or casualty.stable or casualty.medic!=m.index or casualty.aid>=Actors.AID_SECONDS:return []
+		if casualty.pos.distance_to(u.pos)>=2.8 or m.pos.distance_to(casualty.pos)>Actors.AID_REACH:return []
+		pairs.append({"medic":m.index,"casualty":index})
+	return pairs
 
 func in_contact(sim,u:Dictionary)->bool:
 	if u.suppression>0.2:return true

@@ -16,6 +16,7 @@
 | `scripts/simulation.gd` | Commands, squads, damage, targeting, knowledge, suppression, economy, objectives, opponent waves, terminal states |
 | `scripts/cover_behavior.gd` | Bounded individual shelter search, reservations, commitment and routes for autonomy scenarios |
 | `scripts/terrain.gd` | Shared scenery definitions, cover/visibility, clearance-aware domain navigation |
+| `scripts/city_building_geometry.gd`, `resources/city_building_geometry.json` | Shared ground-wall, porch and dock profiles for supported Harbor render builders and the map compiler |
 | `scripts/battle.gd` | Input dispatch, camera, scene synchronization, order feedback, fog, effect events, benchmark |
 | `scripts/hud.gd` | Briefing, command deck, selection/range/order overlays, minimap, results |
 | `scripts/unit_models.gd` | Original military-inspired equipment meshes and materials |
@@ -46,7 +47,7 @@ The benchmark forces a 1920×1080 render target even if the desktop clamps the w
 
 Run `python3 tools/check.py`. The wrapper checks result markers and script errors as well as exit status, because Godot can return zero after a script load failure. Interactive commands are in the README. Tests use sampled scenario checks; they do not prove absence of every possible clipping or navigation problem.
 
-Built-in engine practices: [AStarGrid2D](https://docs.godotengine.org/en/4.5/classes/class_astargrid2d.html) and [MultiMesh instancing](https://docs.godotengine.org/en/4.5/tutorials/performance/using_multimesh.html). Repository tracking remains in `docs/` with hierarchical plans; Git has not been initialized.
+Built-in engine practices: [AStarGrid2D](https://docs.godotengine.org/en/4.5/classes/class_astargrid2d.html) and [MultiMesh instancing](https://docs.godotengine.org/en/4.5/tutorials/performance/using_multimesh.html). Repository tracking remains in `docs/` with hierarchical plans.
 
 Mesh batching indexes every source surface before appending it, preserving both primitive and authored shell triangles. The clearance suite also verifies pre/post-batching triangle counts for each equipment type.
 
@@ -103,6 +104,8 @@ Unit IDs resolve through an authoritative dictionary populated by spawn; individ
 
 ### Individual shelter routing
 In autonomy scenarios, actors may route within a 10-unit squad leash to separately reserved shelter slots. Wall destinations must screen an observed threat; vegetation/rubble remain abstract partial cover. At most half a section seeks at once; squad movement waits during seeking/settling. Explicit move/hold/retreat and group maneuvers constrain local initiative. Bounded failed attempts retry, occupied shelter is retained, and actors settle before firing. This is local AStar routing, not independent world-scale soldier planning.
+
+Quiet occupation and combat shelter share the same route bounds: every waypoint stays within the leash, routes are at most 18 units long, and stationary squadmates can require a local detour. Sandbag goals stand 0.95 units outside the field footprint, using the 0.8 standing body plus `Terrain.OBSTACLE_MARGIN` (0.12) and a 0.03 tolerance. Work slots are centered at 1.65-unit intervals and reserve that distance against nearby friendly active shelter goals, with a 0.001 coordinate tolerance. This includes adjoining works and neighboring sections. Field structures already represented by terrain rectangles do not also reserve or repel soldiers through enclosing actor circles. Vehicle and soldier body checks remain active. Shelter geometry, approach progress and deadlines are revalidated at the existing cover-scan cadence; valid settled occupants stay put while an invalidated squadmate can search again.
 
 ### Authentic diorama surface pass
 Architecture uses original world-projected procedural plaster/masonry, damp, tile and oxidation patterns with screen-space surface-gradient relief. Equipment keeps joint batching with restrained dust and wear. Ground aggregate fades with pixel footprint. Facade trim remains within clearance padding; no changed navigation or destruction model.
@@ -165,6 +168,12 @@ Engineers use three articulated infantry actors and explicit construction assign
 Non-solid engineer works (wire, hedgehogs, trench, berm, net) are terrain zones: `terrain.field_zones` hold per-profile speed multipliers, cover classes, concealment and a berm front, indexed in 8 m buckets. Their units use collision layer `field_zone`, so they never act as bodies. Hedgehogs additionally make navigation cells solid for tracked/wheeled grids and `movement_clear` refuses vehicle entry. Zone changes refresh only local navigation weights/solids. A completed, unthreatened and route-connected forward supply point replaces the land insertion for purchases.
 
 Harbor city buildings come from `city_buildings.gd` (design table, height caps, dispatch) with `city_buildings_urban.gd` and `city_buildings_works.gd` as parametric builders; decor comes from `assets_city.gd`/`assets_city.json`. Harbor props render as MultiMesh groups and buildings are chunk-merged per ~96 u tile. Rules: [harbor-city-design.md](harbor-city-design.md).
+
+`city_building_geometry.json` supplies shared local ground-body profiles to those builders through `city_building_geometry.gd` and to `tools/build_harbor_map.py`. The compiler keeps placement parcels, transforms and yaw snapping unchanged, then emits body collision separately with a 0.15-unit decomposition tolerance. Fourteen supported families account for 381 of Harbor's 478 buildings; 97 custom/compound buildings explicitly retain `collision_geometry: "parcel_fallback"`. Roof overhangs and decorative parcel margins do not become wall blockers.
+
+`scenario.low_obstacle_blocks` contains indices of low porch/dock pieces in `scenario.blocks`. Terrain keeps them in locomotion solids but excludes them from the building-cover and sight indexes. Building collision ranges continue to own every wall and low piece, so collapse removes them together; crushable-prop removal also updates the sight index. Coarse-map smoothed infantry routes use the existing published-edge corner guard to avoid grazing the more precise wall boundaries between samples. Fine-grid legacy section routes keep their existing sampled-envelope behavior.
+
+Precise body decomposition increases Harbor's collision rectangles from 940 to 5,649. Narrow movement/cover queries up to radius 1.4 use a second 2-unit spatial index, with solid/building insertion bounds expanded by 1.4001; point sight queries use unexpanded rectangles. Wide queries retain the existing 32-unit index and ordering, including the 10-unit shelter search. Collapse and crushing erase both indexes, and rebuilding refreshes both. LOS validates the index once per complete sampled line, while land traversal rejects static solids before the more expensive coastline checks. Exact geometry predicates and shelter search limits are unchanged; there is no persistent search-result cache.
 
 HUD terrain classification is cached by `minimap_background.gd`, invalidated by map/dynamic geometry changes; fog tint still updates. Navigation weather weights refresh lazily per requested grid. Proposal paths reuse cached navigation with conservative temporary exclusions rather than reconstructing whole grids for every hover. These CPU-work reductions are distinct from native frame-rate acceptance.
 

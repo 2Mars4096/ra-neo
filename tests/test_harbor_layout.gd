@@ -5,6 +5,7 @@ extends SceneTree
 const Terrain=preload("res://scripts/terrain.gd")
 const Library=preload("res://scripts/asset_library.gd")
 const City=preload("res://scripts/city_buildings.gd")
+const Body=preload("res://scripts/city_building_geometry.gd")
 var checks:=0
 var failures:Array[String]=[]
 func check(ok:bool,label:String)->void:
@@ -26,6 +27,12 @@ func obb_distance(spec:Dictionary,p:Vector2)->float:
 	var local:Vector2=(p-vec(spec.position)).rotated(deg_to_rad(float(spec.rotation_degrees)))
 	var half:=vec(spec.source_size)/2
 	return Vector2(maxf(absf(local.x)-half.x,0),maxf(absf(local.y)-half.y,0)).length()
+func body_distance(spec:Dictionary,p:Vector2,pieces:Array[Rect2])->float:
+	var local:Vector2=(p-vec(spec.position)).rotated(deg_to_rad(float(spec.rotation_degrees)))
+	var nearest:=INF
+	for piece in pieces:
+		nearest=minf(nearest,local.distance_to(local.clamp(piece.position,piece.end)))
+	return nearest
 func poly_bounds(poly:PackedVector2Array)->Rect2:
 	var r:=Rect2(poly[0],Vector2.ZERO)
 	for p in poly:r=r.expand(p)
@@ -81,7 +88,8 @@ func run()->void:
 	for spec in data.architecture:
 		for key in ["design","position","rotation_degrees","source_size","collision"]:check(spec.has(key),"architecture field "+key)
 		var first:int=spec.collision[0];var count:int=spec.collision[1]
-		check(count>=1 and count<=int(lv.collision_rects_max) and first>=0 and first+count<=data.blocks.size(),"collision range bounded %s"%[spec.position])
+		var cap:int=int(lv.body_collision_rects_max if spec.get("collision_geometry","")=="ground_body" else lv.collision_rects_max)
+		check(count>=1 and count<=cap and first>=0 and first+count<=data.blocks.size(),"collision range bounded %s"%[spec.position])
 		for k in range(first,mini(first+count,data.blocks.size())):used[k]+=1
 		if spec.design=="rock":
 			check(spec.get("terrain_feature","")=="hill" and count==1,"rock entry is one axis-aligned hill rect")
@@ -101,30 +109,44 @@ func run()->void:
 	check(data.map_props.size()>=1500,"1500+ decor placements (%d)"%data.map_props.size())
 	check(designs.size()>=20,"broad family use (%d designs)"%designs.size())
 
-	# ---- oriented collision: <=6 rects covering the footprint with <=1 u excess.
+	# ---- physical body collision, with an explicit parcel fallback for custom
+	# families. Placement envelopes still own setbacks, decor and land use.
 	var excess_max:float=float(lv.collision_excess_max)
 	var worst_excess:=0.0
+	var worst_body_excess:=0.0
+	var body_count:=0
 	for spec in buildings:
 		var first:int=spec.collision[0];var count:int=spec.collision[1]
 		var rects:Array=[]
 		for k in range(first,first+count):rects.append(rect(data.blocks[k]))
+		var pieces:Array[Rect2]=Body.ground_rects(spec)
+		var physical:=not pieces.is_empty()
+		check(spec.get("collision_geometry","")==("ground_body" if physical else "parcel_fallback"),"collision profile declared %s"%spec.design)
+		if physical:body_count+=1
+		else:pieces.append(Rect2(-vec(spec.source_size)/2,vec(spec.source_size)))
 		for r in rects:
-			for corner in rect_poly(r):worst_excess=maxf(worst_excess,obb_distance(spec,corner))
+			for corner in rect_poly(r):
+				var excess:=body_distance(spec,corner,pieces)
+				if physical:worst_body_excess=maxf(worst_body_excess,excess)
+				else:worst_excess=maxf(worst_excess,excess)
 			check(Rect2(0,0,1024,768).encloses(r),"collision rect within map %s"%[spec.position])
-		var size:=vec(spec.source_size);var yaw:=-deg_to_rad(float(spec.rotation_degrees))
-		var steps:=Vector2i(ceili(size.x/0.5),ceili(size.y/0.5))
+		var yaw:=-deg_to_rad(float(spec.rotation_degrees))
 		var covered:=true
-		for ix in steps.x+1:
-			for iz in steps.y+1:
-				var local:=Vector2(-size.x/2+size.x*ix/steps.x,-size.y/2+size.y*iz/steps.y)
-				var p:=vec(spec.position)+local.rotated(yaw)
-				if not rects.any(func(r):return r.grow(0.001).has_point(p)):covered=false;break
-			if not covered:break
-		check(covered,"collision covers oriented footprint %s %s"%[spec.design,spec.position])
+		for piece in pieces:
+			var steps:=Vector2i(maxi(1,ceili(piece.size.x/0.5)),maxi(1,ceili(piece.size.y/0.5)))
+			for ix in steps.x+1:
+				for iz in steps.y+1:
+					var local:=piece.position+piece.size*Vector2(float(ix)/steps.x,float(iz)/steps.y)
+					var p:=vec(spec.position)+local.rotated(yaw)
+					if not rects.any(func(r):return r.grow(0.001).has_point(p)):covered=false;break
+				if not covered:break
+		check(covered,"collision covers oriented ground body %s %s"%[spec.design,spec.position])
 		var axis_aligned:=is_zero_approx(fmod(absf(float(spec.rotation_degrees))+0.0005,90.0)-0.0005)
-		check(count==1 or not axis_aligned,"axis-aligned building uses one rect")
+		check(count==pieces.size() or not axis_aligned,"axis-aligned building uses one rect per physical piece")
 		for corner in obb(spec)+PackedVector2Array([vec(spec.position)]):check(not terrain.is_water(corner),"building on land %s"%[spec.position])
 	check(worst_excess<=excess_max+0.001,"collision excess <=1 u (worst %.3f)"%worst_excess)
+	check(worst_body_excess<=float(lv.body_collision_excess_max)+0.001,"body collision excess <=0.15 u (worst %.3f)"%worst_body_excess)
+	check(body_count>=381,"common rectangular families use body collision (%d)"%body_count)
 
 	# ---- no overlaps (spatially bucketed SAT on oriented footprints).
 	var grid:Dictionary={}

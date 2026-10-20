@@ -109,10 +109,14 @@ colour so chunk batching works.
   yards between, central school/kindergarten), port (sheds parallel to quay,
   crane rail + siding between shed and quay edge), village (houses on lane,
   barns behind, fields beyond).
-- Collision: never one large AABB for a rotated building. Emit per-building
-  oriented footprints decomposed into ≤6 axis-aligned rects whose union covers
-  the footprint with ≤1 u excess. `architecture[]` entries are independent of
-  `blocks[]` and carry `collision:[first,count]`.
+- Collision: never one large AABB for a rotated building. Placement parcels
+  and custom-family fallbacks retain the ≤6-rectangle, ≤1 u excess contract.
+  Supported ground bodies use the shared `city_building_geometry.json` profiles
+  and a separate 0.15 u decomposition tolerance, with up to 64 rectangles per
+  wall/porch/dock piece. Placement transforms and yaw snapping stay unchanged.
+  `architecture[]` entries carry `collision:[first,count]` owning every piece;
+  `low_obstacle_blocks` identifies steps/docks that block movement without
+  acting as full-height cover or line-of-sight walls.
 - Damage: 0 by default; damaged/ruined clustered within ~60 u of objectives
   and the freight front (10–20% there), never uniformly random.
 - Must keep: all water polygons, objectives, insertion points, land/sea route

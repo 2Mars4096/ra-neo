@@ -2,6 +2,10 @@
 
 ## Known limitations
 
+- Harbor physical wall profiles currently cover 381 of 478 buildings. The remaining 97 custom/compound buildings retain conservative parcel collision; their courtyard/gateway geometry needs a separate compound-profile pass. Garrison window posts still use merged building bounds for every family, so rotated buildings and bounds including low pieces remain approximate. A parked vehicle can still obstruct a local shelter approach, causing bounded retries instead of a vehicle-aware long detour. Existing crowd and local-path limits still apply.
+
+- The physical-cover pass does not complete performance acceptance. The unchanged cover-search benchmark still exceeds its 25 ms limit at two contact locations (one on the original baseline). The slow `(500,680)` case improved from the initial 89.5 ms regression to 29.1 ms, but its final paired original baseline is 17.3 ms. Overall warm peaks are 28.6/29.1 ms and total benchmark process times are 16.82/21.24 s before/after; see [the measured comparison](plans/14-1-cover-contact.md#performance-review). Full-battle rendered performance remains a separate open gate.
+
 - Combat values are fictional abstractions, not ballistic measurements. Vehicle component damage (`vehicle_damage.gd`: facing/range penetration, mobility/firepower/crew/catastrophic), infantry wound states with HE fragment radius (`infantry.gd`), HE structure damage (`structure_damage.gd`) and FPV/crash blast radii now exist, but their armour, penetration and outcome numbers are not ballistic data. No ammo selection, physical projectile interception, or validated probabilities. UAV one-hit disable applies only to the small recon class.
 - Interference uses a scenario-defined radius, not radio propagation. No player-deployed jammers, relay network, frequency/equipment modeling, or UAV return/land failsafe. Friendly tracking remains visible.
 
@@ -37,6 +41,20 @@
 - A building-detail loop needed an explicit float type in GDScript. Fixed the parse error and reran checks before release.
 
 ## Resolved during implementation
+
+### 2026-10-20 — Physical cover contact
+
+- Sandbag face goals used a 0.85-unit gap, smaller than the standing body's required 0.92-unit clearance. They are now 0.95 units outside the rectangular footprint, including the shared terrain margin.
+- Field works were already terrain rectangles but also acted as circular obstacles in slot reservation, actor clearance and avoidance. A real flank runner stalled more than 28 seconds at a terrain-valid waypoint inside the extra circle. Static field works now use their exact terrain geometry; mobile vehicles and soldier bodies retain their collision checks.
+- Quiet occupants bypassed failed-route and geometry validation. Naturally sheltered soldiers remained marked sheltered after trench destruction. Both quiet and combat shelter now validate the goal, actual settled protection, leash and approach deadline; clearing also resets stale timers. Partial recovery preserves valid squadmates.
+- Restoring partial recovery exposed impossible 1.4-spaced trench goals between bodies requiring 1.55 separation. Centered 1.65-spaced goals fix the actual fit. Individual work goals and route waypoints must also fit the 10-unit leash; otherwise a cleared goal could be reassigned every cover scan.
+- Work reservation previously rejected only identical destinations within one section. Distinct slots on contiguous works could be too close, and a second section could reserve a first section's occupied trench slots. Work occupation now preserves spatial separation from all nearby friendly active shelter goals.
+- Building colliders used full placement parcels around inset visible walls. Shared ground-body profiles correct supported families without enlarging meshes or moving buildings. Low steps/docks remain movement obstacles but do not grant a wall halo or stop ground shots. Tightening global placement tolerance was avoided because it would change city yaw/layout; body emission has its own tolerance and cache.
+- Precise Harbor geometry exposed a coarse-grid infantry shortcut that grazed a wall by about 0.07 units between samples. Coarse-map published routes now use the existing corner guard; the original `test_large_terrain` footprint assertions pass without loosening them. Fine-grid legacy route behavior is retained.
+- More precise wall pieces increased false candidates in the original 32-unit obstacle buckets. Narrow movement, cover and sight queries now use a conservative fine index; wide candidate enumeration retains its original order. LOS validates index freshness once per sampled line, and land traversal rejects solid interiors before checking the coastline. Both indexes are maintained during collapse, crushing and rebuilds. Geometry predicates and timing thresholds are unchanged; measured results are in the cover-contact plan.
+- Older tests equated one collision rectangle with one building and placed an allegedly uncovered soldier inside a building. Fixtures now check physical body/transform and actual clear ground. The regroup snapshot also caught a medic legitimately finishing eight seconds of aid at the 60-second boundary; the test now verifies the actual pairing and requires treatment plus reunion within its unchanged 12-second bound. Movement and damage assertions remain intact.
+
+See [14-1: Soldiers reach physical cover](plans/14-1-cover-contact.md) for negative controls, native measurements and verification scope.
 
 - Reported tank shaking: removed flat-ground chassis bob, limited rendered hull yaw, retained valid combat targets, and penalized avoidance heading reversals. Static user evidence cannot establish which contributor dominated; dedicated stability checks cover bob and target retention.
 - Scenario variations originally reused the ridge/warehouse composition and fixed objectives. Replace Fields/Urban ground layouts, building styles, and objective positions; shoreline and dimensions still remain shared.

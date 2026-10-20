@@ -10,11 +10,20 @@ const VehicleDamage=preload("res://scripts/vehicle_damage.gd")
 const Garrison=preload("res://scripts/garrison.gd")
 const Ruin=preload("res://scripts/ruined_building.gd")
 const Art=preload("res://scripts/visuals.gd")
+const Body=preload("res://scripts/city_building_geometry.gd")
 var failures:=0
 var checks:=0
 func check(ok:bool,label:String)->void:
 	checks+=1
 	if not ok:failures+=1;printerr("FAIL: ",label)
+
+func fixture(ok:bool,label:String)->bool:
+	check(ok,label)
+	if not ok:
+		printerr("WORLD DAMAGE: fixture unavailable; stopping before dependent checks")
+		print("WORLD DAMAGE: %d checks, %d failures" % [checks,failures])
+		quit(1)
+	return ok
 
 func harbor_index()->int:
 	var configs:Array=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
@@ -39,10 +48,17 @@ func firing_spot(sim,building:Dictionary,distance:float)->Vector2:
 
 func pick_building(sim,design:String,min_integrity:float,max_integrity:float)->Dictionary:
 	for building in Garrison.index(sim).buildings:
-		if building.design!=design or building.rects.size()!=1:continue
+		if building.design!=design:continue
+		# A rectangular, axis-aligned physical body can own several colliders:
+		# porch/dock pieces and rotated-body strips are not separate buildings.
+		var spec:Dictionary=building.spec
+		if absf(fposmod(float(spec.rotation_degrees)+45.0,90.0)-45.0)>0.001 or int(spec.damage)!=0:continue
+		var walls:Array=Body.ground_pieces(spec).filter(func(piece):return piece.wall)
+		if walls.size()!=1:continue
 		var value:=SD.integrity(building)
 		if value<min_integrity or value>max_integrity:continue
 		if firing_spot(sim,building,10.0).x<0:continue
+		if Garrison.entry_point(sim,building.id,building.bounds.get_center()+Vector2(0,40)).x<0:continue
 		return building
 	return {}
 
@@ -72,6 +88,7 @@ func _init()->void:
 
 func run()->void:
 	var harbor:=harbor_index()
+	if not fixture(harbor>=0,"Harbor scenario exists"):return
 	# --- 0. Shots to collapse per building size ---------------------------------
 	var sim=Sim.new(false,harbor)
 	print("SHOTS TO COLLAPSE (integrity = (%.0f + area x floors x %.2f) x construction)" % [SD.BASE,SD.PER_AREA])
@@ -87,11 +104,14 @@ func run()->void:
 		var row:="  %-15s %7.0f %6d %9.0f |" % [building.design,building.area,building.floors,value]
 		for weapon in ["tank","at_gun","atgm","helo","boat"]:row+=" %5d" % ceili(value/float(SD.HE[weapon].structure))
 		print(row)
-	check(SD.integrity(pick_building(sim,"dacha_hut",0,1000))<SD.integrity(pick_building(sim,"stone_house",0,1000)),"timber hut weaker than a stone house")
+	var timber:Dictionary=pick_building(sim,"dacha_hut",0,1000)
+	var stone:Dictionary=pick_building(sim,"stone_house",0,1000)
+	if not fixture(not timber.is_empty() and not stone.is_empty(),"found timber and stone comparison buildings"):return
+	check(SD.integrity(timber)<SD.integrity(stone),"timber hut weaker than a stone house")
 
 	# --- 1. Small arms never damage buildings or hard works ------------------------
 	var house:Dictionary=pick_building(sim,"stone_house",30.0,80.0)
-	check(not house.is_empty(),"found a small stone house with a firing position")
+	if not fixture(not house.is_empty(),"found a small stone house with a firing position"):return
 	var defenders:Dictionary=garrison(sim,house,1)
 	var rifle_spot:Vector2=firing_spot(sim,house,8.0)
 	var rifle:={"kind":"rifle","pos":rifle_spot,"team":0,"suppression":0.0,"state":"READY","members":[],"visible":true}
@@ -116,6 +136,7 @@ func run()->void:
 	# --- 2. Tank HE collapses a small building: measured shots, states, garrison --------
 	var s2=Sim.new(false,harbor)
 	var target:Dictionary=pick_building(s2,"stone_house",30.0,80.0)
+	if not fixture(not target.is_empty(),"found a small stone house for the HE collapse check"):return
 	var spot:Vector2=firing_spot(s2,target,10.0)
 	var holders:Dictionary=garrison(s2,target,1)
 	var tank:Dictionary=s2.spawn("tank",0,spot)
@@ -180,7 +201,7 @@ func run()->void:
 	var block:Dictionary={}
 	for building in Garrison.index(s4).buildings:
 		if SD.integrity(building)>=400.0 and Garrison.entry_point(s4,building.id,building.bounds.get_center()+Vector2(0,40)).x>=0:block=building;break
-	check(not block.is_empty(),"found a large building")
+	if not fixture(not block.is_empty(),"found a large building"):return
 	var occupants:Dictionary=garrison(s4,block,0)
 	var integrity:=SD.integrity(block)
 	SD.damage_building(s4,block.id,integrity*0.36,block.bounds.get_center()+Vector2(0,30))
@@ -427,6 +448,9 @@ func run()->void:
 	for i in architecture.size():
 		var spec:Dictionary=architecture[i]
 		if spec.has("collision") and int(spec.collision[0])==int(target.blocks[0]):spec_index=i
+	if not fixture(spec_index>=0,"collapsed building maps to its authored visual"):
+		root.free()
+		return
 	var staging:=Node3D.new()
 	var spec:Dictionary=architecture[spec_index]
 	var size:=Vector2(spec.source_size[0],spec.source_size[1])
@@ -463,6 +487,10 @@ func run()->void:
 	battle.effects.muted=true
 	var bsim=battle.sim
 	var bt:Dictionary=pick_building(bsim,"stone_house",30.0,80.0)
+	if not fixture(not bt.is_empty(),"found a small stone house in the battle scene"):
+		get_root().remove_child(battle)
+		battle.free()
+		return
 	var tile_root:Node=battle.find_child("HarborBuildings",true,false)
 	var tiles_before:=triangles(tile_root) if tile_root!=null else -1
 	bsim.events.clear()

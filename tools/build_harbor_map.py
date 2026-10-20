@@ -8,10 +8,11 @@ morphology (setback, orientation, corner/main-street/landmark rules) -> yards,
 walls and decor per morphology -> damage clustered near objectives and the
 freight front. Every random draw is seeded from a stable per-block/per-edge key.
 
-Rotated buildings never use one large AABB: each oriented footprint becomes
-<=6 axis-aligned collision rects that cover it with <=1 u excess. Where the
-street angle cannot be decomposed that tightly, the building yaw is snapped
-toward the nearest axis (a slightly stepped frontage, as on real slopes).
+Placement uses <=6 conservative rectangles per oriented parcel, snapping yaw
+toward the nearest axis where needed. Ground-body profiles are shared with
+the render builders and compiled separately after placement, with <=0.15 u
+excess at the unchanged authored yaw. Custom families without a body profile
+explicitly retain the conservative parcel fallback.
 
 Run: python3 tools/build_harbor_map.py [--check]
 --check verifies byte-for-byte reproducibility without writing scenarios.json.
@@ -31,6 +32,10 @@ SCENARIOS = ROOT / "resources/scenarios.json"
 MAP_W, MAP_H = 1024, 768
 TOL = 0.95  # construction tolerance for collision excess (contract: <=1 u)
 MAX_RECTS = 6
+BODY_TOL = 0.15  # separate from parcel placement: soldiers can reach real walls
+BODY_MAX_RECTS = 64  # per physical piece, without changing authored yaw
+GEOMETRY = ROOT / "resources/city_building_geometry.json"
+BODY_GEOMETRY = json.loads(GEOMETRY.read_text())
 
 # ---------------------------------------------------------------- geometry
 def sub(a, b): return (a[0]-b[0], a[1]-b[1])
@@ -161,7 +166,7 @@ def obb_distance(P):
         return math.hypot(max(x, 0.0), max(z, 0.0))
     return dist
 
-def _strips(P, axis, lo, hi, limit, anchor=None, dist=None):
+def _strips(P, axis, lo, hi, limit, anchor=None, dist=None, tolerance=TOL):
     """Greedy full-column strips along axis over [lo,hi]; coverage is exact by
     construction. anchor extends every strip to a fixed far side (cap mode)."""
     other = 1-axis; out = []; a = lo
@@ -174,7 +179,7 @@ def _strips(P, axis, lo, hi, limit, anchor=None, dist=None):
         if r is None: return False
         a, b, c0, c1 = r
         verts = [(a, c0), (a, c1), (b, c0), (b, c1)] if axis == 0 else [(c0, a), (c1, a), (c0, b), (c1, b)]
-        return all(dist(v) <= TOL for v in verts)
+        return all(dist(v) <= tolerance for v in verts)
     while a < hi-1e-9:
         if len(out) >= limit: return None
         r = rect(a, hi)
@@ -188,29 +193,29 @@ def _strips(P, axis, lo, hi, limit, anchor=None, dist=None):
         out.append(rect(a, good)); a = good
     return [(r[0], r[2], r[1]-r[0], r[3]-r[2]) if axis == 0 else (r[2], r[0], r[3]-r[2], r[1]-r[0]) for r in out]
 
-def _decompose(P):
+def _decompose(P, tolerance=TOL, limit=MAX_RECTS):
     best = None; dist = obb_distance(P)
     for axis in (0, 1):
         vals = sorted(p[axis] for p in P)
-        r = _strips(P, axis, vals[0], vals[-1], MAX_RECTS, dist=dist)
+        r = _strips(P, axis, vals[0], vals[-1], limit, dist=dist, tolerance=tolerance)
         if r and (best is None or len(r) < len(best)): best = r
         # Hybrid: middle strips along axis, end caps by perpendicular strips.
         for f in (0.0, 0.35, 0.7, 1.0):
             a = vals[0]+(vals[1]-vals[0])*f; b = vals[3]-(vals[3]-vals[2])*f
             if b-a < 1e-6: continue
-            total = _strips(P, axis, a, b, MAX_RECTS, dist=dist)
+            total = _strips(P, axis, a, b, limit, dist=dist, tolerance=tolerance)
             if not total: continue
             for cut, keep in ((a, True), (b, False)):
                 cap = _clip(P, axis, cut, keep)
                 if len(cap) < 3 or abs(area(cap)) < 1e-9: continue
                 o = [p[1-axis] for p in cap]
-                r = _strips(cap, 1-axis, min(o), max(o), MAX_RECTS, anchor=cut, dist=dist)
+                r = _strips(cap, 1-axis, min(o), max(o), limit, anchor=cut, dist=dist, tolerance=tolerance)
                 if r is None: total = None; break
                 total = total+r
-            if not total or len(total) > MAX_RECTS: continue
-            if all(all(dist(v) <= TOL for v in rect_poly(t)) for t in total):
+            if not total or len(total) > limit: continue
+            if all(all(dist(v) <= tolerance for v in rect_poly(t)) for t in total):
                 if best is None or len(total) < len(best): best = total
-    return best if best and len(best) <= MAX_RECTS else None
+    return best if best and len(best) <= limit else None
 
 _RECT_CACHE: dict = {}
 def local_rects(W, D, yaw):
@@ -249,6 +254,55 @@ def world_rects(c, rects):
         x1 = math.ceil((c[0]+x+w)*10000)/10000; z1 = math.ceil((c[1]+z+d)*10000)/10000
         out.append([x0, z0, round(x1-x0, 4), round(z1-z0, 4)])
     return out
+
+def ground_pieces(spec):
+    """Local physical pieces from the same profiles used by the GDScript art.
+
+    The shell includes wall thickness. Low porch steps contain their posts;
+    overhead roofs/canopies and decorative parcel margins are not solids.
+    An empty result means an explicit conservative custom-family fallback.
+    """
+    profile = BODY_GEOMETRY["families"].get(spec["design"])
+    if profile is None: return []
+    row = BODY_GEOMETRY["profiles"][profile]
+    W, D = spec["source_size"]; left, front, right, rear = row["insets"]
+    x0, z0, x1, z1 = -W/2+left, -D/2+front, W/2-right, D/2-rear
+    margin = row["wall_outset"]
+    result = [{"rect": (x0-margin, z0-margin, x1-x0+margin*2, z1-z0+margin*2), "wall": True}]
+    if "porch" in row and spec.get("damage", 0) < 2:
+        p = row["porch"]; width = min(p["width"], W-p["width_margin"])
+        result.append({"rect": (-width/2, z0-p["front_offset"]-p["depth"]/2, width, p["depth"]), "wall": False})
+    if "dock" in row:
+        p = row["dock"]; width = W-p["width_margin"]
+        for z in (z0-p["front_offset"], z1+p["front_offset"]):
+            result.append({"rect": (-width/2, z-p["depth"]/2, width, p["depth"]), "wall": False})
+    return result
+
+def ground_rects(spec):
+    return [piece["rect"] for piece in ground_pieces(spec)]
+
+_BODY_RECT_CACHE: dict = {}
+def body_collision(spec):
+    """Tight body rectangles at the final authored transform; no layout changes."""
+    pieces = ground_pieces(spec)
+    if not pieces: return spec["rects"], []
+    result = []; low = []; yaw = spec["rotation_degrees"]
+    for piece in pieces:
+        x, z, W, D = piece["rect"]
+        key = (W, D, yaw)
+        if key not in _BODY_RECT_CACHE:
+            if abs((yaw+45) % 90-45) < 1e-6:
+                ex, _ = frame(yaw); w, d = (W, D) if abs(ex[0]) > 0.5 else (D, W)
+                _BODY_RECT_CACHE[key] = [(-w/2, -d/2, w, d)]
+            else:
+                _BODY_RECT_CACHE[key] = _decompose(obb((0.0, 0.0), W, D, yaw), BODY_TOL, BODY_MAX_RECTS)
+            if not _BODY_RECT_CACHE[key]:
+                raise ValueError(f"Body collision exceeds {BODY_MAX_RECTS} rectangles: {spec['design']} {W}x{D} yaw {yaw}")
+        center = local_to_world(spec["position"], yaw, x+W/2, z+D/2)
+        rects = world_rects(center, _BODY_RECT_CACHE[key])
+        if not piece["wall"]: low.extend(range(len(result), len(result)+len(rects)))
+        result.extend(rects)
+    return result, low
 
 # ------------------------------------------------------------ seeded random
 class Rng:
@@ -979,11 +1033,15 @@ def compile_map(bp, draft=False):
     apply_damage(city, sc, bp)
     enemy_defences(city, sc)
     # ------------------------------------------------------------- emit
+    sc["low_obstacle_blocks"] = []  # indices into blocks; locomotion only, no wall shelter/LOS
     order = sorted(city.buildings, key=lambda e: (e["position"][1]//64, e["position"][0], e["position"][1]))
     for e in order:
-        first = len(sc["blocks"]); sc["blocks"].extend(e["rects"])
+        rects, low = body_collision(e)
+        first = len(sc["blocks"]); sc["blocks"].extend(rects)
+        sc["low_obstacle_blocks"].extend(first+k for k in low)
         entry = {k: v for k, v in e.items() if k not in ("poly", "rects")}
-        entry["collision"] = [first, len(e["rects"])]
+        entry["collision"] = [first, len(rects)]
+        entry["collision_geometry"] = "ground_body" if ground_rects(e) else "parcel_fallback"
         sc["architecture"].append(entry)
     sc["building_count"] = len(sc["architecture"])
     for r in bp["rock_parcels"]:
@@ -1000,6 +1058,8 @@ def compile_map(bp, draft=False):
     sc["open_spaces"] = [{"name": o["name"], "kind": o["kind"], "polygon": [list(p) for p in o["polygon"]]} for o in city.open_spaces]
     sc["urban_blocks"] = city.blocks_out
     sc["layout_validation"] = dict(bp["layout_validation"])
+    sc["layout_validation"]["body_collision_excess_max"] = BODY_TOL
+    sc["layout_validation"]["body_collision_rects_max"] = BODY_MAX_RECTS*3
     sc["layout_validation"]["damage_hotspots"] = [list(p) for p in sc["objectives"]]+bp["damage_front"]
     sc["layout_validation"]["primary_streets"] = [st["name"] for st in bp["streets"] if st.get("width", 0) >= 16]
     if not draft and not 450 <= sc["building_count"] <= 700: raise ValueError(f"{sc['building_count']} buildings outside 450-700")

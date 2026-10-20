@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "families": {
+    "panel_5": "urban_rectangle",
+    "panel_9": "urban_rectangle",
+    "point_tower": "urban_rectangle",
+    "shop_pavilion": "urban_rectangle",
+    "stone_house": "house",
+    "outbuilding": "house",
+    "dacha_hut": "house",
+    "transit_shed": "hall",
+    "workshop_hall": "hall",
+    "barn_long": "hall",
+    "coop_shed": "hall",
+    "port_admin": "office",
+    "barracks": "office",
+    "gatehouse": "booth"
+  },
+  "profiles": {
+    "urban_rectangle": {
+      "insets": [0.6, 1.0, 0.6, 1.2],
+      "wall_outset": 0.0
+    },
+    "house": {
+      "insets": [0.45, 1.25, 0.45, 0.4],
+      "wall_outset": 0.11,
+      "porch": {
+        "width": 2.5,
+        "width_margin": 0.5,
+        "depth": 1.05,
+        "front_offset": 0.65,
+        "height": 0.22,
+        "post_side": 0.95,
+        "post_front_offset": 1.0,
+        "post_size": 0.09,
+        "post_height": 2.1
+      }
+    },
+    "hall": {
+      "insets": [0.5, 1.35, 0.5, 1.35],
+      "wall_outset": 0.11,
+      "dock": {
+        "width_margin": 1.0,
+        "depth": 1.0,
+        "front_offset": 0.55,
+        "base": 0.08,
+        "height": 0.45
+      }
+    },
+    "office": {
+      "insets": [0.45, 0.65, 0.45, 0.45],
+      "wall_outset": 0.11
+    },
+    "booth": {
+      "insets": [0.5, 0.5, 0.5, 0.5],
+      "wall_outset": 0.11
+    }
+  }
+}

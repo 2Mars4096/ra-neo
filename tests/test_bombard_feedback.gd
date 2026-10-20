@@ -14,6 +14,7 @@ const SD=preload("res://scripts/structure_damage.gd")
 const VehicleDamage=preload("res://scripts/vehicle_damage.gd")
 const Garrison=preload("res://scripts/garrison.gd")
 const AudioFX=preload("res://scripts/audio_fx.gd")
+const Body=preload("res://scripts/city_building_geometry.gd")
 var failures:=0
 var checks:=0
 func check(ok:bool,label:String)->void:
@@ -28,6 +29,12 @@ func harbor_index()->int:
 
 func warnings(sim,text:String)->int:
 	return sim.events.filter(func(e):return e.type=="warning" and text in str(e.text)).size()
+
+func axis_aligned_body(building:Dictionary)->bool:
+	# Collider count includes low porch/dock pieces and decomposition strips;
+	# use the authored transform and physical wall shape for this fixture.
+	var spec:Dictionary=building.spec
+	return absf(fposmod(float(spec.rotation_degrees)+45.0,90.0)-45.0)<=0.001 and Body.ground_pieces(spec).filter(func(piece):return piece.wall).size()==1
 
 # A spot within `reach` of the building's wall, open for `u`, with no line to the wall.
 func blind_spot(sim,u:Dictionary,building:Dictionary,reach:float)->Vector2:
@@ -44,6 +51,8 @@ func blind_spot(sim,u:Dictionary,building:Dictionary,reach:float)->Vector2:
 
 func _init()->void:
 	var harbor:=harbor_index()
+	check(harbor>=0,"Harbor scenario exists")
+	if harbor<0:quit(1);return
 	bombard_checks(harbor)
 	audio_checks()
 	enemy_toast_checks(harbor)
@@ -65,7 +74,7 @@ func bombard_checks(harbor:int)->void:
 	var none:=0
 	# Prefer a blind spot whose firing position is a real drive away.
 	for candidate in Garrison.index(sim).buildings:
-		if candidate.rects.size()!=1 or SD.integrity(candidate)>120.0:continue
+		if not axis_aligned_body(candidate) or SD.integrity(candidate)>120.0:continue
 		var p:=blind_spot(sim,tank,candidate,reach)
 		if not p.is_finite():continue
 		tank.pos=p
@@ -88,7 +97,7 @@ func bombard_checks(harbor:int)->void:
 	print("BOMBARD first search (builds the tracked nav grid once) %.1f ms" % ((Time.get_ticks_usec()-warm)/1000.0))
 	for candidate in Garrison.index(sim).buildings:
 		if sweep>=60:break
-		if candidate.rects.size()!=1:continue
+		if not axis_aligned_body(candidate):continue
 		var t0:=Time.get_ticks_usec()
 		if not SD.firing_position(sim,tank,candidate,reach).is_finite():sweep_none+=1
 		var took:=Time.get_ticks_usec()-t0
@@ -127,7 +136,7 @@ func bombard_checks(harbor:int)->void:
 	var gun_spot:=Vector2.INF
 	var gun_building:Dictionary={}
 	for candidate in Garrison.index(s2).buildings:
-		if candidate.rects.size()!=1:continue
+		if not axis_aligned_body(candidate):continue
 		gun_spot=blind_spot(s2,gun,candidate,float(s2.definitions.at_gun.range)*0.85)
 		if gun_spot.is_finite():
 			gun_building=candidate
@@ -250,9 +259,13 @@ func leak_pair(sim,squad:Dictionary,building:Dictionary,pair:Array,label:String)
 func transit_checks(harbor:int)->void:
 	var sim=Sim.new(false,harbor)
 	var building:Dictionary={}
+	var door:=Vector2(-1,-1)
 	for candidate in Garrison.index(sim).buildings:
-		if candidate.rects.size()==1 and candidate.design=="stone_house":building=candidate;break
-	var door:Vector2=Garrison.entry_point(sim,building.id,building.bounds.get_center()+Vector2(0,30))
+		if candidate.design!="stone_house" or not axis_aligned_body(candidate) or int(candidate.spec.damage)!=0:continue
+		door=Garrison.entry_point(sim,candidate.id,candidate.bounds.get_center()+Vector2(0,30))
+		if door.x>=0:building=candidate;break
+	check(not building.is_empty(),"found an axis-aligned stone house with a reachable doorway")
+	if building.is_empty():return
 	var squad:Dictionary=sim.spawn("rifle",0,door+Vector2(0,6))
 	check(Garrison.order(sim,[squad.id],building.id)==1,"garrison order accepted")
 	var entry:=false

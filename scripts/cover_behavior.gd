@@ -14,6 +14,11 @@ const RATED_VALID:=8
 # body. The prone footprint (1.15 m) closed gaps a runner fits through, so a
 # soldier who had gone flat in the open found no route to reachable cover.
 const STRIDE:=0.8
+# Stand just outside the physical wall, using the movement check's clearance.
+const FACE_GAP:=STRIDE+preload("res://scripts/terrain.gd").OBSTACLE_MARGIN+0.03
+# Leave room for two standing bodies (1.55 minimum), including when a new
+# occupant must settle between squadmates who already reached their slots.
+const WORK_SPACING:=1.65
 # A halted friendly section's formation (offsets ~1 u, prone 1.5 u, plus a body).
 const FOOTPRINT:=2.0
 
@@ -30,6 +35,8 @@ static func clear(member:Dictionary) -> void:
 	member["cover_phase"]=""
 	member["cover_blocked"]=0.0
 	member["cover_screened"]=false
+	member.cover_until=0.0
+	member["cover_deadline"]=0.0
 	member.erase("cover_from")
 
 # Shelter points that pass the terrain tests, by anchor position. Every soldier
@@ -59,6 +66,7 @@ static func _update(u:Dictionary,sim) -> void:
 		for member in u.members:clear(member)
 		u["crossfire"]=false
 		return
+	_revalidate_shelters(u,sim)
 	var threats:Array=[]
 	var threat:Dictionary={}
 	var weight:=0.0
@@ -80,8 +88,8 @@ static func _update(u:Dictionary,sim) -> void:
 	if not alert:
 		# A section halted beside its own works occupies them (no enemy needed).
 		# Engineers with a site to build stay on the job instead of manning works.
-		# Expire combat shelters first: once squadmates occupy works, the occupy
-		# call below returns early and would otherwise strand them there.
+		# Occupied shelters stay put while their geometry remains valid. Combat
+		# shelters without current contact expire before the next halt search.
 		for member in u.members:
 			if member.get("occupying",false):continue
 			if sim.time>=maxf(member.cover_until,member.get("cover_deadline",0.0)):clear(member)
@@ -140,7 +148,7 @@ static func _update(u:Dictionary,sim) -> void:
 					member.cover_until=sim.time+2.0+member.index*0.15
 					moving+=1
 					continue
-			if exposed or member.cover_goal.distance_to(u.pos)>LEASH or member.get("cover_blocked",0.0)>2.0 or (phase!="SHELTERED" and sim.time>member.get("cover_deadline",0.0)):
+			if exposed:
 				clear(member);member.cover_until=sim.time+(0.0 if stale and exposed else 1.0)
 			else:continue
 		if intruding:continue
@@ -154,6 +162,25 @@ static func _update(u:Dictionary,sim) -> void:
 		if result.is_empty():member.cover_phase="EXPOSED";continue
 		assign(u,member,sim,result,bearing)
 		moving+=1
+
+# Apply the same validity and approach limits to quiet occupation and combat
+# shelter. Previously the idle branch skipped occupants forever, even after
+# their trench disappeared or a route had been blocked for half a minute.
+static func _revalidate_shelters(u:Dictionary,sim) -> void:
+	for member in u.members:
+		if member.hp<=0:continue
+		var phase:String=member.get("cover_phase","")
+		if phase not in ["SEEKING","SETTLING","SHELTERED"]:continue
+		var unavailable:bool=not sim.terrain.cover(member.cover_goal) or not sim.terrain.traversable(member.cover_goal,"land",STRIDE)
+		var stranded:bool=phase=="SHELTERED" and not sim.terrain.cover(member.pos)
+		var failed:bool=member.get("cover_blocked",0.0)>2.0 or (phase!="SHELTERED" and sim.time>member.get("cover_deadline",0.0))
+		if not unavailable and not stranded and not failed and member.cover_goal.distance_to(u.pos)<=LEASH:continue
+		var occupied:bool=member.get("occupying",false)
+		clear(member)
+		# Back off a failed approach, but let destroyed shelter be replaced at
+		# once. Other soldiers can retain their still-valid positions.
+		member.cover_until=sim.time+(1.0 if failed else 0.0)
+		if occupied:u["occupy_check"]=minf(float(u.get("occupy_check",sim.time)),member.cover_until)
 
 static func assign(u:Dictionary,member:Dictionary,sim,result:Dictionary,bearing:Vector2) -> void:
 	member.cover_goal=result.pos
@@ -169,6 +196,19 @@ static func route_length(from:Vector2,route:Array) -> float:
 	var length:=0.0
 	for point in route:length+=from.distance_to(point);from=point
 	return length
+
+# Both combat shelter and idle work occupation use the same local route
+# contract. Every waypoint must fit inside the soldier's movement leash.
+static func _shelter_route(u:Dictionary,member:Dictionary,sim,goal:Vector2) -> Array:
+	if goal.distance_to(u.pos)>LEASH:return []
+	var route:Array
+	if _squadmate_blocks(u,member,[goal]) and sim.terrain.segment_clear(member.pos,goal,"land",STRIDE):
+		route=_detour(u,member,sim,goal)
+	else:
+		route=sim.terrain.path(member.pos,goal,"land",STRIDE,[],"infantry")
+		if not route.is_empty() and _squadmate_blocks(u,member,route):route=_detour(u,member,sim,goal)
+	if route.is_empty() or route.any(func(point):return point.distance_to(u.pos)>LEASH) or route_length(member.pos,route)>18.0:return []
+	return route
 
 static func find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threats:Array=[]) -> Dictionary:
 	var t0:int=Time.get_ticks_usec() if sim.profiling else 0
@@ -222,6 +262,9 @@ static func _pick_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 	var clearances:=PackedFloat64Array()
 	for other in occupants:
 		if not sim.alive(other) or sim.definitions[other.kind].domain!="land":continue
+		# Exact structure rectangles are already in the terrain query. Their
+		# enclosing actor radii would reserve the very faces being sampled.
+		if other.get("structure",false):continue
 		if other.team!=u.team and not sim.contact_known(u,other):continue
 		if other.members.is_empty():
 			taken.append(other.pos);clearances.append(float(sim.definitions[other.kind].radius)+0.85)
@@ -257,24 +300,9 @@ static func _pick_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 		candidates.append({"pos":entry.pos,"score":score,"screened":rating.screened and not threat.is_empty() and not rating.soft,"fire":rating.fire})
 		if candidates.size()>=RATED_VALID:break
 	candidates.sort_custom(func(a,b):return a.score<b.score)
-	var radius:=STRIDE
 	for candidate in candidates.slice(0,6):
-		# A clear straight line is the route path() would return: when a holding
-		# squadmate stands across it, step round them instead of planning.
-		var route:Array
-		if _squadmate_blocks(u,member,[candidate.pos]) and sim.terrain.segment_clear(member.pos,candidate.pos,"land",radius):
-			route=_detour(u,member,sim,candidate.pos)
-		else:
-			route=sim.terrain.path(member.pos,candidate.pos,"land",radius,[],"infantry")
-			if not route.is_empty() and _squadmate_blocks(u,member,route):route=_detour(u,member,sim,candidate.pos)
-		if route.is_empty():continue
-		var bounded:=true
-		var length:=0.0
-		var previous:Vector2=member.pos
-		for point in route:
-			if point.distance_to(u.pos)>LEASH:bounded=false
-			length+=previous.distance_to(point);previous=point
-		if bounded and length<=18:return {"pos":candidate.pos,"path":route,"screened":candidate.screened,"fire":candidate.fire}
+		var route:=_shelter_route(u,member,sim,candidate.pos)
+		if not route.is_empty():return {"pos":candidate.pos,"path":route,"screened":candidate.screened,"fire":candidate.fire}
 	return {}
 
 # How a slot stands against the observed threats: screened from the main one,
@@ -397,13 +425,16 @@ static func work_slots(u:Dictionary,sim,threat_dir:Vector2) -> Array:
 		var length:float=rect.size.x if long_x else rect.size.y
 		var across:=Vector2(0,1) if long_x else Vector2(1,0)
 		var side:float=-signf(threat_dir.dot(across)) if absf(threat_dir.dot(across))>0.05 else 1.0
-		for i in maxi(1,int(length/1.3)):
-			var t:=(i+0.5)*length/maxi(1,int(length/1.3))
+		# Centre the run with at least half a unit at either end. Dividing the
+		# whole length into 1.3-unit cells produced 1.4-spaced trench goals: a
+		# middle soldier could never fit between two stationary occupants.
+		var count:=maxi(1,floori((length-1.0)/WORK_SPACING)+1)
+		for i in count:
+			var t:=(length-(count-1)*WORK_SPACING)/2+i*WORK_SPACING
 			var along:=rect.position+(Vector2(t,0) if long_x else Vector2(0,t))
 			var middle:=along+across*(rect.size.y/2 if long_x else rect.size.x/2)
-			if site.kind=="fighting_trench":slots.append(middle)
-			# Shoulder against the friendly face of the wall (body radius + a hand).
-			else:slots.append(middle+across*side*((rect.size.y if long_x else rect.size.x)/2+0.85))
+			var slot:Vector2=middle if site.kind=="fighting_trench" else middle+across*side*((rect.size.y if long_x else rect.size.x)/2+FACE_GAP)
+			if slot.distance_to(u.pos)<=LEASH:slots.append(slot)
 	return slots
 
 # Sections do not all settle in at the same instant: the first search waits a
@@ -439,29 +470,40 @@ static func occupy_works(u:Dictionary,sim,threat:Dictionary) -> bool:
 	# Searching is costly: a failed search backs off ~10 s (staggered per unit) so
 	# idle defenders across the map do not re-run it every few ticks.
 	u["occupy_check"]=sim.time+9.0+float(u.id%7)*0.4
-	if u.members.any(func(m):return m.hp>0 and m.get("occupying",false)):return true
 	var enemy_side:Vector2=sim.field_ops.get("enemy_insertion",u.pos+Vector2(0,-1)) if u.team==0 else sim.field_ops.get("insertion",u.pos+Vector2(0,1))
 	var aim:Vector2=threat.pos if not threat.is_empty() else enemy_side
 	var threat_dir:Vector2=(aim-u.pos).normalized()
 	var slots:=work_slots(u,sim,threat_dir)
-	if slots.is_empty():return halt_in_cover(u,sim,threat_dir)
+	if slots.is_empty():return halt_in_cover(u,sim,threat_dir) or u.members.any(func(m):return m.hp>0 and m.get("occupying",false))
 	var taken:Array=[]
+	# Keep valid occupants and reserve their goals while an uncovered member
+	# tries again. Neighbouring sections and generic shelters reserve space too.
+	var occupants:Array=sim.range_candidates(u.pos,LEASH*2+4) if sim.ticking else sim.units
+	for other in occupants:
+		if not sim.alive(other) or other.team!=u.team:continue
+		for member in other.members:
+			if member.hp>0 and member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"]:taken.append(member.cover_goal)
+	var assigned:=false
 	for member in u.members:
-		if member.hp<=0:continue
+		if member.hp<=0 or member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] or sim.time<member.cover_until:continue
 		var best:=Vector2(-1,-1);var distance:=INF
 		for slot in slots:
-			if slot in taken or not sim.terrain.traversable(slot,"land",0.8):continue
+			# End slots on adjoining works can be closer than WORK_SPACING even
+			# though each work's own slots fit. Reserve distance, not just identity;
+			# the tiny tolerance absorbs coordinate rounding on this large map.
+			if taken.any(func(goal):return slot.distance_to(goal)<WORK_SPACING-0.001) or not sim.terrain.traversable(slot,"land",STRIDE):continue
 			if slot.distance_squared_to(member.pos)<distance:distance=slot.distance_squared_to(member.pos);best=slot
 		if best.x<0:continue
-		var route:Array=sim.terrain.path(member.pos,best,"land",STRIDE,[],"infantry")
+		var route:=_shelter_route(u,member,sim,best)
 		if route.is_empty():continue
 		taken.append(best)
+		assigned=true
 		member.cover_goal=best;member.cover_path=route;member.cover_phase="SEEKING";member.cover_blocked=0.0
 		member["cover_screened"]=false;member["occupying"]=true;member["hold_facing"]=threat_dir
-		member.cover_until=sim.time+100000.0;member["cover_deadline"]=sim.time+100000.0
-	if taken.is_empty():return halt_in_cover(u,sim,threat_dir)
-	sim.events.append({"type":"decision","unit":u.id,"phase":"COVER","reason":"Section manning field works","pos":u.pos})
-	return true
+		member.cover_until=sim.time+12.0;member["cover_deadline"]=sim.time+12.0
+	if assigned:sim.events.append({"type":"decision","unit":u.id,"phase":"COVER","reason":"Section manning field works","pos":u.pos})
+	if not assigned:halt_in_cover(u,sim,threat_dir)
+	return u.members.any(func(m):return m.hp>0 and m.get("occupying",false))
 
 # No field works nearby: each soldier takes the nearest real cover within a few
 # metres (building corner, yard wall, car, rubble) that screens the enemy side,
@@ -471,7 +513,7 @@ static func halt_in_cover(u:Dictionary,sim,threat_dir:Vector2,first:int=0) -> bo
 	var any:=false
 	for i in range(first,u.members.size()):
 		var member:Dictionary=u.members[i]
-		if member.hp<=0 or member.get("occupying",false):continue
+		if member.hp<=0 or member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] or sim.time<member.cover_until:continue
 		if not _halt_budget(sim):
 			# Out of searches this tick: the others look at the next threat scan.
 			u["halt_resume"]=[sim.time,threat_dir,u.occupy_check,i]
@@ -483,7 +525,7 @@ static func halt_in_cover(u:Dictionary,sim,threat_dir:Vector2,first:int=0) -> bo
 		if result.is_empty() or result.pos.distance_to(member.pos)>8.0:continue
 		member.cover_goal=result.pos;member.cover_path=result.path;member.cover_phase="SEEKING";member.cover_blocked=0.0
 		member["cover_screened"]=false;member["occupying"]=true;member["hold_facing"]=threat_dir
-		member.cover_until=sim.time+100000.0;member["cover_deadline"]=sim.time+100000.0
+		member.cover_until=sim.time+12.0;member["cover_deadline"]=sim.time+12.0
 		member["cover_from"]=Vector2.ZERO
 		any=true
 	if any:sim.events.append({"type":"decision","unit":u.id,"phase":"COVER","reason":"Section taking cover at halt","pos":u.pos})

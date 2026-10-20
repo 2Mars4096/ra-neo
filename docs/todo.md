@@ -30,6 +30,8 @@
 
 - [ ] [14: Harbor city realism](plans/14-harbor-city-realism.md) — district layout, 27 building families, city decor, tier-1 engineers done; old-town continuity, microdistrict density, native review and performance open.
 
+- [x] [14-1: Soldiers reach physical cover](plans/14-1-cover-contact.md) — reachable sandbag goals, shared physical building profiles and stale/blocked occupation recovery; native arrivals verified and 24 selected integration suites pass. The 97 complex-building fallbacks and remaining cover-cost timing failures are documented follow-ups (2026-10-20).
+
 - [x] Harbor victory after pre-reserve logistics destruction; objective/hold, dispatched-reserve timing, and defeat precedence covered, current-game documentation corrected (7 focused suites, 1,141 checks, 0 failures; 2026-10-20).
 
 - [ ] [13: Black Sea Harbor](plans/13-black-sea-harbor.md) — user-authorized one huge Sevastopol-inspired theatre; shared assets, polygonal bays, irregular districts and measured scale.

@@ -21,11 +21,11 @@ func scenario_index(id:String)->int:
 
 const BASE:=Vector2(300,640)
 
-func open_ground(sim,near:Vector2,radius:float=4.0)->Vector2:
+func open_ground(sim,near:Vector2,radius:float=4.0,uncovered:bool=false)->Vector2:
 	for ring in range(0,30):
 		for i in 16:
 			var p:Vector2=near+Vector2.from_angle(i*TAU/16.0)*ring*2.0
-			if sim.terrain.traversable(p,"land",radius) and not sim.terrain.is_water(p):return p
+			if sim.terrain.traversable(p,"land",radius) and not sim.terrain.is_water(p) and (not uncovered or not sim.terrain.cover(p)):return p
 	return Vector2(-1,-1)
 
 func _init()->void:
@@ -49,10 +49,11 @@ func sandbags()->void:
 	var covered:Dictionary=squad.members[0]
 	var exposed:Dictionary=squad.members[1]
 	for m in squad.members:m.pos=bag_pos+Vector2(-8,9)
-	covered.pos=bag_pos+Vector2(0,1.4)
+	# Half-unit sandbag depth plus enough clearance for the standing body.
+	covered.pos=bag_pos+Vector2(0,1.45)
 	# Open ground nearer the shooter than the man behind the bags.
 	exposed.pos=bag_pos+Vector2(6,-4)
-	check(sim.terrain.cover(covered.pos) and not sim.terrain.cover(exposed.pos),"one soldier behind sandbags, one in the open")
+	check(sim.terrain.traversable(covered.pos,"land",0.8) and sim.terrain.traversable(exposed.pos,"land",0.8) and sim.terrain.cover(covered.pos) and not sim.terrain.cover(exposed.pos),"one soldier clear behind sandbags, one on clear open ground")
 	var worn:float=1.0+(1.0/SD.COVER_SCALE-1.0)*0.5
 	var leak_covered:float=SD.sandbag_leak(sim,shooter,squad,covered)
 	var leak_exposed:float=SD.sandbag_leak(sim,shooter,squad,exposed)
@@ -68,8 +69,12 @@ func sandbags()->void:
 	print("SANDBAG net damage per hit: behind bags %.2f, in open %.2f" % [net_covered,net_exposed])
 	check(net_covered<net_exposed*0.85 and net_covered>net_exposed*SD.COVER_SCALE,"half-worn bags still protect their soldier, less than intact ones")
 	# Reverse: the man behind the bags is nearest, the victim stands in the open farther back.
-	exposed.pos=bag_pos+Vector2(7,9)
-	check(not sim.terrain.cover(exposed.pos),"rear soldier in the open")
+	# The old fixed offset could fall inside a nearby building (where the
+	# parcel-wide cover query happened to return false). Require real open
+	# ground so changing the authored wall footprint cannot fake this control.
+	exposed.pos=open_ground(sim,bag_pos+Vector2(7,9),0.8,true)
+	check(exposed.pos.x>=0 and sim.terrain.traversable(exposed.pos,"land",0.8) and not sim.terrain.cover(exposed.pos),"rear soldier on clear open ground")
+	check(covered.pos.distance_squared_to(shooter.pos)<exposed.pos.distance_squared_to(shooter.pos),"covered soldier is nearer the shooter than the exposed rear victim")
 	check(SD.sandbag_leak(sim,shooter,squad)>1.0 and SD.sandbag_leak(sim,shooter,squad,exposed)==1.0,"the victim's position decides, not the soldier nearest the shooter")
 
 # An HE round on a garrison bursts on the wall at the struck soldier's window.

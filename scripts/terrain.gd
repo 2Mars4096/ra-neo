@@ -5,6 +5,9 @@ const SIZE := Vector2(96, 72)
 const DOCKS:Array[Rect2]=[Rect2(79.5,39.75,9,2.5),Rect2(79.5,47.75,9,2.5)]
 const CELL := 2.0
 const GRID := Vector2i(48, 36)
+# Shared clearance around solid scenery. Shelter goals include the same skin
+# as point and swept movement checks, so a planned wall position is reachable.
+const OBSTACLE_MARGIN:=0.12
 # Constants remain legacy defaults; runtime consumers use these instance sizes.
 var world_size:Vector2=SIZE
 var fog_grid_size:Vector2i=GRID
@@ -29,6 +32,13 @@ var use_static_index:=true
 var _static_index:Dictionary={}
 var _static_counts:Array=[]
 const SPATIAL_CELL:=32.0
+# Narrow movement/cover/LOS queries use small buckets; wide searches retain
+# the coarse index and its original candidate order. Expanded insertion makes
+# a narrow-radius query one bucket lookup instead of a repeated bucket union.
+const NEAR_CELL:=2.0
+const NEAR_RADIUS:=1.4
+const NEAR_PADDING:=0.0001
+var _static_near_index:Dictionary={}
 var field_mode:=false
 var roads=preload("res://scripts/road_network.gd").new()
 var scenario_id:=0
@@ -64,6 +74,9 @@ var poles: Array[Vector2] = [Vector2(46,22),Vector2(74,46)]
 var land := AStarGrid2D.new()
 var sea := AStarGrid2D.new()
 var blocks: Array[Rect2] = [Rect2(32, 26, 8, 20), Rect2(54, 40, 8, 14), Rect2(64, 10, 8, 8), Rect2(72, 30, 6, 6)]
+# Authored steps/loading docks remain movement obstacles, but their low
+# surfaces do not count as walls for shelter or ground line of fire.
+var low_obstacle_blocks:Dictionary={}
 var woods: Array[Rect2] = [Rect2(20, 12, 10, 14), Rect2(40, 44, 10, 16), Rect2(58, 22, 10, 10)]
 
 func _init(preset:int=0, config_override:Dictionary={}) -> void:
@@ -100,6 +113,8 @@ func _init(preset:int=0, config_override:Dictionary={}) -> void:
 	for point in config.get("objectives",[[46,22],[74,46]]):poles.append(Vector2(point[0],point[1]))
 	blocks.clear();woods.clear()
 	for r in config.blocks:blocks.append(Rect2(r[0],r[1],r[2],r[3]))
+	for index in config.get("low_obstacle_blocks",[]):
+		if int(index)>=0 and int(index)<blocks.size():low_obstacle_blocks[blocks[int(index)]]=true
 	for r in config.woods:woods.append(Rect2(r[0],r[1],r[2],r[3]))
 	rubble=Rect2(config.rubble[0],config.rubble[1],config.rubble[2],config.rubble[3])
 	mud=Rect2(config.mud[0],config.mud[1],config.mud[2],config.mud[3])
@@ -394,6 +409,8 @@ func traversable(p: Vector2, domain: String, radius: float = -1) -> bool:
 			for dock in DOCKS:
 				if circle_rect(p,radius,dock): return false
 		return true
+	for rect in _static_candidates("solid",p,radius+OBSTACLE_MARGIN):
+		if circle_rect(p,radius+OBSTACLE_MARGIN,rect) and not (crush_pass and crushables.has(rect)):return false
 	if water_polygons.is_empty():
 		if p.x>shore_x-radius:return false
 	elif not _coast_clear(p,radius,false):return false
@@ -403,10 +420,8 @@ func traversable(p: Vector2, domain: String, radius: float = -1) -> bool:
 	if port:
 		for dock in DOCKS:
 			if circle_rect(p,radius,dock):return false
-	for rect in _static_candidates("solid",p,radius+0.12):
-		if circle_rect(p,radius+0.12,rect) and not (crush_pass and crushables.has(rect)):return false
 	for rect in dynamic_blocks:
-		if circle_rect(p,radius+0.12,rect) and not (crush_pass and pushable_blocks.has(rect)):return false
+		if circle_rect(p,radius+OBSTACLE_MARGIN,rect) and not (crush_pass and pushable_blocks.has(rect)):return false
 	var tree_distance_squared:=pow(radius+1.2,2)
 	for tree in _static_candidates("tree",p,radius+1.2):
 		if p.distance_squared_to(tree)<tree_distance_squared:return false
@@ -934,9 +949,11 @@ func _path_smooth(job:Dictionary,work:int)->void:
 			if segment_travel_cost(origin,raw[next],domain,profile)<=raw_costs[next-index]*1.025:
 				furthest=next
 				break
-		# Section envelopes are not rigid (soldiers step individually): only
-		# hulls and default-profile routes are made exact.
-		if profile!="infantry":spent+=_publish(result,origin,raw,index,furthest,domain,radius,avoid)
+		# Fine-grid section envelopes retain their flexible sampled routes.
+		# Coarse-map shortcuts can span dozens of metres; publish them through
+		# the corner guard too, so precise building faces do not leave a section
+		# route grazing a wall between samples. This bends at existing nodes.
+		if profile!="infantry" or nav_cell_size>1.0:spent+=_publish(result,origin,raw,index,furthest,domain,radius,avoid)
 		else:result.append(raw[furthest])
 		origin=raw[furthest]
 		index=furthest+1
@@ -993,8 +1010,8 @@ func _corners_clear(a:Vector2,b:Vector2,domain:String,radius:float)->bool:
 	if domain=="sea":
 		rects.append([_static_candidates("water",middle,reach+radius),radius])
 	else:
-		rects.append([_static_candidates("solid",middle,reach+radius+0.12),radius+0.12])
-		rects.append([dynamic_blocks,radius+0.12])
+		rects.append([_static_candidates("solid",middle,reach+radius+OBSTACLE_MARGIN),radius+OBSTACLE_MARGIN])
+		rects.append([dynamic_blocks,radius+OBSTACLE_MARGIN])
 		if port:rects.append([[Rect2(76.5,57.3,3,9.4)],radius])
 	if port:rects.append([DOCKS,radius])
 	for group in rects:
@@ -1057,8 +1074,14 @@ func line_clear(a: Vector2, b: Vector2) -> bool:
 	# Unindexed (small) layouts list every solid per query: filter those too.
 	var listed:=_static_unindexed()
 	var solids:Array[Rect2]=[]
+	# The static geometry cannot change during this line: validate once, not
+	# at every 0.8-unit sample. All exact samples and rectangle tests remain.
+	var sight_buckets:Dictionary={}
+	if not listed:
+		_ensure_static_index()
+		sight_buckets=_static_near_index["sight"]
 	if listed:
-		for rect in _static_candidates("solid",a,0.0):
+		for rect in _static_candidates("sight",a,0.0):
 			if rect.intersects(box,true):solids.append(rect)
 		if solids.is_empty() and dynamic.is_empty():return true
 	for i in range(1, steps):
@@ -1066,7 +1089,9 @@ func line_clear(a: Vector2, b: Vector2) -> bool:
 		if listed:
 			for rect in solids:
 				if rect.has_point(p):return false
-		elif blocked(p):return false
+		else:
+			for rect in sight_buckets.get(Vector2i((p/NEAR_CELL).floor()),[]):
+				if rect.has_point(p):return false
 		for rect in dynamic:
 			if rect.has_point(p):return false
 	return true
@@ -1110,7 +1135,7 @@ func crush_props(center:Vector2,radius:float)->Array:
 	if crushables.is_empty():return []
 	var hit:Array=[]
 	for rect in _static_candidates("solid",center,radius+0.3):
-		if crushables.has(rect) and circle_rect(center,radius+0.12,rect):hit.append(rect)
+		if crushables.has(rect) and circle_rect(center,radius+OBSTACLE_MARGIN,rect):hit.append(rect)
 	if hit.is_empty():return []
 	var records:Array=[]
 	for rect in hit:
@@ -1118,12 +1143,7 @@ func crush_props(center:Vector2,radius:float)->Array:
 		crushables.erase(rect)
 		# Keep array sizes stable so the static index is not rebuilt wholesale.
 		prop_blocks[info.block]=Rect2(-9999,-9999,0,0)
-		for kind in ["solid","building"]:
-			var buckets:Dictionary=_static_index.get(kind,{})
-			for x in range(floori(rect.position.x/SPATIAL_CELL),floori(rect.end.x/SPATIAL_CELL)+1):
-				for y in range(floori(rect.position.y/SPATIAL_CELL),floori(rect.end.y/SPATIAL_CELL)+1):
-					var bucket:Array=buckets.get(Vector2i(x,y),[])
-					bucket.erase(rect)
+		_erase_static_rect(rect)
 		info["rect"]=rect
 		records.append(info)
 	_refresh_land_cells(hit)
@@ -1154,12 +1174,7 @@ func collapse_blocks(indices:Array,area:Rect2)->Array:
 		if k<0 or k>=blocks.size() or blocks[k].size==Vector2.ZERO:continue
 		var rect:Rect2=blocks[k]
 		blocks[k]=Rect2(-9999,-9999,0,0)
-		for kind in ["solid","building"]:
-			var buckets:Dictionary=_static_index.get(kind,{})
-			for x in range(floori(rect.position.x/SPATIAL_CELL),floori(rect.end.x/SPATIAL_CELL)+1):
-				for y in range(floori(rect.position.y/SPATIAL_CELL),floori(rect.end.y/SPATIAL_CELL)+1):
-					var bucket:Array=buckets.get(Vector2i(x,y),[])
-					bucket.erase(rect)
+		_erase_static_rect(rect)
 		removed.append(rect)
 	rubble_zones.append({"rect":area,"speed":RUBBLE_SPEED.duplicate(),"cover":["infantry"],"conceal":1.0,"front":Vector2.UP,"rubble":true})
 	update_field_zones(_zone_input if not _zone_input.is_empty() else field_zones.filter(func(z):return not z.get("rubble",false)))
@@ -1169,9 +1184,28 @@ func collapse_blocks(indices:Array,area:Rect2)->Array:
 func hard_cover_props()->Array:
 	return prop_blocks.filter(func(r):return maxf(r.size.x,r.size.y)>=1.5)
 
+func _wall_blocks()->Array:
+	return blocks if low_obstacle_blocks.is_empty() else blocks.filter(func(r):return not low_obstacle_blocks.has(r))
+
+# Remove both broad phases before refreshing navigation, including entries
+# in the neighboring fine buckets reached by the insertion margin.
+func _erase_static_rect(rect:Rect2)->void:
+	for kind in ["solid","building","sight"]:
+		for nearby in [false,true]:
+			var cell_size:float=NEAR_CELL if nearby else SPATIAL_CELL
+			var index:Dictionary=_static_near_index if nearby else _static_index
+			var buckets:Dictionary=index.get(kind,{})
+			var bounds:Rect2=rect.grow(NEAR_RADIUS+NEAR_PADDING) if nearby and kind!="sight" else rect
+			for x in range(floori(bounds.position.x/cell_size),floori(bounds.end.x/cell_size)+1):
+				for y in range(floori(bounds.position.y/cell_size),floori(bounds.end.y/cell_size)+1):
+					var bucket:Array=buckets.get(Vector2i(x,y),[])
+					bucket.erase(rect)
+
 func rebuild_static_index(invalidate_navigation:bool=true)->void:
 	_static_index.clear()
-	var sets:Dictionary={"solid":blocks+roadside_blocks+prop_blocks,"building":blocks+hard_cover_props(),"cover":woods+static_cover,"tree":trees,"water":water_blocks}
+	_static_near_index.clear()
+	var walls:=_wall_blocks()
+	var sets:Dictionary={"solid":blocks+roadside_blocks+prop_blocks,"sight":walls+roadside_blocks+prop_blocks,"building":walls+hard_cover_props(),"cover":woods+static_cover,"tree":trees,"water":water_blocks}
 	for kind in sets:
 		var buckets:Dictionary={}
 		for value in sets[kind]:
@@ -1182,6 +1216,17 @@ func rebuild_static_index(invalidate_navigation:bool=true)->void:
 					if not buckets.has(id):buckets[id]=[]
 					buckets[id].append(value)
 		_static_index[kind]=buckets
+		if kind in ["solid","sight","building"]:
+			var near_buckets:Dictionary={}
+			var margin:float=0.0 if kind=="sight" else NEAR_RADIUS+NEAR_PADDING
+			for value in sets[kind]:
+				var bounds:Rect2=Rect2(value).grow(margin)
+				for x in range(floori(bounds.position.x/NEAR_CELL),floori(bounds.end.x/NEAR_CELL)+1):
+					for y in range(floori(bounds.position.y/NEAR_CELL),floori(bounds.end.y/NEAR_CELL)+1):
+						var id:=Vector2i(x,y)
+						if not near_buckets.has(id):near_buckets[id]=[]
+						near_buckets[id].append(value)
+			_static_near_index[kind]=near_buckets
 	_static_counts=[blocks.size(),roadside_blocks.size(),prop_blocks.size(),woods.size(),static_cover.size(),trees.size(),water_blocks.size()]
 	if invalidate_navigation:
 		navigation.clear();navigation_weights.clear()
@@ -1191,7 +1236,7 @@ func _ensure_static_index()->void:
 	if _static_counts.is_empty() or _static_counts[0]!=blocks.size() or _static_counts[1]!=roadside_blocks.size() or _static_counts[2]!=prop_blocks.size() or _static_counts[3]!=woods.size() or _static_counts[4]!=static_cover.size() or _static_counts[5]!=trees.size() or _static_counts[6]!=water_blocks.size():rebuild_static_index()
 
 func _static_unindexed()->bool:
-	return not use_static_index or blocks.size()+roadside_blocks.size()+prop_blocks.size()+trees.size()+woods.size()+static_cover.size()+water_blocks.size()<64
+	return not use_static_index or (blocks.size()<64 and blocks.size()+roadside_blocks.size()+prop_blocks.size()+trees.size()+woods.size()+static_cover.size()+water_blocks.size()<64)
 
 func _static_candidates(kind:String,p:Vector2,radius:float)->Array:
 	# Tiny mutable legacy fixtures keep exhaustive semantics, including in-place
@@ -1199,11 +1244,14 @@ func _static_candidates(kind:String,p:Vector2,radius:float)->Array:
 	if _static_unindexed():
 		match kind:
 			"solid":return blocks+roadside_blocks+prop_blocks
-			"building":return blocks+hard_cover_props()
+			"sight":return _wall_blocks()+roadside_blocks+prop_blocks
+			"building":return _wall_blocks()+hard_cover_props()
 			"cover":return woods+static_cover
 			"tree":return trees
 			"water":return water_blocks
 	_ensure_static_index()
+	if radius<=(0.0 if kind=="sight" else NEAR_RADIUS) and _static_near_index.has(kind):
+		return _static_near_index[kind].get(Vector2i((p/NEAR_CELL).floor()),[])
 	var first:=Vector2i(((p-Vector2.ONE*radius)/SPATIAL_CELL).floor())
 	var last:=Vector2i(((p+Vector2.ONE*radius)/SPATIAL_CELL).floor())
 	var buckets:Dictionary=_static_index[kind]

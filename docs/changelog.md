@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-20 — Soldiers reach physical cover
+
+- Soldiers can reach normal and rotated sandbag faces: work goals use the actual body/terrain clearance, and rectangular field works no longer add an oversized circular actor exclusion. Work slots are separated enough for a returning soldier to fit between settled squadmates; reservations also account for adjoining works and nearby sections.
+- Quiet and combat shelter share bounded routes and validation. Blocked approaches expire; destroyed shelter clears its stale state; one displaced soldier can recover while valid occupants stay put. Goals outside the squad leash are rejected before assignment.
+- Shared ground-body profiles align movement and wall cover with the visible geometry of 381 Harbor buildings across 14 families. Authored placement, yaw, decorations and roads stay intact. Low steps/docks block walking without acting as full-height cover or shot blockers; garrison/collapse ownership includes every piece. The other 97 custom buildings retain explicit conservative fallback geometry.
+- Coarse-map infantry shortcuts now use the existing published-edge corner guard after precise collision exposed a between-sample wall graze. Fine-grid legacy routes retain their existing behavior.
+- Narrow obstacle queries use a second spatial index to limit the cost of the more precise geometry. Wide shelter searches retain their original candidate order; collision predicates and search limits stay intact. LOS avoids repeated index validation, and solid interiors are rejected before coastline checks.
+- Added `test_cover_contact.gd` and `test_city_collision.gd` to the core runner and registered the affected garrison-fire and bombard-feedback suites. Updated layout, destruction, bombard, garrison, per-body cover and buddy-aid reunion fixtures to check the intended behavior with physical geometry; original damage/movement assertions and recovery bounds remain.
+- Native before/after captures use identical setup and normal 24-second simulation: all three sandbag soldiers go from standing 3.02–4.49 units outside the obstacle to sheltered/crouched at 0.95; two panel-facade soldiers move from 2.05 to 1.3544 units from the visible wall. Measurements are from soldier centers, and screenshots use the real software-rendered game, not a frame-rate benchmark.
+- The spatial optimization preserves all 48 sampled simulation-state hashes and reduces the new crowded cover-search hotspot from 89.5 to 29.1 ms. The unchanged 25 ms benchmark still has two timing failures versus one on the original baseline; performance acceptance remains open, with the full paired results recorded in the plan.
+- Final validation: Godot 4.5.1, all 24 selected integration suites pass with zero failures, including the previous mission-outcome suites. The Harbor compiler `--check` is reproducible and `git diff --check` passes. This integration result is separate from the unresolved cover-cost timing benchmark.
+- Verification details and remaining scope: [cover-contact review](plans/14-1-cover-contact.md).
+
 ## 2026-10-20 — Harbor victory and current-game documentation
 
 - Harbor can now end in victory after every enemy command post and ammo depot is destroyed before the reserve launches. All objectives must still be held uncontested for the authored duration; an already-dispatched reserve keeps its existing delay, and legacy mission rules remain intact.

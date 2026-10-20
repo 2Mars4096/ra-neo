@@ -604,6 +604,9 @@ static func actor_clear(u:Dictionary,member:Dictionary,to:Vector2,sim) -> bool:
 		var other:Dictionary=entry.unit
 		var peer:Dictionary=entry.actor
 		if not sim.alive(other) or peer.hp<=0:continue
+		# Field works already have their exact (possibly rotated) terrain
+		# footprint. A second, enclosing actor circle blocks usable wall faces.
+		if other.get("structure",false):continue
 		# Retain the original squad broad-phase contract exactly.
 		if other.pos.x<min_x-12.5 or other.pos.x>max_x+12.5 or other.pos.y<min_y-12.5 or other.pos.y>max_y+12.5:continue
 		if other.members.is_empty():
@@ -642,6 +645,9 @@ static func avoidance(u:Dictionary,member:Dictionary,from:Vector2,heading:Vector
 		var other:Dictionary=entry.unit
 		var peer:Dictionary=entry.actor
 		if other.id==u.id or not sim.alive(other) or peer.hp<=0:continue
+		# Terrain routing handles static field works; do not steer away from
+		# their bounding circle while approaching a valid cover slot.
+		if other.get("structure",false):continue
 		var relative:Vector2=peer.pos-from
 		var ahead:float=relative.dot(heading)
 		# Bodies beyond our own slot are not in the way (arrival crowds).

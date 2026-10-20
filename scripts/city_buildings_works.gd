@@ -1,6 +1,7 @@
 extends RefCounted
 # Original procedural works families. No world transform or collision ownership.
 const Kit=preload("res://scripts/parcel_kit.gd")
+const Geometry=preload("res://scripts/city_building_geometry.gd")
 
 static func build(art,parent:Node3D,spec:Dictionary)->void:
 	var b:=Works.new(art,parent,spec)
@@ -49,15 +50,16 @@ class Works:
 				k.fbox(p+along*side*0.55,n,0.22,0.045,0.08,metal.darkened(0.2))
 	func shell(x0:float,x1:float,z0:float,z1:float,h:float)->void:
 		# Hollow, segmented perimeter; ruined sections have uneven surviving heights.
+		var thickness:=2.0*float(Geometry.profile(design).get("wall_outset",0.11))
 		box((x0+x1)/2,0,(z0+z1)/2,x1-x0,0.16,z1-z0,Kit.CONCRETE)
 		for z in [z0,z1]:
 			var count:=maxi(1,int((x1-x0)/3.2))
 			var step:float=(x1-x0)/count
 			for i in count:
 				var top:float=h if damage<2 else h*[0.35,0.8,0.5,0.22][(i+variant)%4]
-				box(x0+(i+0.5)*step,0,z,step,top,0.22,wall,wm)
+				box(x0+(i+0.5)*step,0,z,step,top,thickness,wall,wm)
 		for x in [x0,x1]:
-			box(x,0,(z0+z1)/2,0.22,h if damage<2 else h*0.65,z1-z0,wall,wm)
+			box(x,0,(z0+z1)/2,thickness,h if damage<2 else h*0.65,z1-z0,wall,wm)
 		if damage>0:
 			for i in 3:
 				box(x1-0.6-i*0.36,0.25,z1+0.125,0.38,h*(0.25+i*0.09),0.025,Color("49483f"))
@@ -113,8 +115,9 @@ class Works:
 			"fort_ruin":fort()
 		finish_damage()
 	func house()->void:
-		var x0:float=-w/2+0.45;var x1:float=w/2-0.45
-		var z0:float=-d/2+1.25;var z1:float=d/2-0.4
+		var body:=Geometry.shell_rect(design,Vector2(w,d))
+		var x0:float=body.position.x;var x1:float=body.end.x
+		var z0:float=body.position.y;var z1:float=body.end.y
 		var h:float=floors*2.7
 		shell(x0,x1,z0,z1,h)
 		if design=="stone_house":
@@ -144,8 +147,10 @@ class Works:
 						window_at(Vector3(x,f*2.7+1.45,z),Vector3(0,0,-1 if z<0 else 1),design=="stone_house")
 				window_at(Vector3(x1+0.12,f*2.7+1.45,(z0+z1)/2),Vector3.RIGHT,design=="stone_house")
 			k.door(Vector3(x1-0.65,0.06,z0-0.13),Vector3.FORWARD,0.8,2.0,Kit.TIMBER,false)
-			box(0,0,z0-0.65,minf(2.5,w-0.5),0.22,1.05,Kit.CONCRETE)
-			for x in [-0.95,0.95]:box(x,0.22,z0-1.0,0.09,2.1,0.09,Kit.TIMBER)
+			var porch:=Geometry.porch_rect(design,Vector2(w,d))
+			var details:Dictionary=Geometry.profile(design).porch
+			box(porch.get_center().x,0,porch.get_center().y,porch.size.x,float(details.height),porch.size.y,Kit.CONCRETE)
+			for side in [-1,1]:box(side*float(details.post_side),float(details.height),z0-float(details.post_front_offset),float(details.post_size),float(details.post_height),float(details.post_size),Kit.TIMBER)
 			k.lean_roof(-1.1,1.1,z0,z0-1.1,2.65,2.4,k.metalmat(metal))
 			k.chimney(x0+0.65,z1-0.65,h,h+1.7,Kit.BRICK,1)
 			# Visible plinth and occasional exposed limestone patches.
@@ -185,14 +190,17 @@ class Works:
 		var workshop:bool=design=="workshop_hall"
 		var h:float=7.5 if port else 3.6
 		var rise:float=(1.65+0.1*variant) if port else (1.2+0.1*variant)
-		var x0:float=-w/2+0.5;var x1:float=w/2-0.5
-		var z0:float=-d/2+1.35;var z1:float=d/2-1.35
+		var body:=Geometry.shell_rect(design,Vector2(w,d))
+		var x0:float=body.position.x;var x1:float=body.end.x
+		var z0:float=body.position.y;var z1:float=body.end.y
 		shell(x0,x1,z0,z1,h)
 		gable(x0-0.2,x1+0.2,z0-0.2,z1+0.2,h,rise)
 		var bays:=maxi(2,int((w-1)/5.5));var step:float=(x1-x0)/bays
+		var dock_details:Dictionary=Geometry.profile(design).dock
+		for dock in Geometry.dock_rects(design,Vector2(w,d)):
+			box(dock.get_center().x,float(dock_details.base),dock.get_center().y,dock.size.x,float(dock_details.height),dock.size.y,Kit.CONCRETE)
 		for z in [z0-0.15,z1+0.15]:
 			var n:=Vector3(0,0,-1 if z<0 else 1)
-			box(0,0.08,z+n.z*0.4,w-1.0,0.45,1.0,Kit.CONCRETE)
 			for i in bays:
 				var x:float=x0+(i+0.5)*step
 				if damage==2:continue
@@ -214,7 +222,8 @@ class Works:
 		if damage<2:
 			for z in [-d*0.22,0,d*0.22]:window_at(Vector3(x1+0.13,h-1.3,z),Vector3.RIGHT)
 	func office()->void:
-		var x0:float=-w/2+0.45;var x1:float=w/2-0.45;var z0:float=-d/2+0.65;var z1:float=d/2-0.45
+		var body:=Geometry.shell_rect(design,Vector2(w,d))
+		var x0:float=body.position.x;var x1:float=body.end.x;var z0:float=body.position.y;var z1:float=body.end.y
 		var h:float=floors*2.7
 		shell(x0,x1,z0,z1,h)
 		if design=="barracks":gable(x0-0.15,x1+0.15,z0-0.15,z1+0.15,h,1.3,true)
@@ -233,7 +242,8 @@ class Works:
 			for y in [h+0.6,h+1.6]:box(0,y,z1-0.65,6.2,0.08,0.08,Kit.IRON)
 			for i in 5:box(-2.4+i*1.2,h+0.8,z1-0.64,0.65,0.65,0.08,metal)
 	func booth()->void:
-		var x0:float=-w/2+0.5;var x1:float=w/2-0.5;var z0:float=-d/2+0.5;var z1:float=d/2-0.5
+		var body:=Geometry.shell_rect(design,Vector2(w,d))
+		var x0:float=body.position.x;var x1:float=body.end.x;var z0:float=body.position.y;var z1:float=body.end.y
 		shell(x0,x1,z0,z1,2.7);flat(x0-0.2,x1+0.2,z0-0.2,z1+0.2,2.75)
 		if damage<2:
 			for z in [z0-0.12,z1+0.12]:window_at(Vector3(0,1.6,z),Vector3(0,0,-1 if z<0 else 1))

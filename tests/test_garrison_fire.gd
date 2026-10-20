@@ -31,10 +31,12 @@ func side_spot(sim,building:Dictionary,dir:Vector2)->Vector2:
 	if not sim.terrain.line_clear(edge+dir*0.7,p):return Vector2(-1,-1)
 	return p
 
-# An L-shaped (multi-part) block with a doorway and open ground on at least three faces.
+# An authored L-shaped block with a doorway and open ground on three faces.
+# Several collision rectangles can also describe a rotated rectangular body,
+# so collider count does not identify the intended compound-building fixture.
 func pick_building(sim)->Dictionary:
 	for b in Garrison.index(sim).buildings:
-		if b.rects.size()<2 or int(b.capacity)<2 or b.bounds.size.x<12 or b.bounds.size.y<12 or b.bounds.size.x>40 or b.bounds.size.y>40:continue
+		if b.design!="classic_corner" or int(b.capacity)<2 or b.bounds.size.x<12 or b.bounds.size.y<12 or b.bounds.size.x>40 or b.bounds.size.y>40:continue
 		var open:=SIDES.filter(func(dir):return side_spot(sim,b,dir).x>=0)
 		if open.size()<3:continue
 		if Garrison.entry_point(sim,b.id,b.bounds.get_center()).x<0:continue
