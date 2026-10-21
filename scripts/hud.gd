@@ -9,7 +9,8 @@ const TEAL := Color("b8ca83")
 const ORANGE := Color("dab273")
 const RED := Color("df8066")
 const Notice := preload("res://scripts/notice_feed.gd")
-const SCENARIO_LABELS := {"coast":"COAST","fields":"FIELDS","urban":"URBAN","showcase":"SHOWCASE","classic":"SKIRMISH","riverside_town":"TOWN"}
+const BattlefieldInterface := preload("res://scripts/battlefield_interface.gd")
+const SCENARIO_LABELS := {"coast":"COAST","fields":"FIELDS","urban":"URBAN","showcase":"SHOWCASE","classic":"SKIRMISH","riverside_town":"TOWN","black_sea_harbor":"BLACK SEA HARBOR"}
 # Player-facing summaries of the effects FieldOps.tick applies.
 const FIELD_FUNCTIONS := {"tactical_cover":"Infantry cover barrier once complete · T rotates","observation_post":"Raised post with 24 m sight","repair_point":"Repairs land vehicles within 10 m out of combat","aid_post":"Treats wounded living soldiers within 10 m; no revival","concertina_wire":"Slows infantry to a crawl; tracked vehicles crush it · T rotates","tank_obstacles":"Hedgehogs stop tracked and wheeled vehicles; infantry pass with cover · T rotates","fighting_trench":"Dug-in infantry cover inside the trench · T rotates","vehicle_berm":"Armoured vehicles: 40% less ground fire damage from front/sides","camouflage_net":"Land units spotted at half range; firing reveals them for 3s","forward_supply_point":"Land entry needs a connected route and no seen enemy within 18 m; otherwise uses rear","bunker":"Concrete MG pillbox: pins and cuts down infantry; needs tanks or AT fire to destroy","at_gun":"Dug-in anti-tank gun: long-range fire against armour and boats","command_post":"Radio command post: 28 m observation; enemy reserves stage from command posts","ammo_depot":"Ammunition dump: enemy counterattacks need a depot or command post"}
 const FIELD_LABELS := {"tactical_cover":"COVER","observation_post":"OBS","repair_point":"REPAIR","aid_post":"AID","concertina_wire":"WIRE","tank_obstacles":"AT OBST","fighting_trench":"TRENCH","vehicle_berm":"BERM","camouflage_net":"NET","forward_supply_point":"SUPPLY","bunker":"BUNKER","at_gun":"AT GUN","command_post":"CMD POST","ammo_depot":"DEPOT"}
@@ -28,6 +29,7 @@ const FIELD_ORDERS := [
 	["FPV / WORKS","FPV button, then click a seen enemy. Drag lays lines; T rotates."]]
 const UNIT_NAMES := {"rifle":"RIFLE SECTION","atgm":"AT TEAM","engineer":"ENGINEERS","tank":"MAIN BATTLE TANK","drone":"SCOUT UAV","helo":"GUNSHIP","boat":"CORVETTE","aa":"AIR DEFENSE","harvester":"HARVESTER","fpv_drone":"FPV DRONE"}
 var battle: Node3D
+var battlefield_ui=BattlefieldInterface.new()
 var scenario_entries: Array[Dictionary] = []
 var preview_key := ""
 var preview_reason := ""
@@ -182,6 +184,7 @@ func _draw() -> void:
 # only when something it shows may have changed.
 func frame() -> void:
 	if layers.is_empty():return
+	battlefield_ui.update(self)
 	layers[0].queue_redraw()
 	layers[2].queue_redraw()
 	if sidebar_state()!=sidebar_key or sidebar_clock()-sidebar_msec>=SIDEBAR_INTERVAL_MSEC:layers[1].queue_redraw()
@@ -190,6 +193,18 @@ func frame() -> void:
 func sidebar_state() -> Array:
 	var sim=battle.sim
 	return [size,pointer(),battle.selected.hash(),battle.build_mode,battle.build_rotated,battle.attack_mode,battle.strike_mode,battle.paused,battle.show_help,sim.result,int(sim.credits)]
+
+# Battle's dispatcher delegates only interface actions here. This layer never
+# creates simulation orders, supply or tutorial success states.
+func handle_action(action:String,_point:Vector2)->bool:
+	return battlefield_ui.handle_action(self,action)
+
+func observe_event(event:Dictionary)->void:
+	if not is_instance_valid(battle):return
+	battlefield_ui.observe_event(event,battle.sim)
+
+func compact_layout()->bool:
+	return size.y<800
 
 func draw_layer(canvas:CanvasItem,part:int) -> void:
 	if not is_instance_valid(battle):
@@ -263,8 +278,9 @@ func draw_world(sim) -> void:
 	for obj in sim.objectives:
 		var p: Vector2 = battle.screen_pos(obj.pos,1)
 		if battlefield_rect().has_point(p) and p.y>80:
-			panel(Rect2(p+Vector2(-44,-22),Vector2(88,22)),INK)
-			text_at(obj.name,p+Vector2(-34,-7),11,TEAL if obj.owner==0 else ORANGE,true)
+			var label_width:float=clampf(bold.get_string_size(obj.name,HORIZONTAL_ALIGNMENT_LEFT,-1,11).x+20,88,160)
+			panel(Rect2(p+Vector2(-label_width/2,-22),Vector2(label_width,22)),INK)
+			text_at(fit_bold(obj.name,label_width-20,11),p+Vector2(-label_width/2+10,-7),11,TEAL if obj.owner==0 else ORANGE,true)
 	for u in sim.units:
 		if not sim.alive(u) or not u.visible:
 			continue
@@ -276,26 +292,30 @@ func draw_world(sim) -> void:
 			cv.draw_rect(Rect2(p+Vector2(-15,0),Vector2(30,4)),INK)
 			cv.draw_rect(Rect2(p+Vector2(-15,0),Vector2(30*maxf(0,u.hp/u.max_hp),4)),TEAL if u.team==0 else RED)
 		# Inbound strike drones are tagged so the threat reads before it dives.
-		if u.kind=="fpv_drone" and u.team!=0 and not selected:text_at("FPV",p+Vector2(-9,-7),9,RED,true)
+		if u.kind=="fpv_drone" and u.team!=0 and not selected and not BattlefieldInterface.tactical_icons(battle.camera_size):text_at("FPV",p+Vector2(-9,-7),9,RED,true)
 		var status_row:=false
+		var status_y:float=-40 if BattlefieldInterface.tactical_icons(battle.camera_size) else -20
 		if selected:
-			text_at("FPV" if u.kind=="fpv_drone" else str(u.kind).to_upper(),p+Vector2(-15,-7),9,TEAL,true)
+			if not BattlefieldInterface.tactical_icons(battle.camera_size):text_at("FPV" if u.kind=="fpv_drone" else str(u.kind).to_upper(),p+Vector2(-15,-7),9,TEAL,true)
 			status_row=true
 			if u.suppression>0.6:
-				text_at("PINNED",p+Vector2(-21,-20),10,ORANGE,true)
+				text_at("PINNED",p+Vector2(-21,status_y),10,ORANGE,true)
 			elif u.recovering:
-				text_at("REPAIR +",p+Vector2(-23,-20),10,TEAL,true)
+				text_at("REPAIR +",p+Vector2(-23,status_y),10,TEAL,true)
 			elif BUILDING_STATES.has(u.get("visual_state","")):
 				var building_state:String=u.visual_state
-				text_at(building_state,p+Vector2(-font.get_string_size(building_state,HORIZONTAL_ALIGNMENT_LEFT,-1,10).x/2,-20),10,TEAL,true)
+				text_at(building_state,p+Vector2(-font.get_string_size(building_state,HORIZONTAL_ALIGNMENT_LEFT,-1,10).x/2,status_y),10,TEAL,true)
 			else:status_row=false
+		if BattlefieldInterface.tactical_icons(battle.camera_size) and (not u.get("structure",false) or BattlefieldInterface.ROLE_LABELS.has(u.kind)):
+			battlefield_ui.draw_role(self,u,p)
 		# Vehicle component damage (u.visible already hides unseen enemies); two
 		# tags at most in the world, the full list is in the selected-unit panel.
 		if u.has("crew"):
 			var tags:=damage_tags(sim,u)
 			if not tags.is_empty():
 				var tag:String=" · ".join(tags.slice(0,2))
-				text_at(tag,p+Vector2(-font.get_string_size(tag,HORIZONTAL_ALIGNMENT_LEFT,-1,9).x/2,-32 if status_row else -20),9,ORANGE if u.team==0 else RED,true)
+				var tag_y:float=(-56 if status_row else -28) if BattlefieldInterface.tactical_icons(battle.camera_size) else (-32 if status_row else -20)
+				text_at(tag,p+Vector2(-font.get_string_size(tag,HORIZONTAL_ALIGNMENT_LEFT,-1,9).x/2,tag_y),9,ORANGE if u.team==0 else RED,true)
 		if u.team==0 and u.suppression>0.1:
 			cv.draw_rect(Rect2(p+Vector2(-15,6),Vector2(30*u.suppression,2)),ORANGE)
 		if u.team==0 and float(u.get("build_left",0.0))>0:
@@ -322,22 +342,24 @@ func draw_world(sim) -> void:
 	# A compact field console keeps the central battle unobstructed.
 	console_panel(Rect2(0,0,w,42))
 	text_at("RA / NEO",Vector2(16,27),16,WHITE,true)
-	text_at(sim.scenario.name.to_upper(),Vector2(120,27),12,MUTED,true)
-	text_at("SUPPLY  %04d" % int(sim.credits),Vector2(w-510,27),15,TEAL,true)
-	text_at("%02d:%02d" % [int(sim.time)/60,int(sim.time)%60],Vector2(w-340,27),13,WHITE)
+	text_at(fit_bold(sim.scenario.name.to_upper(),w-856,12),Vector2(120,27),12,MUTED,true)
+	text_at("SUPPLY  %04d" % int(sim.credits),Vector2(w-560,27),15,TEAL,true)
+	text_at("%02d:%02d" % [int(sim.time)/60,int(sim.time)%60],Vector2(w-392,27),13,WHITE)
+	button("settings","SETTINGS",Rect2(w-333,7,72,28))
 	button("pause","RESUME" if battle.paused else "PAUSE",Rect2(w-255,7,80,28))
 	button("help","GUIDE",Rect2(w-169,7,76,28))
 	button("restart","RESTART",Rect2(w-87,7,78,28))
 	if not sim.classic.is_empty():
 		var power:Vector2=sim.Classic.power(sim,0)
-		text_at("POWER %d / %d" % [power.y,power.x],Vector2(w-670,27),12,ORANGE if power.y>power.x else MUTED)
+		text_at("POWER %d / %d" % [power.y,power.x],Vector2(w-720,27),12,ORANGE if power.y>power.x else MUTED)
 	else:
-		if not sim.field_ops.is_empty():text_at("INCOME +%s/s" % String.num(float(sim.field_ops.income_rate)),Vector2(w-640,27),12,MUTED,true)
+		if not sim.field_ops.is_empty():text_at("INCOME +%s/s" % String.num(float(sim.field_ops.income_rate)),Vector2(w-690,27),12,MUTED,true)
 		var badges:=objective_badges(sim)
 		for i in badges.size():
 			var obj:Dictionary=sim.objectives[i]
 			var badge:Rect2=badges[i]
 			console_panel(badge)
+			hits.append({"id":"mission:objective:%d" % i,"rect":badge,"enabled":true})
 			var state_text:String="CONTESTED" if obj.get("contested",false) else ("SECURED" if obj.owner==0 else "%d%%" % int(obj.progress/sim.capture_time*100))
 			var state_width:=font.get_string_size(state_text,HORIZONTAL_ALIGNMENT_LEFT,-1,10).x
 			text_at(fit_bold(obj.name,badge.size.x-state_width-24,11),badge.position+Vector2(8,18),11,TEAL if obj.owner==0 else ORANGE,true)
@@ -345,7 +367,8 @@ func draw_world(sim) -> void:
 	if sim.scenario.get("autonomy",false):
 		text_at("%s  ·  Sight %d%%" % [sim.weather.label,roundi(sim.weather.sight_scale*100)],Vector2(w-530,65),11,WHITE)
 	# The sector hold countdown sits under the badge row so it never covers a badge.
-	if sim.score_hold>0:
+	if sim.scenario.get("id","")=="black_sea_harbor":battlefield_ui.draw_mission(self)
+	elif sim.score_hold>0:
 		console_panel(Rect2(12,86,124,24))
 		text_at("HOLD  %02ds" % ceili(float(sim.scenario.hold)-sim.score_hold),Vector2(22,103),13,TEAL,true)
 
@@ -360,6 +383,7 @@ func draw_top(sim) -> void:
 	var badge_row:Array=objective_badges(sim) if sim.classic.is_empty() else []
 	if not badge_row.is_empty() and badge_row[-1].intersects(pause_rect.grow(6)):pause_rect.position.y=86
 	var toast_y:=90.0 if pause_rect.position.y<86 else 122.0
+	if sim.scenario.get("id","")=="black_sea_harbor":toast_y=maxf(toast_y,172)
 	if battle.strike_mode:draw_strike_reticle(sim)
 	# The attack-move / strike mode banner first, then the notice stack under it.
 	if battle.attack_mode or battle.strike_mode:
@@ -374,6 +398,10 @@ func draw_top(sim) -> void:
 		text_at("TACTICAL PAUSE",pause_rect.position+Vector2(21,20),13,TEAL,true)
 	if battle.cursor_hint!="" and not battle.show_help and sim.result=="":draw_cursor_hint()
 	if battle.notices.cursor_left>0 and not battle.show_help and sim.result=="":draw_cursor_notice()
+	if not battle.show_help and sim.result=="" and not battlefield_ui.menu_open(battle):
+		battlefield_ui.draw_roster(self)
+		battlefield_ui.draw_tutorial(self)
+		battlefield_ui.draw_enemy_hover(self)
 	if battle.show_help:draw_guide()
 	if sim.result!="":draw_result()
 
@@ -560,10 +588,12 @@ func draw_sidebar(sim) -> void:
 			cv.draw_line(Vector2(bolt_x-1,y),Vector2(bolt_x+1,y),INK,1)
 	text_at("TACTICAL DISPLAY",Vector2(x+19,65),11,MUTED,true)
 	text_at("N ↑",Vector2(size.x-45,65),11,WHITE,true)
-	minimap=Rect2(x+19,74,230,145)
+	var compact:bool=compact_layout() and not sim.field_ops.is_empty()
+	minimap=Rect2(x+19,68 if compact else 74,230,100 if compact else 145)
 	draw_minimap(sim)
-	cv.draw_line(Vector2(x+18,243),Vector2(size.x-18,243),LINE,1)
-	text_at("PRODUCTION" if not sim.classic.is_empty() else "REINFORCEMENTS",Vector2(x+19,263),12,WHITE,true)
+	var production_top:float=224 if compact else 274
+	cv.draw_line(Vector2(x+18,production_top-31),Vector2(size.x-18,production_top-31),LINE,1)
+	text_at("PRODUCTION" if not sim.classic.is_empty() else "REINFORCEMENTS",Vector2(x+19,production_top-11),12,WHITE,true)
 	var types:Array=["rifle","atgm","tank","drone","helo","boat","aa"]
 	if not sim.classic.is_empty():types.append("harvester")
 	elif not sim.field_ops.is_empty():types=sim.FieldOps.PURCHASES
@@ -571,17 +601,18 @@ func draw_sidebar(sim) -> void:
 	for i in types.size():
 		var kind:String=types[i]
 		var definition:Dictionary=sim.definitions[kind]
-		var compact:bool=not sim.field_ops.is_empty()
-		var tile:=Rect2(x+18+(i%2)*119,274+(i/2)*(52 if compact else 67),113,48 if compact else 61)
+		var field_tiles:bool=not sim.field_ops.is_empty()
+		var row_height:float=44 if compact else (52 if field_tiles else 67)
+		var tile:=Rect2(x+18+(i%2)*119,production_top+(i/2)*row_height,113,row_height-4 if field_tiles else 61)
 		var field:bool=not sim.field_ops.is_empty()
 		var enabled:bool=sim.credits>=float(definition.cost) and (sim.recruit_clock<=0 or field)
 		if field:enabled=enabled and sim.FieldOps.queue(sim).size()<sim.FieldOps.QUEUE_LIMIT
 		if not sim.classic.is_empty():enabled=enabled and sim.Classic.production_reason(sim,kind,0)==""
 		button("buy:"+kind,"",tile,enabled)
-		cv.draw_rect(Rect2(tile.position+Vector2(2,2),Vector2(tile.size.x-4,38)),Color("151b19"))
+		cv.draw_rect(Rect2(tile.position+Vector2(2,2),Vector2(tile.size.x-4,minf(38,tile.size.y-12))),Color("151b19"))
 		if portraits.has(kind):
 			var portrait:Texture2D=portraits[kind]
-			var portrait_height:=28.0 if tile.size.y<55 else 38.0
+			var portrait_height:=22.0 if compact else (28.0 if tile.size.y<55 else 38.0)
 			var portrait_width:float=portrait_height*portrait.get_width()/portrait.get_height()
 			cv.draw_texture_rect(portrait,Rect2(tile.position+Vector2((tile.size.x-portrait_width)*0.5,2),Vector2(portrait_width,portrait_height)),false,Color(1,1,1,1) if enabled else Color(0.65,0.68,0.63,1))
 		else:
@@ -612,7 +643,7 @@ func draw_sidebar(sim) -> void:
 	for id in battle.selected:
 		var unit:Dictionary=sim.get_unit(id)
 		if sim.alive(unit):units.append(unit)
-	var y:=maxf(632,height-174)
+	var y:=height-174 if compact else maxf(632,height-174)
 	cv.draw_line(Vector2(x+18,y-10),Vector2(size.x-18,y-10),LINE,1)
 	var heading:="SELECT YOUR FORCE"
 	var detail:="Drag a box or click a section."
@@ -714,7 +745,7 @@ func draw_queue_badge(sim,kind:String,tile:Rect2) -> void:
 # FPV strike shares the REINFORCEMENTS header row; a bar and countdown show the cooldown.
 func draw_strike_tile(sim,x:float) -> void:
 	var reason:String=sim.FieldOps.strike_reason(sim)
-	var tile:=Rect2(x+145,248,105,22)
+	var tile:=Rect2(x+145,198 if compact_layout() else 248,105,22)
 	var cooling:float=sim.FieldOps.strike_ready_in(sim)
 	button("strike:fpv","",tile,reason=="",battle.strike_mode)
 	var label:="FPV STRIKE" if cooling<=0 else "FPV %ds" % ceili(cooling)
@@ -730,16 +761,17 @@ func draw_strike_tile(sim,x:float) -> void:
 
 func draw_field_works(sim,x:float) -> void:
 	var engineer:int=battle.selected_engineer()
-	# Fourteen works in a three-column grid that ends above the selection panel
-	# divider (y 622) at the smallest supported height (800 px).
-	text_at("FIELD WORKS",Vector2(x+19,494),11,MUTED,true)
-	text_at("ENGINEER SELECTED" if engineer>=0 else "SELECT ENGINEERS",Vector2(x+130,494),10,TEAL if engineer>=0 else ORANGE,true)
+	# Fourteen works in a three-column grid remain above the selection divider,
+	# including the compact 720 px layout.
+	var top:float=415 if compact_layout() else 499
+	text_at("FIELD WORKS",Vector2(x+19,top-5),11,MUTED,true)
+	text_at("ENGINEER SELECTED" if engineer>=0 else "SELECT ENGINEERS",Vector2(x+130,top-5),10,TEAL if engineer>=0 else ORANGE,true)
 	var kinds:Array=battle.field_choices().keys()
 	for i in kinds.size():
 		var kind:String=kinds[i]
 		var choice:Dictionary=battle.field_choice(kind)
 		var reason:=field_block_reason(sim,kind,engineer)
-		var tile:=Rect2(x+18+(i%3)*79,499+(i/3)*24,75,22)
+		var tile:=Rect2(x+18+(i%3)*79,top+(i/3)*24,75,22)
 		button("build:"+kind,"",tile,reason=="",battle.build_mode==kind)
 		text_at(FIELD_LABELS.get(kind,kind.to_upper()),tile.position+Vector2(5,14),9,WHITE if reason=="" else MUTED,true)
 		var price:=str(int(choice.get("cost",0)))
@@ -813,7 +845,7 @@ func draw_minimap(sim) -> void:
 			if u.get("structure",false) and not sim.field_ops.is_empty():
 				var complete:bool=float(u.get("build_left",0.0))<=0
 				# Width applies to the outline only (Godot warns when it is given with a fill).
-				cv.draw_rect(Rect2(p-Vector2(2.5,2.5),Vector2(5,5)),WHITE if battle.selected.has(u.id) else TEAL,complete,-1.0 if complete else 1.0)
+				cv.draw_rect(Rect2(p-Vector2(2.5,2.5),Vector2(5,5)),BattlefieldInterface.structure_color(self,u,battle.selected.has(u.id)),complete,-1.0 if complete else 1.0)
 			else:cv.draw_circle(p,3 if battle.selected.has(u.id) else 2,TEAL if u.team==0 else RED)
 	for obj in sim.objectives:
 		var p: Vector2=minimap.position+obj.pos/sim.terrain.world_size*minimap.size
@@ -928,7 +960,10 @@ func draw_guide() -> void:
 	var width:=(632.0-7.0*(count-1))/count
 	for i in count:
 		button("scenario:"+str(listed[i].index),listed[i].label,Rect2(r.position+Vector2(34+i*(width+7.0),119),Vector2(width,25)),true,active==listed[i].index)
-	button("begin","DEPLOY  →",Rect2(r.position+Vector2(34,446+extra),Vector2(632,38)))
+	if battle.sim.scenario.get("id","")=="black_sea_harbor":
+		button("tutorial:start","DEPLOY WITH FIELD GUIDE",Rect2(r.position+Vector2(34,446+extra),Vector2(292,38)))
+		button("begin","DEPLOY  →",Rect2(r.position+Vector2(334,446+extra),Vector2(332,38)))
+	else:button("begin","DEPLOY  →",Rect2(r.position+Vector2(34,446+extra),Vector2(632,38)))
 
 func draw_result() -> void:
 	cv.draw_rect(Rect2(Vector2.ZERO,size),Color(0.035,0.043,0.035,0.82))

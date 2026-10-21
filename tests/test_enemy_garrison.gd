@@ -101,7 +101,20 @@ func _init()->void:
 			var near:bool=FieldOps.nearest_site(sim,victim,sites[0]+sites[1]+sites[2],func(b):return int(buildings[b].state)==0)>=0
 			print("evicted section %d: role %s, next building %d (lost %d)" % [victim.id,victim.get("garrison_role",false),next,lost])
 			check(next!=lost,"never re-enters the collapsed building")
-			check((next>=0 and int(buildings[next].state)==0) or (not near and not victim.get("garrison_role",false)),"evicted section re-garrisons a nearby intact building")
+			if victim.get("combat_ineffective",false):
+				# The seeded collapse leaves this ATGM section with a severely
+				# wounded survivor. Alive/selectable does not mean able to walk.
+				check(next<0 and victim.orders.is_empty() and not victim.get("garrison_role",false),"downed collapse survivors do not receive impossible garrison orders")
+				# Positive control: normal medical recovery makes the same
+				# survivor able to enter an available nearby building again.
+				sim.Infantry.recover(victim,victim.max_hp*3.0)
+				check(not victim.get("combat_ineffective",false),"medical treatment restores an able collapse survivor")
+				sim.field_ops.garrison_next=0.0
+				run(sim,0.2)
+				next=int(victim.get("garrison_target",victim.get("garrison",-1)))
+				check(next>=0 and next!=lost and int(buildings[next].state)==0,"recovered collapse survivor re-garrisons an intact nearby building")
+			else:
+				check((next>=0 and int(buildings[next].state)==0) or (not near and not victim.get("garrison_role",false)),"able evicted section re-garrisons a nearby intact building")
 		else:print("evicted section buried in the collapse; re-garrison path not exercised here")
 
 	# Wave attackers and the counterattack reserve never garrison.

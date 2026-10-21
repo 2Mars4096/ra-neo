@@ -1,6 +1,7 @@
 extends SceneTree
-# Headless presentation CPU on the harbor during the busy fight of
-# profile_harbor_combat.gd. Per rendered frame it brackets the idle step: from a
+# Headless presentation CPU on the historical synthetic extra-force/time-jumped
+# setup of profile_harbor_combat.gd; sustained combat is NOT asserted. Per engine
+# process frame it brackets the idle step: from a
 # node processed first (lowest priority) to RenderingServer.frame_pre_draw, i.e.
 # every _process (battle sync/animation/fog/effects), HUD _draw callbacks and the
 # transform-notification flush. The 30 Hz simulation tick runs before that window
@@ -29,6 +30,7 @@ func harbor_index()->int:
 		if configs[i].id=="black_sea_harbor":return i
 	return -1
 func _init()->void:
+	print("SCOPE: synthetic transit presentation CPU; combat not asserted. Dummy-renderer samples are not rendered/GPU frame times.")
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seconds="):seconds=float(arg.trim_prefix("--seconds="))
 	Sim.scenario_selection=harbor_index()

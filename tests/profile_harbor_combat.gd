@@ -1,8 +1,9 @@
 extends SceneTree
-# CPU cost of the simulation tick on the harbor map during a busy fight:
-# full enemy defences plus two assault waves converging on a player position.
-# The simulation is deterministic, so `-- --repeat=N` replays the same fight N
-# times and also reports the per-tick minimum (filters other processes' noise).
+# Historical synthetic workload: extra player units plus time-jumped assault
+# waves. The 30 seconds can be transit without sustained fire. It is NOT the
+# normal-mission busy-combat acceptance case; use profile_harbor_busy.gd for that.
+# --repeat=N also reports per-tick minima as a noise diagnostic, not a percentile
+# of real frames. No renderer or GPU work is measured.
 const Sim=preload("res://scripts/simulation.gd")
 const FieldOps=preload("res://scripts/field_ops.gd")
 const BUDGET_MS:=33.0
@@ -72,6 +73,7 @@ func fight(report:bool)->Array:
 	return costs
 var fingerprinting:=false
 func _init()->void:
+	print("SCOPE: synthetic extra-force/time-jumped transit; combat activity is not asserted. CPU only, no rendered frames.")
 	var repeat:=1
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--repeat="):repeat=maxi(1,int(arg.get_slice("=",1)))

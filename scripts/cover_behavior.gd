@@ -228,17 +228,30 @@ static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 
 # Candidate points within the leash that offer cover and room for a soldier.
 static func _shelter_points(u:Dictionary,sim) -> Array:
+	var lap:int=Time.get_ticks_usec() if sim.profiling else 0
 	var points:Array[Vector2]=[]
+	var protected:=PackedByteArray()
 	for ring in [1.2,2.4,3.6,5.5,7.5,9.0]:
-		for index in 16:points.append(u.pos+Vector2.from_angle(index*TAU/16)*ring)
+		for index in 16:
+			points.append(u.pos+Vector2.from_angle(index*TAU/16)*ring)
+			protected.append(0)
 	# Sample the actual thin wall bands; coarse circular rings miss them. Yard
 	# walls, cars and kiosks (hard cover props) screen as well as buildings.
-	for wall in sim.terrain._static_candidates("building",u.pos,LEASH)+sim.terrain.dynamic_blocks:
-		if not wall.grow(LEASH).has_point(u.pos):continue
-		for x in range(ceili(wall.position.x),floori(wall.end.x)+1,1 if wall.size.x<8 else 2):
-			points.append(Vector2(x,wall.position.y-1.05));points.append(Vector2(x,wall.end.y+1.05))
-		for y in range(ceili(wall.position.y),floori(wall.end.y)+1,2):
-			points.append(Vector2(wall.position.x-1.05,y));points.append(Vector2(wall.end.x+1.05,y))
+	var wall_groups:Array=[sim.terrain._static_candidates("building",u.pos,LEASH),sim.terrain.dynamic_blocks]
+	for source in wall_groups.size():
+		# These samples are 1.05 units outside a cover wall: strictly inside
+		# its 1.4-unit cover band. The source proves cover, but never clearance
+		# from a neighboring wall. Field-mode dynamic blocks need the full
+		# cover query because not every dynamic blocker supplies cover.
+		var known_cover:int=1 if sim.terrain.style=="showcase" and (source==0 or not sim.terrain.field_mode) else 0
+		for wall in wall_groups[source]:
+			if not wall.grow(LEASH).has_point(u.pos):continue
+			for x in range(ceili(wall.position.x),floori(wall.end.x)+1,1 if wall.size.x<8 else 2):
+				points.append(Vector2(x,wall.position.y-1.05));points.append(Vector2(x,wall.end.y+1.05))
+				protected.append(known_cover);protected.append(known_cover)
+			for y in range(ceili(wall.position.y),floori(wall.end.y)+1,2):
+				points.append(Vector2(wall.position.x-1.05,y));points.append(Vector2(wall.end.x+1.05,y))
+				protected.append(known_cover);protected.append(known_cover)
 	# Trench and hedgehog interiors are protective positions in their own right.
 	for zone in sim.terrain.field_zones:
 		if not ("infantry" in zone.cover) or not zone.rect.grow(LEASH).has_point(u.pos):continue
@@ -247,14 +260,20 @@ static func _shelter_points(u:Dictionary,sim) -> Array:
 		for i in int(length/1.3):
 			var t:=(i+0.5)*1.3
 			points.append(zone.rect.position+(Vector2(t,zone.rect.size.y/2) if long_x else Vector2(zone.rect.size.x/2,t)))
+			protected.append(1) # Interior of a zone explicitly granting infantry cover.
+	if sim.profiling:lap=sim._lap("cover_points_generate",lap)
 	var shelters:Array=[]
-	for point in points:
+	for i in points.size():
+		var point:Vector2=points[i]
 		if point.distance_to(u.pos)>LEASH:continue
-		if not sim.terrain.cover(point) or not sim.terrain.traversable(point,"land",0.8):continue
+		if protected[i]==0 and not sim.terrain.cover(point):continue
+		if not sim.terrain.traversable(point,"land",0.8):continue
 		shelters.append(point)
+	if sim.profiling:sim._lap("cover_points_filter",lap)
 	return shelters
 
 static func _pick_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threats:Array,occupants:Array,shelters:Array) -> Dictionary:
+	var lap:int=Time.get_ticks_usec() if sim.profiling else 0
 	var candidates:Array=[]
 	# Occupied spots (bodies and friendly cover goals) do not depend on the
 	# point: gathered once instead of per candidate point.
@@ -286,6 +305,7 @@ static func _pick_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 		if not threat.is_empty() and point.distance_to(threat.pos)<member.pos.distance_to(threat.pos)-2:score+=4.0
 		nearby.append({"pos":point,"score":score})
 	nearby.sort_custom(func(a,b):return a.score<b.score)
+	if sim.profiling:lap=sim._lap("cover_reservations",lap)
 	# Line-of-fire rating (the costly part) for the nearest candidates only.
 	# Pinned soldiers want a screen; otherwise a slot with a shot at a known
 	# enemy (fire from cover) beats one that only hides.
@@ -300,9 +320,13 @@ static func _pick_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,thre
 		candidates.append({"pos":entry.pos,"score":score,"screened":rating.screened and not threat.is_empty() and not rating.soft,"fire":rating.fire})
 		if candidates.size()>=RATED_VALID:break
 	candidates.sort_custom(func(a,b):return a.score<b.score)
+	if sim.profiling:lap=sim._lap("cover_ratings",lap)
 	for candidate in candidates.slice(0,6):
 		var route:=_shelter_route(u,member,sim,candidate.pos)
-		if not route.is_empty():return {"pos":candidate.pos,"path":route,"screened":candidate.screened,"fire":candidate.fire}
+		if not route.is_empty():
+			if sim.profiling:sim._lap("cover_routes",lap)
+			return {"pos":candidate.pos,"path":route,"screened":candidate.screened,"fire":candidate.fire}
+	if sim.profiling:sim._lap("cover_routes",lap)
 	return {}
 
 # How a slot stands against the observed threats: screened from the main one,

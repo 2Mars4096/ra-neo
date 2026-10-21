@@ -112,9 +112,11 @@ func run()->void:
 	hud.queue_redraw()
 	await process_frame;await process_frame
 	var modal:Array=ids(hud)
-	check(not modal.is_empty() and modal.all(func(id):return id.begins_with("scenario:") or id=="begin"),"guide owns all hit targets: %s" % [modal])
+	check(not modal.is_empty() and modal.all(func(id):return id.begins_with("scenario:") or id in ["begin","tutorial:start"]),"guide owns all hit targets: %s" % [modal])
+	check("begin" in modal and "tutorial:start" in modal,"guide offers both free and guided deployment")
 	check(hud.action_at(Vector2(1800,500)) in ["blocked"]+modal,"guide blocks the battlefield")
-	battle.show_help=false
+	battle.ui_action("tutorial:start",Vector2.ZERO)
+	check(not battle.show_help and hud.battlefield_ui.tutorial_active,"guided deployment closes briefing and opens the field guide")
 	await process_frame;await process_frame
 	check(ids(hud).any(func(id):return id.begins_with("buy:")),"closing the guide restores sidebar targets")
 	# Static structures are not rewritten each frame (a same-value write still

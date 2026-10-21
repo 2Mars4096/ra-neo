@@ -392,7 +392,7 @@ func inside(p: Vector2) -> bool:
 func default_radius(domain: String) -> float:
 	return 3.3 if domain=="sea" else (1.55 if domain=="air" else 1.8)
 
-func traversable(p: Vector2, domain: String, radius: float = -1) -> bool:
+func traversable(p: Vector2, domain: String, radius: float = -1, pressed_wrecks:Array = []) -> bool:
 	if radius<0: radius=default_radius(domain)
 	if p.x<radius or p.y<radius or p.x>world_size.x-radius or p.y>world_size.y-radius:
 		return false
@@ -421,7 +421,7 @@ func traversable(p: Vector2, domain: String, radius: float = -1) -> bool:
 		for dock in DOCKS:
 			if circle_rect(p,radius,dock):return false
 	for rect in dynamic_blocks:
-		if circle_rect(p,radius+OBSTACLE_MARGIN,rect) and not (crush_pass and pushable_blocks.has(rect)):return false
+		if circle_rect(p,radius+OBSTACLE_MARGIN,rect) and not (crush_pass and pushable_blocks.has(rect)) and not pressed_wrecks.has(rect):return false
 	var tree_distance_squared:=pow(radius+1.2,2)
 	for tree in _static_candidates("tree",p,radius+1.2):
 		if p.distance_squared_to(tree)<tree_distance_squared:return false
@@ -624,7 +624,7 @@ func _nav_grid(domain:String,radius:float,profile:String,current:bool)->AStarGri
 	navigation[key]=grid
 	return grid
 
-func segment_clear(a: Vector2, b: Vector2, domain: String, radius: float) -> bool:
+func segment_clear(a: Vector2, b: Vector2, domain: String, radius: float, pressed_wrecks:Array = []) -> bool:
 	# Exact continuous coastline guard, including thin headlands between samples.
 	if domain!="air" and not water_polygons.is_empty():
 		if not _coast_clear(a,radius,domain=="sea") or not _coast_clear(b,radius,domain=="sea"):return false
@@ -636,7 +636,7 @@ func segment_clear(a: Vector2, b: Vector2, domain: String, radius: float) -> boo
 	var spacing:=maxf(0.35,radius*0.9)
 	var steps:=maxi(1,ceili(a.distance_to(b)/spacing))
 	for i in range(1,steps+1):
-		if not traversable(a.lerp(b,float(i)/steps),domain,radius): return false
+		if not traversable(a.lerp(b,float(i)/steps),domain,radius,pressed_wrecks): return false
 	return true
 
 func nearest_cell(p: Vector2, grid: AStarGrid2D, domain: String, radius: float) -> Vector2i:

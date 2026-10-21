@@ -51,6 +51,7 @@ static func resume(sim,u:Dictionary,reason:String="Regrouping toward objective")
 static func update(sim) -> void:
 	if not sim.scenario.get("autonomy",false):return
 	for u in sim.units:
+		if u.has("wreck_recovery"):continue
 		if not sim.alive(u) or sim.definitions[u.kind].get("structure",false) or u.has("building_id") or u.kind=="harvester" or sim.definitions[u.kind].domain!="land" or u.hold_command:continue
 		# A section whose survivors are all down cannot move: nothing to direct.
 		if u.get("combat_ineffective",false):continue

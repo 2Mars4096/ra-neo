@@ -86,13 +86,14 @@ func run()->void:
 	check(FieldOps.player_strike(sim,AIM).is_empty() and sim.credits==400.0,"no strike on enemies hidden by fog")
 	check(sim.field_ops.last_purchase_error=="No visible enemy near the target","fog miss explains itself")
 	check(FieldOps.strike_ready_in(sim)==0.0,"failed strike does not start the cooldown")
-	# Enemy swarm keeps its own behaviour.
+	# Enemy swarm uses the same observed-target rule as the player.
 	sim=Sim.new(false,index)
 	var victim:Dictionary=sim.spawn("tank",0,AIM)
+	sim.spawn("drone",1,AIM+Vector2(0,4))
 	sim.update_visibility()
 	sim.events.clear()
 	var enemy_ids:Array=FieldOps.launch_swarm(sim,AIM,4)
-	check(enemy_ids.size()==4 and sim.get_unit(enemy_ids[0]).team==1 and sim.get_unit(enemy_ids[0]).strike_target==victim.id,"enemy swarm still launches at player units")
+	check(victim.seen_by[1] and enemy_ids.size()==4 and sim.get_unit(enemy_ids[0]).team==1 and sim.get_unit(enemy_ids[0]).strike_target==victim.id,"enemy swarm launches at observed player units")
 	check(sim.events.any(func(e):return e.type=="warning" and "FPV SWARM INBOUND" in str(e.text)),"enemy swarm still warns")
 	await battle_input(index)
 	print("PLAYER SWARM: ",checks," checks, ",failures," failures")

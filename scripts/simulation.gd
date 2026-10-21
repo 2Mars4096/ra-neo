@@ -13,6 +13,7 @@ var field_ops:Dictionary={}
 const Director = preload("res://scripts/tactical_director.gd")
 const Infantry = preload("res://scripts/infantry.gd")
 const VehicleDamage = preload("res://scripts/vehicle_damage.gd")
+const SectionRecovery = preload("res://scripts/section_recovery.gd")
 const Terrain = preload("res://scripts/terrain.gd")
 static var scenario_selection:=5
 var scenario:Dictionary
@@ -211,7 +212,8 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 		var order:=record_order(u,mode,plan.pos,target_id,queued)
 		slots.append({"pos":plan.pos,"radius":crowd_radius(u.kind),"layer":collision_layer(u)})
 		if u.orders.size() == 1:
-			if plan.planned:u.path = plan.route
+			if not plan.get("recovery",{}).is_empty():SectionRecovery.begin(self,u,plan.recovery)
+			elif plan.planned:u.path = plan.route
 			else:defer_route(u,"order")
 		accepted += 1
 		command.placed+=1
@@ -249,6 +251,13 @@ var click_slots:=CLICK_SLOTS # (tests raise it to resolve a whole group in the c
 # within the tick's budget is planned on the spot; resolved later, only short
 # hops are, the rest join the route queue.
 func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dictionary:
+	# Validate from a prospective clear exit, without moving the authoritative
+	# anchor. A valid command then walks the bounded wreck recovery before its
+	# normal route starts; an invalid destination still changes no orders.
+	var recovery:=SectionRecovery.plan(self,u,true)
+	if not recovery.is_empty():
+		u=u.duplicate()
+		u.pos=recovery.pos
 	var destination:Vector2=command.destination
 	var mode:String=command.mode
 	var ids:Array=command.ids
@@ -302,12 +311,13 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 			return {}
 	elif mode=="attack" and not terrain.reachable(u.pos,target,domain,radius,terrain.mobility_profile(u.kind)):
 		return {}
-	return {"pos":target,"planned":planned,"route":route}
+	return {"pos":target,"planned":planned,"route":route,"recovery":recovery}
 
 # A unit whose target is still resolving (`waiting`) keeps building and its
 # cover until it resolves (resolve_slots), so a unit that gets none is as it was.
 func record_order(u:Dictionary,mode:String,target:Vector2,target_id:int,queued:bool,waiting:bool=false)->Dictionary:
 	if not queued:
+		if not waiting:u.erase(SectionRecovery.KEY)
 		if not waiting:FieldOps.pause_builder(self,u.id)
 		Director.cancel(u)
 		if not waiting:for actor in u.members:Infantry.Cover.clear(actor)
@@ -322,7 +332,7 @@ func record_order(u:Dictionary,mode:String,target:Vector2,target_id:int,queued:b
 	return order
 
 # What a new order replaces (record_order, Director.cancel), to put back.
-const SNAPSHOT_KEYS:=["orders","path","intent","state","command_group","route_pending","maneuver","reason","commit_until","next_decision","hold_command","maneuver_review"]
+const SNAPSHOT_KEYS:=["orders","path","intent","state","command_group","route_pending","maneuver","reason","commit_until","next_decision","hold_command","maneuver_review","wreck_recovery"]
 func order_snapshot(u:Dictionary)->Dictionary:
 	var snapshot:={}
 	for key in SNAPSHOT_KEYS:
@@ -382,7 +392,8 @@ func resolve_slots()->int:
 		entry.command.slots.append({"pos":plan.pos,"radius":crowd_radius(u.kind),"layer":collision_layer(u)})
 		if at==0:
 			u.intent=order.duplicate()
-			if plan.planned:u.path=plan.route
+			if not plan.get("recovery",{}).is_empty():SectionRecovery.begin(self,u,plan.recovery)
+			elif plan.planned:u.path=plan.route
 			else:defer_route(u,"order")
 	terrain.end_path_memo()
 	return work
@@ -442,6 +453,10 @@ func plan_queued_routes(spent:int=0)->void:
 	var searches:=ROUTE_SEARCHES_PER_TICK
 	while not route_queue.is_empty() and work>0:
 		var u:=get_unit(int(route_queue[0]))
+		if u.has(SectionRecovery.KEY):
+			route_queue.pop_front()
+			u.erase("route_pending")
+			continue
 		# (A target still resolving re-queues its unit once known.)
 		if not alive(u) or not route_waiting(u) or u.orders[0].has("slot"):
 			if not u.is_empty():u.erase("route_pending")
@@ -562,6 +577,7 @@ func stop(ids: Array) -> int:
 			Director.cancel(u)
 			u.intent={}
 			u.hold_command=true
+			u.erase(SectionRecovery.KEY)
 			u.speed_now=0.0
 			u.state = "HOLDING"
 	return accepted
@@ -650,6 +666,7 @@ func recruit(kind: String) -> bool:
 func update_visibility() -> void:
 	var indexed:bool=use_spatial_targeting and units.size()>=spatial_targeting_threshold
 	if indexed and not ticking:rebuild_spatial()
+	var site_probes:Array=FieldOps.enemy_site_probes(self) if not field_ops.is_empty() else []
 	var processed_fields:Dictionary={}
 	visible_cells.clear()
 	# Garrison shelter per soldier: during a walked entry/exit a section sees
@@ -681,6 +698,7 @@ func update_visibility() -> void:
 		var reach:float=sight_radius
 		for post in posts:reach=maxf(reach,sight_radius+observer.pos.distance_to(post))
 		var candidates:Array=range_candidates(observer.pos,reach) if indexed else units
+		if observer.team==1 and not site_probes.is_empty():candidates=candidates+site_probes
 		for target in candidates:
 			if not alive(target) or target.team == observer.team:
 				continue
@@ -729,6 +747,7 @@ func update_visibility() -> void:
 			explored.merge(visibility_cache[key])
 	for u in units:
 		u.visible = u.team == 0 or u.seen_by[0]
+	if not field_ops.is_empty():FieldOps.observe_enemy_sites(self,site_probes)
 
 # Living soldiers of a section in garrison transit that are through the wall:
 # 0 none, 1 some, 2 all.
@@ -1277,12 +1296,15 @@ func fpv_strike(u:Dictionary,d:Dictionary,dt:float) -> void:
 	u.speed_now=speed
 	u.target=target.id
 
-# Nearest opposing ground or sea unit within 40 m (works only when no troops).
+# A new lock requires current team/local knowledge, just as the initial launch
+# does. A live assigned target keeps the existing flight guidance in fpv_strike;
+# neither this rule nor site memory changes a Javelin already in flight.
+# Nearest known ground or sea unit within 40 m (works only when no troops).
 func fpv_retarget(u:Dictionary) -> Dictionary:
 	var best:Dictionary={}
 	var best_score:=40.0*40.0
 	for other in units:
-		if not alive(other) or other.team==u.team or definitions[other.kind].domain=="air":continue
+		if not alive(other) or other.team==u.team or definitions[other.kind].domain=="air" or not contact_known(u,other):continue
 		var score:float=u.pos.distance_squared_to(other.pos)
 		if definitions[other.kind].get("structure",false):score+=900.0
 		if score<best_score:best_score=score;best=other
@@ -1374,6 +1396,7 @@ func tick(dt: float) -> void:
 		u.repath -= dt
 		Infantry.reconcile(u)
 		if u.get("combat_ineffective",false):hold_downed(u)
+		var recovering_wreck:=SectionRecovery.step(self,u,dt)
 		var move_lap:int=Time.get_ticks_usec() if profiling else 0
 		if not Garrison.inside(u) and Garrison.transit(u)=="":Infantry.move(u,self,dt)
 		else:Garrison.tick_members(u,dt)
@@ -1419,21 +1442,23 @@ func tick(dt: float) -> void:
 			moving = false
 		if not u.maneuver.is_empty():moving=not u.maneuver.arrived
 		if Infantry.Cover.seeking(u) or u.get("regroup_active",false) or Garrison.transit(u)!="":moving=false
+		if recovering_wreck:moving=false
 		if not u.members.is_empty() and scenario.get("autonomy",false):
 			if moving:u.erase("engage_halt_at");u.erase("engage_shift")
-			elif target.is_empty():u.erase("engage_shift")
+			elif target.is_empty() or recovering_wreck:u.erase("engage_shift")
 			else:space_engaged(u,target,dt)
 		if profiling:target_lap=_lap("unit_targeting",target_lap)
 		if moving:
 			move_unit(u, dt)
 			if profiling:target_lap=_lap("move_unit",target_lap)
+		elif recovering_wreck:pass
 		elif not target.is_empty():
 			u.state = "ENGAGING"
 		elif u.orders.is_empty():
 			if Garrison.inside(u):u.state="GARRISONED"
 			elif Garrison.transit(u)!="":u.state="ENTERING" if Garrison.transit(u)=="IN" else "EXITING"
 			else:u.state="SUPPRESSED" if u.suppression > 0.6 else "READY"
-		if not moving:u.speed_now=move_toward(u.speed_now,0.0,dt*8.0)
+		if not moving and not recovering_wreck:u.speed_now=move_toward(u.speed_now,0.0,dt*8.0)
 		if not u.members.is_empty():
 			var combat_lap:int=Time.get_ticks_usec() if profiling else 0
 			infantry_combat(u,dt,candidates)
@@ -2044,7 +2069,7 @@ func finish_order(u: Dictionary) -> void:
 # The next order takes over: its route now or queued (its target still
 # resolving: the unit holds until resolve_slots() queues the route).
 func start_next_order(u:Dictionary)->void:
-	if u.orders.is_empty():return
+	if u.orders.is_empty() or u.has(SectionRecovery.KEY):return
 	u.intent=u.orders[0].duplicate()
 	if u.orders[0].has("slot"):return
 	if take_route_budget(u.pos,u.orders[0].pos):u.path=order_route(u,u.orders[0].pos)
@@ -2218,6 +2243,7 @@ func unstack_sections()->void:
 	stack_check_at=time+STACK_CHECK
 	var idle:Array=[]
 	for u in units:
+		if u.has(SectionRecovery.KEY):continue
 		if u.members.is_empty() or not alive(u) or not u.orders.is_empty() or not u.maneuver.is_empty() or u.hold_command:continue
 		if u.get("combat_ineffective",false) or u.get("regroup_active",false) or u.has("garrison_target") or Garrison.inside(u) or Garrison.transit(u)!="" or definitions[u.kind].domain!="land":continue
 		idle.append(u)
@@ -2269,7 +2295,7 @@ func held_spots(u:Dictionary,around:Vector2,ids:Array)->Array[Dictionary]:
 		spots.append({"pos":spot,"radius":crowd_radius(other.kind),"layer":layer})
 	return spots
 
-func movement_clear(u: Dictionary, to: Vector2, neighbors: Array) -> bool:
+func movement_clear(u: Dictionary, to: Vector2, neighbors: Array, pressed_wrecks:Array = []) -> bool:
 	var d: Dictionary=definitions[u.kind]
 	# Vehicles cannot enter anti-tank obstacles (they may always back out).
 	if d.domain=="land" and terrain.mobility_profile(u.kind) in terrain.VEHICLE_PROFILES:
@@ -2302,7 +2328,7 @@ func movement_clear(u: Dictionary, to: Vector2, neighbors: Array) -> bool:
 			if to.distance_squared_to(member.pos)>=u.pos.distance_squared_to(member.pos):continue
 			var near:Vector2=u.pos+step*clampf((member.pos-u.pos).dot(step)/length_squared,0,1)
 			if near.distance_to(member.pos)<clearance:return false
-	if not terrain.segment_clear(u.pos,to,d.domain,float(d.radius)): return false
+	if not terrain.segment_clear(u.pos,to,d.domain,float(d.radius),pressed_wrecks): return false
 	for other in neighbors:
 		if not alive(other) or other.id==u.id or collision_layer(other)!=collision_layer(u): continue
 		# Two infantry sections never block each other as whole circles; their

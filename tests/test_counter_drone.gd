@@ -39,11 +39,15 @@ func swarm_run(with_aa:int,count:int)->Dictionary:
 		var unit:Dictionary=sim.spawn(kind,0,BASE+offset)
 		if not unit.is_empty():victims.append(unit)
 	for i in with_aa:sim.spawn("aa",0,BASE+Vector2(-10+20*i,-8))
+	# Launch intelligence comes from a real spotter over the cluster, keeping
+	# this fixture about interception rather than inventing hidden targets.
+	var spotter:Dictionary=sim.spawn("drone",1,BASE+Vector2(0,6))
 	sim.update_visibility()
 	var before:=0.0
 	for v in victims:before+=v.hp
 	var events_before:int=sim.events.size()
 	var ids:Array=FieldOps.launch_swarm(sim,BASE+Vector2(2,4),count)
+	spotter.hp=0.0 # Do not add another airborne target to the interception duel.
 	var warned:=false
 	for i in range(events_before,sim.events.size()):
 		if sim.events[i].type=="warning" and "FPV" in str(sim.events[i].text):warned=true

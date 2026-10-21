@@ -159,15 +159,82 @@ static func continue_queue(sim,engineer:Dictionary)->void:
 # base. A drone scouts ahead; the main body attack-moves straight in while a
 # flanking group detours wide to arrive from the side; a wave that loses 70% of
 # its strength withdraws to regroup. Waves need living enemy logistics.
+# Strategic orders may use an observed site's last position for three minutes.
+# Only normal visibility samples refresh a contact; hidden live state (including
+# destruction, completion or a newer forward base) never updates that memory.
+# After the contact expires, the authored landing zone is the public fallback.
+const SITE_MEMORY_SECONDS:=180.0
+
+# A remembered position whose unit has gone can still be inspected. These
+# markers use the normal visibility pass, including cover, weather, lookouts
+# and blocked radios; they never enter the unit list or become combat targets.
+static func enemy_site_probes(sim)->Array:
+	var probes:Array=[]
+	for id in sim.field_ops.get("enemy_sites",{}):
+		if sim.alive(sim.get_unit(id)):continue
+		var site:Dictionary=sim.field_ops.enemy_sites[id]
+		probes.append({"id":id,"kind":site.kind,"team":0,"pos":site.pos,"hp":1.0,"seen_by":[false,false],"last_shot":-100.0})
+	return probes
+
+static func observe_enemy_sites(sim,probes:Array=[])->void:
+	var contacts:Dictionary=sim.field_ops.get("enemy_sites",{})
+	for site in sim.units:
+		if not sim.alive(site) or site.team!=0 or not site.get("structure",false) or not site.seen_by[1]:continue
+		contacts[site.id]={"pos":site.pos,"kind":site.kind,"seen_at":sim.time,"complete":float(site.get("build_left",0.0))<=0}
+	for probe in probes:
+		if probe.seen_by[1]:contacts.erase(probe.id)
+	sim.field_ops["enemy_sites"]=contacts
+	prune_enemy_sites(sim)
+
+static func prune_enemy_sites(sim)->void:
+	var contacts:Dictionary=sim.field_ops.get("enemy_sites",{})
+	for id in contacts.keys():
+		if sim.time-float(contacts[id].seen_at)>SITE_MEMORY_SECONDS:contacts.erase(id)
+
 static func wave_target(sim)->Vector2:
-	var forward:=forward_point(sim)
-	if forward.x>=0:return forward
-	var works:Array=sim.units.filter(func(u):return sim.alive(u) and u.team==0 and u.get("structure",false))
-	if not works.is_empty():
+	prune_enemy_sites(sim)
+	var contacts:Dictionary=sim.field_ops.get("enemy_sites",{})
+	var forward:Dictionary={}
+	var forward_id:=-1
+	for id in contacts:
+		var site:Dictionary=contacts[id]
+		if site.kind=="forward_supply_point" and site.complete and int(id)>forward_id:
+			forward=site;forward_id=int(id)
+	if not forward.is_empty():return forward.pos
+	if not contacts.is_empty():
 		var sum:=Vector2.ZERO
-		for u in works:sum+=u.pos
-		return sum/works.size()
+		for site in contacts.values():sum+=site.pos
+		return sum/contacts.size()
 	return sim.field_ops.insertion
+
+# An offensive can have several formations in transit at once. The scheduler's
+# legacy active/strength/target/recrew fields describe only the latest wave;
+# all-wave consumers (garrisons and local defenders) use this union instead.
+static func active_wave_ids(state:Dictionary)->Array:
+	if not state.has("formations"):return state.get("active",[])
+	var ids:Array=[]
+	for formation in state.formations:ids.append_array(formation.active)
+	return ids
+
+static func publish_latest_wave(state:Dictionary)->void:
+	var latest:Dictionary=state.get("latest",{})
+	if latest.is_empty():return
+	for key in ["active","strength","target","recrew"]:state[key]=latest[key]
+
+static func update_waves(sim,state:Dictionary)->void:
+	if not state.has("formations"):state["formations"]=[]
+	for formation in state.formations.duplicate():
+		follow_recrew(sim,formation)
+		var alive:Array=formation.active.filter(func(id):var u:Dictionary=sim.get_unit(id);return sim.alive(u) and u.team==1)
+		var hp:=0.0
+		for id in alive:hp+=float(sim.get_unit(id).hp)
+		if alive.is_empty() or hp<float(formation.strength)*0.3:
+			if not alive.is_empty():sim.issue(alive,sim.field_ops.enemy_insertion,"retreat")
+			sim.events.append({"type":"warning","text":"Enemy assault broken • survivors falling back","notice":"info","pos":formation.target})
+			formation.active=[]
+			formation.recrew={}
+			state.formations.erase(formation)
+	publish_latest_wave(state)
 
 static func wave_composition(index:int)->Array:
 	var kinds:Array=["drone"]
@@ -183,7 +250,7 @@ static func wave_composition(index:int)->Array:
 static func local_counterattacks(sim,state:Dictionary)->void:
 	if sim.time<float(state.get("local_next",0.0)):return
 	state.local_next=sim.time+2.0
-	var wave:Array=state.get("active",[])
+	var wave:Array=active_wave_ids(state)
 	for defender in sim.units:
 		if not sim.alive(defender) or defender.team!=1 or defender.get("structure",false) or defender.id in wave:continue
 		if sim.definitions[defender.kind].domain!="land" or defender.get("garrison_role",false):continue
@@ -222,7 +289,7 @@ static func enemy_garrisons(sim)->void:
 	# more are due it runs again next tick instead of planning them all at once.
 	var orders_left:=GARRISON_ORDERS if sim.ticking else 1<<30
 	var sites:Array=garrison_sites(sim)
-	var excluded:Array=sim.field_ops.get("waves",{}).get("active",[])+sim.counterattack_ids
+	var excluded:Array=active_wave_ids(sim.field_ops.get("waves",{}))+sim.counterattack_ids
 	# Sections per building: enemy claims (inside, entering, bound for) and player presence.
 	var claims:Dictionary={}
 	var player:Dictionary={}
@@ -338,7 +405,7 @@ static func enemy_mortar(sim)->void:
 	for k in MORTAR_ROUNDS:
 		var p:Vector2=best+Vector2.RIGHT.rotated(rng.randf()*TAU)*MORTAR_SCATTER*sqrt(rng.randf())
 		state.rounds.append({"at":sim.time+MORTAR_FLIGHT+k*MORTAR_SPACING,"pos":p})
-	sim.events.append({"type":"warning","text":"Incoming mortar fire","notice":"alert"})
+	sim.events.append({"type":"warning","text":"Incoming mortar fire","notice":"alert","pos":best})
 
 # Per objective, the buildings within GARRISON_RADIUS that have a doorway,
 # best first. Score: share of clear sight lines from the windows facing the
@@ -374,18 +441,9 @@ static func enemy_offensive(sim)->void:
 	if plan.is_empty() or not sim.field_ops.started:return
 	var state:Dictionary=sim.field_ops.get("waves",{})
 	if state.is_empty():
-		state={"next":float(plan.get("first",150.0)),"index":0,"active":[],"strength":0.0}
+		state={"next":float(plan.get("first",150.0)),"index":0,"active":[],"strength":0.0,"formations":[]}
 		sim.field_ops["waves"]=state
-	if not state.active.is_empty():follow_recrew(sim,state)
-	# Withdraw a broken wave so it does not trickle into the defence one unit at a time.
-	if not state.active.is_empty():
-		var alive:Array=state.active.filter(func(id):return sim.alive(sim.get_unit(id)))
-		var hp:=0.0
-		for id in alive:hp+=float(sim.get_unit(id).hp)
-		if alive.is_empty() or hp<state.strength*0.3:
-			if not alive.is_empty():sim.issue(alive,sim.field_ops.enemy_insertion,"retreat")
-			sim.events.append({"type":"warning","text":"Enemy assault broken • survivors falling back","notice":"info"})
-			state.active=[]
+	update_waves(sim,state)
 	local_counterattacks(sim,state)
 	swarm_strikes(sim,state,plan)
 	if not state.get("warned",false) and sim.time>=state.next-20.0 and state.index<int(plan.get("max_wave",8)) and enemy_logistics_alive(sim):
@@ -407,11 +465,11 @@ static func enemy_offensive(sim)->void:
 	if not state.has("swarm_next"):state.swarm_next=sim.time+float(plan.get("interval",120.0))*0.5
 	# From the second wave on, an FPV swarm strikes ahead of the assault.
 	if state.index>=2:launch_swarm(sim,target,mini(8,4+state.index/2))
-	state.active=main+flank+scouts
-	state.target=target
-	state.recrew={}
-	state.strength=0.0
-	for id in state.active:state.strength+=float(sim.get_unit(id).hp)
+	var formation:={"number":state.index,"active":main+flank+scouts,"target":target,"recrew":{},"strength":0.0}
+	for id in formation.active:formation.strength+=float(sim.get_unit(id).hp)
+	if not formation.active.is_empty():state.formations.append(formation)
+	state["latest"]=formation
+	publish_latest_wave(state)
 	sim.issue(scouts,target,"attack_move")
 	sim.issue(main,target,"attack_move")
 	# Flank: a waypoint 70 u off the direct axis on the side with a reachable route.
@@ -424,7 +482,7 @@ static func enemy_offensive(sim)->void:
 		sim.issue(flank,target,"attack_move",true)
 		break
 	if flank.size()>0 and sim.get_unit(flank[0]).orders.is_empty():sim.issue(flank,target,"attack_move")
-	sim.events.append({"type":"warning","text":"ENEMY ASSAULT WAVE %d • %d units inbound" % [state.index,state.active.size()],"notice":"info"})
+	sim.events.append({"type":"warning","text":"ENEMY ASSAULT WAVE %d • %d units inbound" % [state.index,formation.active.size()],"notice":"info","pos":target})
 
 # Re-crew follows the wave: a vehicle boarded by a wave section joins the wave
 # (its integrity adds to the wave's strength, while the boarders have already
@@ -479,7 +537,7 @@ static func densest_cluster(sim,team:int)->Vector2:
 # Launch count strike drones from the attacker's side toward aim. Vehicles near
 # the aim point are preferred targets, then squads, then works. Returns ids.
 static func launch_swarm(sim,aim:Vector2,count:int,team:int=1)->Array:
-	var victims:Array=sim.units.filter(func(u):return sim.alive(u) and u.team!=team and sim.definitions[u.kind].domain!="air" and u.pos.distance_to(aim)<SWARM_TARGET_RADIUS)
+	var victims:Array=sim.units.filter(func(u):return sim.alive(u) and u.team!=team and u.seen_by[team] and sim.definitions[u.kind].domain!="air" and u.pos.distance_to(aim)<SWARM_TARGET_RADIUS)
 	if victims.is_empty():return []
 	victims.sort_custom(func(a,b):return swarm_rank(a,aim)<swarm_rank(b,aim))
 	var live:int=sim.units.filter(func(u):return sim.alive(u) and u.team==team and u.kind=="fpv_drone").size()
@@ -489,7 +547,7 @@ static func launch_swarm(sim,aim:Vector2,count:int,team:int=1)->Array:
 	var origin:Vector2=aim+axis.normalized()*minf(axis.length(),SWARM_STANDOFF)
 	var ids:=spawn_swarm(sim,origin,victims,count,team)
 	if not ids.is_empty() and team==1:
-		sim.events.append({"type":"warning","text":"FPV SWARM INBOUND • %d strike drones • AA and massed rifles can shoot them down" % ids.size(),"notice":"alert"})
+		sim.events.append({"type":"warning","text":"FPV SWARM INBOUND • %d strike drones • AA and massed rifles can shoot them down" % ids.size(),"notice":"alert","pos":aim})
 	return ids
 
 # Player FPV strike: bought from the reinforcement panel, aimed with a map click
@@ -1056,6 +1114,7 @@ static func sync_obstacles(sim)->void:
 		if sim.VehicleDamage.light_wreck(wreck):pushable.append(rect)
 	var changed:bool=sim.terrain.update_field_geometry(blocks,covers,pushable)
 	if sim.terrain.update_field_zones(zones) or changed:sim.visibility_cache.clear()
+	if changed:sim.SectionRecovery.refresh(sim)
 
 # Tracked vehicles of either side flatten wire they drive across.
 static func crush_wire(sim,wire:Dictionary)->void:

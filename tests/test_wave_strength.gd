@@ -158,6 +158,9 @@ func swarms_excluded()->void:
 	var target:=FieldOps.wave_target(sim)
 	var victim:Dictionary=sim.spawn("rifle",0,target)
 	check(not victim.is_empty(),"swarm victim fixture")
+	sim.spawn("drone",1,target+Vector2(0,4))
+	sim.update_visibility()
+	check(victim.seen_by[1],"a scout observes the wave's swarm victim")
 	sim.field_ops["waves"]={"next":sim.time,"index":2,"active":[],"strength":0.0,"swarm_next":sim.time+1000.0}
 	FieldOps.enemy_offensive(sim)
 	var state:Dictionary=sim.field_ops.waves

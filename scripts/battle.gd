@@ -7,6 +7,14 @@ const HUD = preload("res://scripts/hud.gd")
 const Motion = preload("res://scripts/unit_animation.gd")
 const StructureDamage = preload("res://scripts/structure_damage.gd")
 const Notice = preload("res://scripts/notice_feed.gd")
+const PlayerSettings = preload("res://scripts/player_settings.gd")
+const BattleMenu = preload("res://scripts/battle_menu.gd")
+var settings:=PlayerSettings.new()
+var settings_path:=PlayerSettings.PATH
+var menu:Control
+var menu_was_paused:=true
+var window_focused:=true
+var pointer_in_window:=true
 var sim := Sim.new()
 var art := Visuals.new()
 var effects := Effects.new()
@@ -90,6 +98,14 @@ func flap(key:String,started:int)->int:
 	return now
 
 func _ready() -> void:
+	settings.load_preferences(settings_path)
+	get_window().focus_entered.connect(func():
+		window_focused=true
+		pointer_in_window=get_viewport().get_visible_rect().has_point(get_viewport().get_mouse_position()))
+	get_window().focus_exited.connect(release_pointer)
+	get_window().mouse_entered.connect(func():pointer_in_window=true)
+	get_window().mouse_exited.connect(func():pointer_in_window=false)
+	get_window().size_changed.connect(update_interface_scale)
 	if huge_world():MAX_ZOOM=float(sim.scenario.get("camera_max_zoom",220.0))
 	camera_focus=Vector3(sim.terrain.world_size.x/2,0,sim.terrain.world_size.y/2+5)
 	if not sim.classic.is_empty():
@@ -168,8 +184,16 @@ func _ready() -> void:
 	hud.battle = self
 	hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(hud)
+	menu=BattleMenu.new()
+	layer.add_child(menu)
+	menu.changed.connect(change_setting)
+	menu.closed.connect(close_menu)
+	menu.restart_confirmed.connect(restart_now)
+	menu.defaults_requested.connect(reset_settings)
+	menu.report_requested.connect(copy_bug_report)
 	add_child(sound)
 	sound.volume_db = -19
+	apply_settings()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--capture="):
 			screenshot_path=arg.trim_prefix("--capture=")
@@ -193,6 +217,126 @@ func _ready() -> void:
 func request_zoom(factor:float) -> void:
 	if not is_finite(factor) or factor<=0:return
 	camera_zoom_target=clampf(camera_zoom_target*factor,MIN_ZOOM,MAX_ZOOM)
+
+func user_zoom(factor:float) -> void:
+	var exponent:float=settings.values.zoom_speed*(-1.0 if settings.values.invert_zoom else 1.0)
+	request_zoom(pow(factor,exponent))
+
+# Targeted commands are exclusive, including the unfinished placement/selection
+# drags. Cancelling consumes that input; it must never also issue a move.
+func set_targeting(mode:String,kind:String="") -> void:
+	attack_mode=mode=="attack"
+	strike_mode=mode=="strike"
+	build_mode=kind if mode=="build" else ""
+	build_drag=false
+	dragging=false
+	cursor_hint=""
+	hint_dirty=true
+
+func cancel_targeting(announce:bool=true) -> bool:
+	var message:="Placement cancelled" if build_mode!="" else ("FPV strike cancelled" if strike_mode else "Attack order cancelled")
+	var active:bool=build_mode!="" or strike_mode or attack_mode or build_drag
+	set_targeting("")
+	if active and announce:notify(message,Notice.CURSOR)
+	return active
+
+func release_pointer() -> void:
+	window_focused=false
+	pointer_in_window=false
+	middle_panning=false
+	dragging=false
+	build_drag=false
+
+func menu_open() -> bool:
+	return is_instance_valid(menu) and menu.visible
+
+func prepare_menu() -> void:
+	if not menu_open():menu_was_paused=paused
+	paused=true
+	cancel_targeting(false)
+	middle_panning=false
+
+func open_settings() -> void:
+	prepare_menu()
+	menu.show_settings(settings.values)
+	var release_path:="res://scripts/release_info.gd"
+	if ResourceLoader.exists(release_path):menu.status.text=str(load(release_path).label())+" · Scale limited to fit window."
+
+func close_menu() -> void:
+	if not menu_open():return
+	if menu.mode=="settings":
+		var error:Error=settings.save_preferences(settings_path)
+		if error!=OK:notify("Could not save settings (%s)" % error_string(error))
+	menu.dismiss()
+	paused=menu_was_paused
+
+func request_restart() -> void:
+	if sim.result!="" or sim.time<=0:
+		restart_now()
+		return
+	prepare_menu()
+	menu.show_restart(str(sim.scenario.name))
+
+func restart_now() -> void:
+	get_tree().reload_current_scene()
+
+func change_setting(key:String,value:Variant) -> void:
+	settings.set_value(key,value)
+	apply_settings()
+
+func reset_settings() -> void:
+	settings.reset()
+	apply_settings()
+	menu.sync_values(settings.values)
+
+func apply_settings() -> void:
+	AudioServer.set_bus_volume_db(0,linear_to_db(maxf(0.0001,float(settings.values.master_volume))))
+	AudioServer.set_bus_mute(0,bool(settings.values.muted) or float(settings.values.master_volume)<=0)
+	effects.muted=bool(settings.values.muted)
+	if audio!=null:audio.set_muted(effects.muted)
+	if DisplayServer.get_name()!="headless":
+		var wanted:int=Window.MODE_FULLSCREEN if settings.values.fullscreen else Window.MODE_WINDOWED
+		# Do not undo the player's normal maximize action when changing volume.
+		if wanted==Window.MODE_FULLSCREEN or get_window().mode in [Window.MODE_FULLSCREEN,Window.MODE_EXCLUSIVE_FULLSCREEN]:
+			get_window().mode=wanted
+	update_interface_scale()
+
+# The previous fixed 1440×900 canvas shrank fonts and never activated compact
+# HUD layouts on a 720p window. Track the real window, with an optional scale
+# capped so the logical UI always has at least 1120×720 points of room.
+func update_interface_scale() -> void:
+	if benchmark:return
+	var window_size:Vector2i=get_window().size
+	var fit:float=minf(float(window_size.x)/1120.0,float(window_size.y)/720.0)
+	var scale:float=maxf(0.1,minf(float(settings.values.ui_scale),fit))
+	var logical:=Vector2i(roundi(window_size.x/scale),roundi(window_size.y/scale))
+	if get_window().content_scale_size!=logical:get_window().content_scale_size=logical
+
+func toggle_setting(key:String) -> void:
+	change_setting(key,not bool(settings.values[key]))
+	var error:Error=settings.save_preferences(settings_path)
+	if error!=OK:notify("Could not save settings (%s)" % error_string(error))
+
+func copy_bug_report() -> void:
+	var path:="res://scripts/release_info.gd"
+	if not ResourceLoader.exists(path):
+		if menu_open() and menu.mode=="settings":menu.status.text="Bug reports are available in the integrated release build."
+		return
+	var result:Dictionary=load(path).write_report(sim)
+	if result.ok and DisplayServer.get_name()!="headless":DisplayServer.clipboard_set(result.text)
+	var status:String=("Report saved: "+str(result.path)) if result.ok else ("Could not save report: "+str(result.error))
+	if menu_open() and menu.mode=="settings":menu.status.text=status
+	# Keep the full location in the wrapping menu status, not across the battlefield.
+	var message:="Bug report copied and saved" if DisplayServer.get_name()!="headless" else "Bug report saved"
+	notify(message if result.ok else "Could not save bug report; see Settings",Notice.INFO)
+
+# Screen-edge strips remain active over the top rail and right sidebar. Clicking
+# or dragging a HUD control never pans, and leaving/focusing another window stops
+# movement. Kept pure enough for deterministic pointer regression coverage.
+func edge_pan_direction(mouse:Vector2,view:Vector2,button_down:bool=false) -> Vector2:
+	if not settings.values.edge_scroll or not window_focused or not pointer_in_window or middle_panning or dragging or build_drag or button_down or show_help or menu_open() or sim.result!="":return Vector2.ZERO
+	if mouse.x<0 or mouse.y<0 or mouse.x>=view.x or mouse.y>=view.y:return Vector2.ZERO
+	return Vector2((-1 if mouse.x<10 else 0)+(1 if mouse.x>=view.x-10 else 0),(-1 if mouse.y<10 else 0)+(1 if mouse.y>=view.y-10 else 0))
 
 func advance_zoom(dt:float) -> void:
 	camera_size=lerpf(camera_size,camera_zoom_target,1.0-exp(-14.0*maxf(dt,0)))
@@ -275,7 +419,7 @@ func update_camera() -> void:
 
 # Brief screen-plane jolt from nearby blasts (effects.gd scales it by blast size and distance from the focus).
 func camera_shake() -> Vector3:
-	return effects.camera_shake(camera_focus,camera_size,camera.basis)
+	return effects.camera_shake(camera_focus,camera_size,camera.basis)*float(settings.values.camera_shake)
 
 func screen_pos(p: Vector2, height: float = 0) -> Vector2:
 	return camera.unproject_position(Vector3(p.x,height,p.y))
@@ -384,7 +528,7 @@ func refresh_fog_pixels() -> bool:
 	return changed
 
 func _physics_process(dt: float) -> void:
-	if benchmark or (not paused and not show_help):
+	if benchmark or (not paused and not show_help and not menu_open()):
 		var start:=Time.get_ticks_usec()
 		# Pre-tick poses for render interpolation, refreshed in place each tick.
 		for unit in sim.units:
@@ -427,26 +571,21 @@ func _process(dt: float) -> void:
 	marker.visible=marker_time>0
 	if marker.visible:
 		marker.scale=Vector3.ONE*(1+(1-marker_time)*0.8)
-	if not show_help and sim.result=="":
+	if not show_help and not menu_open() and window_focused and sim.result=="":
 		var movement:=Vector2.ZERO
 		if Input.is_physical_key_pressed(KEY_LEFT): movement.x-=1
 		if Input.is_physical_key_pressed(KEY_RIGHT): movement.x+=1
 		if Input.is_physical_key_pressed(KEY_UP): movement.y-=1
 		if Input.is_physical_key_pressed(KEY_DOWN): movement.y+=1
-		var mouse:=get_viewport().get_mouse_position()
+		# Use the last pointer event. Before the first mouse input Godot's dummy
+		# driver reports (0,0); that is not an intentional top-left edge gesture.
+		var mouse:=pointer
 		var view:=get_viewport().get_visible_rect().size
-		# Edge scrolling pauses while the map is grabbed with the middle button.
-		var over_battlefield:bool=hud.action_at(mouse)=="" and not middle_panning
-		if over_battlefield and mouse.y>0 and mouse.y<view.y:
-			if mouse.x>=0 and mouse.x<10: movement.x-=1
-			if mouse.x<=view.x and mouse.x>view.x-10: movement.x+=1
-		if over_battlefield and mouse.x>0 and mouse.x<view.x:
-			if mouse.y>=0 and mouse.y<10: movement.y-=1
-			if mouse.y>view.y-10 and mouse.y<view.y: movement.y+=1
+		movement+=edge_pan_direction(mouse,view,Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) or Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE))
 		var right:=Vector2(camera.global_basis.x.x,camera.global_basis.x.z).normalized()
 		var down:=Vector2(-right.y,right.x)
 		# Huge theatres pan proportionally faster when zoomed out; legacy speed is unchanged.
-		var speed:=32.0*(maxf(1.0,camera_size/72.0) if huge_world() else 1.0)
+		var speed:=32.0*(maxf(1.0,camera_size/72.0) if huge_world() else 1.0)*float(settings.values.camera_speed)
 		var pan:Vector2=(right*movement.x+down*movement.y)*dt*speed
 		camera_focus.x+=pan.x
 		camera_focus.z+=pan.y
@@ -642,6 +781,7 @@ void fragment(){float d=length((UV-vec2(0.5))*2.0);ALBEDO=vec3(0.035,0.04,0.035)
 var audio:Node3D=null
 func consume_events() -> void:
 	for event in sim.events:
+		if is_instance_valid(hud) and hud.has_method("observe_event"):hud.observe_event(event)
 		if event.type=="destroyed" and event.get("abandoned",false):continue
 		if event.type=="warning":
 			if notify(event.text,notices.event_level(event)) and audio!=null:audio.ui("warn")
@@ -962,6 +1102,7 @@ func refresh_cursor_hint() -> void:
 	cursor_hint=str(special_plan(pointer,pick(pointer,true),attack_mode,ids).get("label",""))
 
 func ui_action(action: String, p: Vector2) -> void:
+	if hud.has_method("handle_action") and hud.handle_action(action,p):return
 	match action:
 		"begin":
 			show_help=false
@@ -971,17 +1112,19 @@ func ui_action(action: String, p: Vector2) -> void:
 			else:notify("Scout first. Ground sections capture sectors.")
 		"help": show_help=true
 		"pause": paused=not paused
-		"restart": get_tree().reload_current_scene()
+		"restart": request_restart()
+		"settings": open_settings()
+		"bug-report": copy_bug_report()
 		"attack":
-			attack_mode=true
-			strike_mode=false
+			set_targeting("attack" if not orderable().is_empty() else "")
 		"stop":
+			cancel_targeting(false)
 			var before:=active_sites()
 			var stopped:=sim.stop(orderable())
 			var paused_sites:=release_note(before)
 			notify("Stop acknowledged by %d / %d sections • disconnected units keep orders" % [stopped,orderable().size()]+paused_sites,Notice.CURSOR if paused_sites=="" else Notice.INFO)
 		"retreat":
-			attack_mode=false
+			cancel_targeting(false)
 			var before:=active_sites()
 			var withdrawn:=sim.retreat(orderable())
 			var paused_sites:=release_note(before)
@@ -996,18 +1139,16 @@ func ui_action(action: String, p: Vector2) -> void:
 				get_tree().reload_current_scene()
 			elif action.begins_with("build:") and not sim.field_ops.is_empty():
 				var kind:=action.trim_prefix("build:")
-				attack_mode=false
-				strike_mode=false
+				set_targeting("")
 				if selected_engineer()<0:
 					build_mode=""
 					notify("Select a living engineer section to build")
 				else:
-					build_mode=kind
+					set_targeting("build",kind)
 					build_rotated=false
 					notify("Place %s • %s • Esc cancels" % [field_choice(kind).get("name",kind.capitalize()),HUD.FIELD_FUNCTIONS.get(kind,"")],Notice.CURSOR)
 			elif action.begins_with("build:"):
-				build_mode=action.trim_prefix("build:")
-				attack_mode=false
+				set_targeting("build",action.trim_prefix("build:"))
 				notify("Place "+build_mode+" near your base • Esc cancels",Notice.CURSOR)
 			elif action=="cancel_build" and selected.size()==1:
 				var site:Dictionary=sim.get_unit(selected[0])
@@ -1026,10 +1167,7 @@ func ui_action(action: String, p: Vector2) -> void:
 				sim.Classic.cancel(sim,sim.get_unit(selected[0]))
 			elif action=="strike:fpv" and not sim.field_ops.is_empty():
 				var reason:String=sim.FieldOps.strike_reason(sim)
-				strike_mode=reason==""
-				if strike_mode:
-					attack_mode=false
-					build_mode=""
+				if reason=="":set_targeting("strike")
 				notify("FPV strike armed • click a seen enemy • Esc cancels" if strike_mode else reason,Notice.CURSOR if strike_mode else Notice.INFO)
 			elif action.begins_with("buy:"):
 				var kind:=action.trim_prefix("buy:")
@@ -1133,6 +1271,24 @@ func _input(event: InputEvent) -> void:
 	if not is_instance_valid(hud):
 		return
 	if event is InputEventMouse:pointer=event.position
+	if menu_open():
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode in [KEY_ESCAPE,KEY_F10]:
+				close_menu()
+				get_viewport().set_input_as_handled()
+			elif menu.mode=="settings" and event.keycode in [KEY_F11,KEY_M]:
+				toggle_setting("fullscreen" if event.keycode==KEY_F11 else "muted")
+				menu.sync_values(settings.values)
+				get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode==KEY_F10:
+			open_settings()
+			get_viewport().set_input_as_handled()
+			return
+		if event.keycode==KEY_F11:
+			toggle_setting("fullscreen")
+			return
 	if event is InputEventMouse or event is InputEventKey:hint_dirty=true
 	if event is InputEventMouseMotion and middle_panning:
 		if event.button_mask&MOUSE_BUTTON_MASK_MIDDLE:middle_pan(event.position)
@@ -1145,11 +1301,12 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventMagnifyGesture:
 		if not show_help and sim.result=="" and hud.action_at(event.position)=="":
-			request_zoom(1.0/maxf(event.factor,0.01))
+			user_zoom(1.0/maxf(event.factor,0.01))
 		return
 	if event is InputEventMouseButton:
 		var p: Vector2=event.position
 		if event.pressed:
+			if event.button_index==MOUSE_BUTTON_RIGHT and cancel_targeting():return
 			var action: String=hud.action_at(p)
 			# Queue removal works on greyed tiles too (e.g. when supply is spent).
 			if event.button_index==MOUSE_BUTTON_RIGHT and hud.hit_id_at(p).begins_with("buy:"):action=hud.hit_id_at(p)
@@ -1171,9 +1328,9 @@ func _input(event: InputEvent) -> void:
 					ui_action(action,p)
 				return
 			if event.button_index==MOUSE_BUTTON_WHEEL_UP:
-				if not show_help and sim.result=="":request_zoom(pow(0.90,maxf(event.factor,0.1)))
+				if not show_help and sim.result=="":user_zoom(pow(0.90,maxf(event.factor,0.1)))
 			elif event.button_index==MOUSE_BUTTON_WHEEL_DOWN:
-				if not show_help and sim.result=="":request_zoom(pow(1.0/0.90,maxf(event.factor,0.1)))
+				if not show_help and sim.result=="":user_zoom(pow(1.0/0.90,maxf(event.factor,0.1)))
 			elif event.button_index==MOUSE_BUTTON_LEFT:
 				if strike_mode:
 					launch_strike(p)
@@ -1195,9 +1352,6 @@ func _input(event: InputEvent) -> void:
 				else:
 					drag_start=p
 					dragging=true
-			elif event.button_index==MOUSE_BUTTON_RIGHT and strike_mode:
-				strike_mode=false
-				notify("FPV strike cancelled",Notice.CURSOR)
 			elif event.button_index==MOUSE_BUTTON_RIGHT:
 				give_order(p,false,event.shift_pressed)
 		elif event.button_index==MOUSE_BUTTON_LEFT and build_drag:
@@ -1224,14 +1378,8 @@ func _input(event: InputEvent) -> void:
 			if event.keycode==KEY_ENTER: get_tree().reload_current_scene()
 			return
 		if event.keycode==KEY_ESCAPE:
-			if build_mode!="":
-				build_mode=""
-				notify("Placement cancelled",Notice.CURSOR)
-			elif strike_mode:
-				strike_mode=false
-				notify("FPV strike cancelled",Notice.CURSOR)
+			if cancel_targeting():return
 			elif show_help: show_help=false
-			elif attack_mode: attack_mode=false
 			else: paused=not paused
 			return
 		if show_help:
@@ -1243,9 +1391,9 @@ func _input(event: InputEvent) -> void:
 					build_rotated=not build_rotated
 					notify("Placement turned %s" % ("across" if build_rotated else "along"),Notice.CURSOR)
 			KEY_A:
-				attack_mode=not selected.is_empty()
-				if attack_mode:strike_mode=false
+				ui_action("attack",Vector2.ZERO)
 			KEY_S:
+				cancel_targeting(false)
 				var before:=active_sites()
 				var stopped:=sim.stop(orderable())
 				var paused_sites:=release_note(before)
@@ -1260,9 +1408,7 @@ func _input(event: InputEvent) -> void:
 					camera_focus=Vector3(focus.x,0,focus.y)
 			KEY_F1: show_help=true
 			KEY_M:
-				effects.muted=not effects.muted
-				sound.volume_db=-80 if effects.muted else -19
-				if audio!=null:audio.set_muted(effects.muted)
+				toggle_setting("muted")
 				notify("Audio muted" if effects.muted else "Audio enabled",Notice.CURSOR)
 			KEY_TAB: selected=all_sections()
 		if event.keycode>=KEY_1 and event.keycode<=KEY_9:
