@@ -2,9 +2,9 @@ extends SceneTree
 const Terrain=preload("res://scripts/terrain.gd")
 class CountTerrain extends BattleTerrain:
 	var traversable_calls:=0
-	func traversable(p:Vector2,domain:String,radius:float=-1)->bool:
+	func traversable(p:Vector2,domain:String,radius:float=-1,pressed_wrecks:Array=[])->bool:
 		traversable_calls+=1
-		return super.traversable(p,domain,radius)
+		return super.traversable(p,domain,radius,pressed_wrecks)
 var specs:Array=[["land",0.8,"infantry"],["land",2.654,"infantry"],["land",2.65,"tracked"],["land",1.23456,"wheeled"],["sea",3.3,"default"],["air",1.55,"default"]]
 var failures:=0
 var checks:=0
