@@ -10,6 +10,7 @@ const ORANGE := Color("dab273")
 const RED := Color("df8066")
 const Notice := preload("res://scripts/notice_feed.gd")
 const BattlefieldInterface := preload("res://scripts/battlefield_interface.gd")
+const Scenarios := preload("res://scripts/scenario_catalog.gd")
 const SCENARIO_LABELS := {"coast":"COAST","fields":"FIELDS","urban":"URBAN","showcase":"SHOWCASE","classic":"SKIRMISH","riverside_town":"TOWN","black_sea_harbor":"BLACK SEA HARBOR"}
 # Player-facing summaries of the effects FieldOps.tick applies.
 const FIELD_FUNCTIONS := {"tactical_cover":"Infantry cover barrier once complete · T rotates","observation_post":"Raised post with 24 m sight","repair_point":"Repairs land vehicles within 10 m out of combat","aid_post":"Treats wounded living soldiers within 10 m; no revival","concertina_wire":"Slows infantry to a crawl; tracked vehicles crush it · T rotates","tank_obstacles":"Hedgehogs stop tracked and wheeled vehicles; infantry pass with cover · T rotates","fighting_trench":"Dug-in infantry cover inside the trench · T rotates","vehicle_berm":"Armoured vehicles: 40% less ground fire damage from front/sides","camouflage_net":"Land units spotted at half range; firing reveals them for 3s","forward_supply_point":"Land entry needs a connected route and no seen enemy within 18 m; otherwise uses rear","bunker":"Concrete MG pillbox: pins and cuts down infantry; needs tanks or AT fire to destroy","at_gun":"Dug-in anti-tank gun: long-range fire against armour and boats","command_post":"Radio command post: 28 m observation; enemy reserves stage from command posts","ammo_depot":"Ammunition dump: enemy counterattacks need a depot or command post"}
@@ -344,18 +345,19 @@ func draw_world(sim) -> void:
 	var game_title:=str(ProjectSettings.get_setting("application/config/name")).to_upper()
 	var scenario_x:=32.0+bold.get_string_size(game_title,HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
 	text_at(game_title,Vector2(16,27),16,WHITE,true)
-	text_at(fit_bold(sim.scenario.name.to_upper(),maxf(0,w-736-scenario_x),12),Vector2(scenario_x,27),12,MUTED,true)
-	text_at("SUPPLY  %04d" % int(sim.credits),Vector2(w-560,27),15,TEAL,true)
-	text_at("%02d:%02d" % [int(sim.time)/60,int(sim.time)%60],Vector2(w-392,27),13,WHITE)
+	text_at(fit_bold(sim.scenario.name.to_upper(),maxf(0,w-814-scenario_x),12),Vector2(scenario_x,27),12,MUTED,true)
+	text_at("SUPPLY  %04d" % int(sim.credits),Vector2(w-638,27),15,TEAL,true)
+	text_at("%02d:%02d" % [int(sim.time)/60,int(sim.time)%60],Vector2(w-470,27),13,WHITE)
+	button("region","REGION",Rect2(w-411,7,72,28))
 	button("settings","SETTINGS",Rect2(w-333,7,72,28))
 	button("pause","RESUME" if battle.paused else "PAUSE",Rect2(w-255,7,80,28))
 	button("help","GUIDE",Rect2(w-169,7,76,28))
 	button("restart","RESTART",Rect2(w-87,7,78,28))
 	if not sim.classic.is_empty():
 		var power:Vector2=sim.Classic.power(sim,0)
-		text_at("POWER %d / %d" % [power.y,power.x],Vector2(w-720,27),12,ORANGE if power.y>power.x else MUTED)
+		text_at("POWER %d / %d" % [power.y,power.x],Vector2(w-798,27),12,ORANGE if power.y>power.x else MUTED)
 	else:
-		if not sim.field_ops.is_empty():text_at("INCOME +%s/s" % String.num(float(sim.field_ops.income_rate)),Vector2(w-690,27),12,MUTED,true)
+		if not sim.field_ops.is_empty():text_at("INCOME +%s/s" % String.num(float(sim.field_ops.income_rate)),Vector2(w-768,27),12,MUTED,true)
 		var badges:=objective_badges(sim)
 		for i in badges.size():
 			var obj:Dictionary=sim.objectives[i]
@@ -369,7 +371,7 @@ func draw_world(sim) -> void:
 	if sim.scenario.get("autonomy",false):
 		text_at("%s  ·  Sight %d%%" % [sim.weather.label,roundi(sim.weather.sight_scale*100)],Vector2(w-530,65),11,WHITE)
 	# The sector hold countdown sits under the badge row so it never covers a badge.
-	if sim.scenario.get("id","")=="black_sea_harbor":battlefield_ui.draw_mission(self)
+	if sim.terrain.compiled_map and not sim.field_ops.is_empty():battlefield_ui.draw_mission(self)
 	elif sim.score_hold>0:
 		console_panel(Rect2(12,86,124,24))
 		text_at("HOLD  %02ds" % ceili(float(sim.scenario.hold)-sim.score_hold),Vector2(22,103),13,TEAL,true)
@@ -385,7 +387,7 @@ func draw_top(sim) -> void:
 	var badge_row:Array=objective_badges(sim) if sim.classic.is_empty() else []
 	if not badge_row.is_empty() and badge_row[-1].intersects(pause_rect.grow(6)):pause_rect.position.y=86
 	var toast_y:=90.0 if pause_rect.position.y<86 else 122.0
-	if sim.scenario.get("id","")=="black_sea_harbor":toast_y=maxf(toast_y,172)
+	if sim.terrain.compiled_map and not sim.field_ops.is_empty():toast_y=maxf(toast_y,172)
 	if battle.strike_mode:draw_strike_reticle(sim)
 	# The attack-move / strike mode banner first, then the notice stack under it.
 	if battle.attack_mode or battle.strike_mode:
@@ -598,7 +600,7 @@ func draw_sidebar(sim) -> void:
 	text_at("PRODUCTION" if not sim.classic.is_empty() else "REINFORCEMENTS",Vector2(x+19,production_top-11),12,WHITE,true)
 	var types:Array=["rifle","atgm","tank","drone","helo","boat","aa"]
 	if not sim.classic.is_empty():types.append("harvester")
-	elif not sim.field_ops.is_empty():types=sim.FieldOps.PURCHASES
+	elif not sim.field_ops.is_empty():types=sim.FieldOps.purchase_choices(sim)
 	var names:Array=types.map(func(kind):return UNIT_NAMES.get(kind,str(sim.definitions[kind].name)))
 	for i in types.size():
 		var kind:String=types[i]
@@ -949,19 +951,21 @@ func draw_guide() -> void:
 	# Modal buttons replace background hit targets.
 	hits.clear()
 	modal=true
-	# One selector per listed scenario, sharing the 632 px row with 7 px gaps.
+	# Keep the legacy fixture selectors stable; regional operations are chosen on
+	# their shared geography, with only the current regional operation in this row.
 	# Hidden legacy scenarios keep their numeric ids and appear only while active.
 	if scenario_entries.is_empty():
-		var presets:Array=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
+		var presets:Array=Scenarios.entries()
 		for index in presets.size():
 			var id:String=presets[index].get("id","")
-			scenario_entries.append({"index":index,"label":SCENARIO_LABELS.get(id,id.get_slice("_",0).to_upper()),"hidden":bool(presets[index].get("hidden",false))})
+			scenario_entries.append({"index":index,"label":SCENARIO_LABELS.get(id,str(presets[index].get("name",id)).to_upper()),"hidden":bool(presets[index].get("hidden",false)),"regional":presets[index].has("map_path")})
 	var active:int=battle.sim.terrain.scenario_id
-	var listed:=scenario_entries.filter(func(entry):return not entry.hidden or entry.index==active)
+	var listed:=scenario_entries.filter(func(entry):return (not entry.hidden and not entry.regional) or entry.index==active)
 	var count:=listed.size()
-	var width:=(632.0-7.0*(count-1))/count
+	var width:=(486.0-7.0*(count-1))/maxi(count,1)
 	for i in count:
-		button("scenario:"+str(listed[i].index),listed[i].label,Rect2(r.position+Vector2(34+i*(width+7.0),119),Vector2(width,25)),true,active==listed[i].index)
+		button("scenario:"+str(listed[i].index),fit_bold(listed[i].label,width-16,12),Rect2(r.position+Vector2(34+i*(width+7.0),119),Vector2(width,25)),true,active==listed[i].index)
+	button("region","REGIONAL MAP  →",Rect2(r.position+Vector2(527,119),Vector2(139,25)))
 	if battle.sim.scenario.get("id","")=="black_sea_harbor":
 		button("tutorial:start","DEPLOY WITH FIELD GUIDE",Rect2(r.position+Vector2(34,446+extra),Vector2(292,38)))
 		button("begin","DEPLOY  →",Rect2(r.position+Vector2(334,446+extra),Vector2(332,38)))
@@ -978,4 +982,5 @@ func draw_result() -> void:
 	text_at("%02d:%02d   /   %d enemies destroyed   /   %d sections lost" % [int(sim.time)/60,int(sim.time)%60,sim.kills,sim.losses],r.position+Vector2(30,174),14,WHITE)
 	hits.clear()
 	modal=true
-	button("restart","REDEPLOY",Rect2(r.position+Vector2(30,215),Vector2(480,46)))
+	button("region","REGIONAL MAP",Rect2(r.position+Vector2(30,215),Vector2(230,46)))
+	button("restart","REDEPLOY",Rect2(r.position+Vector2(272,215),Vector2(238,46)))

@@ -47,6 +47,14 @@ The animation/landscape pass now adds individual infantry actors, procedural sta
 
 ## Current delivery focus
 
+### Regional expansion — 2026-10-23
+
+The user now requests a larger regional map containing distinct battlefields, grounded in believable city, transport and infrastructure layout, with editor improvements first where useful. [Plan 16](plans/16-regional-map.md) implements this increment on `codex/regional-map`: the Black Sea Coast atlas, the existing Harbor operation, and three new rail-valley, limestone-pass and coastal-inlet maps. The region establishes their geographic relationship and loads one tactical operation at a time. Persistent campaign state and continuous cross-map simulation remain future work.
+
+The visual blueprint editor and deterministic compiler share the existing building profiles, asset footprints, road and coastline rules with runtime. New content must pass domain, placement, connection and native route checks without relaxing clearance rules. The geographic reference is the broad Sevastopol / Heraclean Peninsula pattern; detailed streets and tactical extents are original compressed layouts. Ground remains planar, rocks form solid obstacles, and rolling stock is stationary. Human balance/art review and the unresolved performance target remain separate acceptance gates. See the [regional guide](regional-map.md) and [validation](validation.md).
+
+### Earlier delivery increments
+
 The reviewed [combined-arms showcase](plans/7-combined-arms-showcase.md) integrates broad land-unit autonomy, individual movement, animation, a canal-village mission, and user-added terrain/weather and material improvements. Systems are proven in this fourth scenario before expanding all maps. Human play/art acceptance and the 16.7 ms performance target remain open.
 
 The user expanded delivery to a [classic skirmish](plans/8-classic-skirmish.md): finite harvesting, construction, power, queues, enemy base building and annihilation victory. This complements the showcase rather than replacing it. Air/naval production, research and broader economic balance remain subsequent work.

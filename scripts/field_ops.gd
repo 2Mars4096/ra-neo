@@ -10,6 +10,13 @@ const ROTATABLE=["tactical_cover","concertina_wire","tank_obstacles","fighting_t
 const FORWARD_SAFE_RADIUS:=18.0
 const PURCHASES=["rifle","atgm","engineer","tank","aa","drone","helo","boat"]
 
+# Domain availability belongs to the battlefield. Inland operations never
+# charge supply for a boat that has no legal insertion; legacy maps retain
+# their existing roster when the setting is omitted.
+static func purchase_choices(sim)->Array:
+	var domains:Array=sim.scenario.get("available_domains",["land","air","sea"])
+	return PURCHASES.filter(func(kind):return sim.definitions.has(kind) and sim.definitions[kind].domain in domains)
+
 static func build_choices()->Dictionary:
 	var data:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://resources/field_units.json"))
 	data.erase("engineer")
@@ -448,7 +455,7 @@ static func enemy_offensive(sim)->void:
 	swarm_strikes(sim,state,plan)
 	if not state.get("warned",false) and sim.time>=state.next-20.0 and state.index<int(plan.get("max_wave",8)) and enemy_logistics_alive(sim):
 		state.warned=true
-		sim.events.append({"type":"warning","text":"Enemy assault forming in the north-east • ~20 s","notice":"alert"})
+		sim.events.append({"type":"warning","text":"Enemy assault forming • ~20 s","notice":"alert"})
 	if sim.time<state.next or state.index>=int(plan.get("max_wave",8)) or not enemy_logistics_alive(sim):return
 	state.warned=false
 	state.next=sim.time+float(plan.get("interval",120.0))
@@ -672,7 +679,7 @@ static func purchase(sim,kind:String)->bool:
 	sim.field_ops.last_purchase_error=""
 	sim.field_ops["last_entry_forward"]=false
 	sim.field_ops["last_deployed"]=false
-	if sim.result!="" or kind not in PURCHASES:return purchase_fail(sim,"Reinforcements unavailable")
+	if sim.result!="" or kind not in purchase_choices(sim):return purchase_fail(sim,"Reinforcements unavailable in this battlefield")
 	if queue(sim).size()>=QUEUE_LIMIT:return purchase_fail(sim,"Queue full (%d)" % QUEUE_LIMIT)
 	if sim.credits<float(sim.definitions[kind].cost):return purchase_fail(sim,"Need %d more supply" % ceili(float(sim.definitions[kind].cost)-sim.credits))
 	sim.credits-=float(sim.definitions[kind].cost)

@@ -361,6 +361,7 @@ def load_library():
 class City:
     def __init__(self, bp):
         self.bp = bp; self.sc = bp["scenario"]; self.rock_rects = bp["rock_parcels"]
+        self.map_w, self.map_h = self.sc.get("size", [MAP_W, MAP_H])
         self.designs = load_designs(); self.library = load_library()
         self.water = self.sc["water_polygons"]
         self.coast = Grid(32)
@@ -390,7 +391,7 @@ class City:
         return best
     def land_ok(self, poly, margin=1.5):
         b = bbox(poly)
-        if b[0] < 2 or b[1] < 2 or b[2] > MAP_W-2 or b[3] > MAP_H-2: return False
+        if b[0] < 2 or b[1] < 2 or b[2] > self.map_w-2 or b[3] > self.map_h-2: return False
         if any(self.is_water(p) for p in poly+[centroid(poly)]): return False
         return self.coast_dist(poly, margin+1) >= margin
     def road_gap(self, poly, ignore=()):
@@ -511,7 +512,7 @@ class City:
         spec = self.library[asset]; r = aabb(spec["footprint"], p, yaw)
         flat = spec["collision"] == "flat"
         poly = rect_poly(r)
-        if r[0] < 1 or r[1] < 1 or r[0]+r[2] > MAP_W-1 or r[1]+r[3] > MAP_H-1: return None
+        if r[0] < 1 or r[1] < 1 or r[0]+r[2] > self.map_w-1 or r[1]+r[3] > self.map_h-1: return None
         samples = poly+[(r[0]+r[2]/2, r[1]+r[3]/2)]
         if any(self.is_water(q) != (domain == "sea") for q in samples): return None
         for rr in self.rock_rects:
@@ -963,7 +964,7 @@ def compile_map(bp, draft=False):
     city = City(bp)
     sc = copy.deepcopy(bp["scenario"])
     sc.update(blocks=[], architecture=[], map_props=[], prop_blocks=[], water_blocks=[])
-    sc["map_blueprint"] = "resources/maps/black_sea_harbor.json"
+    sc["map_blueprint"] = bp.get("source_path", "resources/maps/black_sea_harbor.json")
     sc["authorship"] = bp["proposal"]
     sc["footpaths"] = bp["footpaths"]
     streets, nodes, graph_edges, faces = build_graph(city)
@@ -1028,10 +1029,18 @@ def compile_map(bp, draft=False):
         city.blocks_out.append({"district": f["district"], "morphology": f["morphology"],
                                 "polygon": [[round(p[0], 3), round(p[1], 3)] for p in f["poly"]]})
     queued, city.queue = city.queue, None
+    # Regional editing gives explicitly placed objects priority over generated
+    # garden/street furniture. The established Harbor order stays unchanged.
+    if bp.get("explicit_decor_first", False):
+        for item in bp["decor"]:
+            city.prop(item["id"], tuple(item["position"]), item.get("rotation_degrees", 0), item.get("context", "authored placement"),
+                      domain=item.get("domain", "land"), road_margin=item.get("road_margin", 0.5),
+                      allow_reserved=item.get("allow_reserved", False))
     for args in queued: city.prop(*args)
-    decorate(city, bp, bounded)
+    decorate(city, dict(bp, decor=[]) if bp.get("explicit_decor_first", False) else bp, bounded)
     apply_damage(city, sc, bp)
-    enemy_defences(city, sc)
+    if bp.get("generate_enemy_defences", True):
+        enemy_defences(city, sc)
     # ------------------------------------------------------------- emit
     sc["low_obstacle_blocks"] = []  # indices into blocks; locomotion only, no wall shelter/LOS
     order = sorted(city.buildings, key=lambda e: (e["position"][1]//64, e["position"][0], e["position"][1]))

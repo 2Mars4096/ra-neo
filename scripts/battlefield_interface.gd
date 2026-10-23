@@ -180,14 +180,18 @@ func mission_lines(sim)->Array[String]:
 	var hold:int=ceili(float(sim.scenario.hold))
 	var first:="SECURE %d/%d  ·  Hold all for %ds" % [secured,sim.objectives.size(),hold]
 	if sim.score_hold>0:first="HOLD %ds remaining  ·  %d/%d sectors clear" % [maxi(0,ceili(float(sim.scenario.hold)-sim.score_hold)),secured,sim.objectives.size()]
-	var logistics:bool=sim.FieldOps.enemy_logistics_alive(sim)
-	var second:="Optional: destroy all enemy posts/depots to stop new waves."
-	if not logistics:second="Enemy logistics neutralised · already deployed forces remain."
+	var authored_logistics:bool=sim.scenario.get("enemy_works",[]).any(func(work):return str(work.kind) in ["command_post","ammo_depot"])
+	var second:="Secure the approaches and hold every sector."
+	if authored_logistics:
+		second="Optional: destroy all enemy posts/depots to stop new waves."
+		if not sim.FieldOps.enemy_logistics_alive(sim):second="Enemy logistics neutralised · already deployed forces remain."
+	elif not sim.FieldOps.reserve_records(sim).is_empty():
+		second="Enemy reserve deployed · secure and hold every sector." if sim.counterattack_sent else "Taking a sector brings enemy reserves. Prepare support."
 	return [first,second]
 
 func draw_mission(hud)->void:
 	var sim=hud.battle.sim
-	if sim.scenario.get("id","")!="black_sea_harbor":return
+	if not sim.terrain.compiled_map or sim.field_ops.is_empty():return
 	var r:=Rect2(12,86,minf(420,hud.battlefield_rect().size.x-24),48)
 	hud.console_panel(r)
 	var lines:=mission_lines(sim)

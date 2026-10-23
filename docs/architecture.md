@@ -5,7 +5,7 @@
 - Godot **4.5.1-stable**, GDScript, GL Compatibility renderer, 2× MSAA.
 - Local single-player 3D scene; elevated orthographic camera; mouse/keyboard UI.
 - Fixed 30 Hz authoritative simulation. Effects and HUD run on rendered frames.
-- Development and graphics checks run on macOS / Apple M4 Pro. Other platforms are not validated.
+- Historical performance measurements use macOS / Apple M4 Pro. The regional implementation also has Linux headless and native GL Compatibility checks; these are functional/render checks, not cross-platform performance acceptance.
 - Original procedural geometry, shaders, generated material atlas and synthesized audio. No external asset dependency, physics plugin, or third-party framework.
 
 ## Modules
@@ -16,13 +16,19 @@
 | `scripts/simulation.gd` | Commands, squads, damage, targeting, knowledge, suppression, economy, objectives, opponent waves, terminal states |
 | `scripts/cover_behavior.gd` | Bounded individual shelter search, reservations, commitment and routes for autonomy scenarios |
 | `scripts/terrain.gd` | Shared scenery definitions, cover/visibility, clearance-aware domain navigation |
-| `scripts/city_building_geometry.gd`, `resources/city_building_geometry.json` | Shared ground-wall, porch and dock profiles for supported Harbor render builders and the map compiler |
-| `scripts/battle.gd` | Input dispatch, camera, scene synchronization, order feedback, fog, effect events, benchmark |
-| `scripts/hud.gd` | Briefing, command deck, selection/range/order overlays, minimap, results |
+| `scripts/scenario_catalog.gd` | Stable legacy scenario indices, lightweight regional descriptors, lazy external map loading and deployment reload |
+| `scripts/region_catalog.gd`, `scripts/regional_map.gd` | Regional metadata, geographic atlas, pan/zoom, battlefield selection and switch confirmation |
+| `scripts/city_building_geometry.gd`, `resources/city_building_geometry.json` | Shared ground-wall, porch and dock profiles for supported city render builders and map compilers |
+| `scripts/battle.gd` | Input dispatch, camera, scene synchronization, atlas pause/return/switch lifecycle, order feedback, fog, effect events, benchmark |
+| `scripts/hud.gd`, `scripts/battlefield_interface.gd` | Briefing, command deck, regional access, available reinforcements, mission guidance, selection/range/order overlays, minimap, results |
 | `scripts/unit_models.gd` | Original military-inspired equipment meshes and materials |
 | `scripts/visuals.gd` | World geometry, instanced vegetation, water/terrain shaders, rigid-mesh batching |
 | `scripts/effects.gd` | Fixed 640-slot particle pool, effect timing and synthesized combat audio |
 | `resources/units.json` | Unit roles, combat/movement stats, prices, visible member counts, radii, and flight altitude |
+| `resources/regions/black_sea_region.json` | Shared atlas geography, battlefield footprints, connections, summaries and source attribution |
+| `resources/maps/blueprints/`, `resources/maps/region/` | Editable regional battlefield sources and separately compiled runtime maps |
+| `tools/regional_editor.py`, `tools/regional_editor.html`, `tools/edit_region.sh` | Local visual blueprint editor, validated preview/save service and launcher |
+| `tools/regional_map_schema.py`, `tools/build_region_maps.py` | Blueprint checks and deterministic regional compilation through the existing Harbor geometry pipeline |
 | `tests/`, `tools/check.py` | Behavior, input/restart, clearance, effects, playthrough, and rendered reviews |
 | `tools/play.sh`, `Play For Every Dawn.command` | Source-project launchers; not exported standalone binaries |
 | `artifacts/` | Generated measurements and review screenshots |
@@ -31,7 +37,7 @@
 
 Squads remain command/navigation groups. Infantry soldiers now have independent positions, health, weapon cooldowns, target acquisition, targeting, facing, suppression, hit reactions, and casualties in `scripts/infantry.gd`. They follow stable local slots inside a conservative group envelope, with terrain and peer-separation checks; the showcase adds bounded local cover selection, but not independent long-range pathfinding. Squad HP is the sum of surviving members. Repair heals living soldiers and never resurrects casualties. Ground, sea, UAV, and helicopter bodies have distinct collision layers. The UAV and helicopter use altitude bands above the tallest scenery. Collision radii cover the actual mesh vertices, including guns and rotors, rather than only the chassis.
 
-Navigation uses Godot AStarGrid2D, with cached one-meter grids per movement domain and radius. Paths only simplify when the entire footprint clears geometry. Footprint tests include ridges, warehouses, shared tree positions, piers, containers, objective poles, map edges, and coastline. A spatial hash narrows dynamic avoidance checks; swept movement prevents bodies stepping through each other. Deployment and formation slots reserve safe space. Crowded units may yield; this is not a full rigid-body vehicle or infantry navigation simulation. In autonomy scenarios, an infantry section's definition radius (2.65) is only its terrain envelope. Against other units it uses `Simulation.crowd_radius` (2.0) for spawn and slot spacing, and its soldiers' bodies for contact: anchors skip other sections, vehicles test soldiers, and detours avoid soldiers. Cross-section soldier clearance is 0.7 x body sum.
+Navigation uses Godot AStarGrid2D, with cached grids per movement domain, radius and mobility profile; cell size comes from the selected scenario (one-meter legacy default, four-meter regional maps). Paths only simplify when the entire footprint clears geometry. Footprint tests include ridges, warehouses, shared tree positions, piers, containers, objective poles, map edges, and coastline. A spatial hash narrows dynamic avoidance checks; swept movement prevents bodies stepping through each other. Deployment and formation slots reserve safe space. Crowded units may yield; this is not a full rigid-body vehicle or infantry navigation simulation. In autonomy scenarios, an infantry section's definition radius (2.65) is only its terrain envelope. Against other units it uses `Simulation.crowd_radius` (2.0) for spawn and slot spacing, and its soldiers' bodies for contact: anchors skip other sections, vehicles test soldiers, and detours avoid soldiers. Cross-section soldier clearance is 0.7 x body sum.
 
 Team knowledge is updated every 0.3 seconds. Ground line of sight respects blockers; elevated reconnaissance can reveal beyond them. Targeting still respects weapon line of fire. The fog/minimap terrain field is cached by observer cell; target detection uses current positions. Explicit pursuit remembers the last visible target position rather than tracking hidden live movement.
 
@@ -57,9 +63,26 @@ Retreat orders use existing footprint-aware routing and group formation slots, m
 
 ## Scenario and weapon presentation
 
-`resources/scenarios.json` defines seven fictional landscapes/modes, obstruction/wood/ruins/mud rectangles, sector names, and hold duration. Black Sea Harbor is the default and only scenario visible in the normal selector; six legacy configurations remain hidden for development and regression checks. Scenario selection on the briefing reloads the scene; restart retains the selection. Ruins give infantry cover; soft ground halves ground movement speed. Ground shader patches use those same rectangles. Navigation grids use terrain travel-time weights; direct shortcuts and smoothing compare sampled travel costs as well as footprint clearance.
+`resources/scenarios.json` retains seven legacy configurations at indices 0–6, including the default Black Sea Harbor at index 6. `ScenarioCatalog` appends three external regional maps without changing those indices. There are four public battlefields and six hidden development/regression fixtures. The regional atlas is the normal entry point for selecting a battlefield; deployment starts at its briefing and restart retains that selection. Ruins give infantry cover; soft ground halves ground movement speed. Ground shader patches use the selected map's authored rectangles. Navigation grids use terrain travel-time weights; direct shortcuts and smoothing compare sampled travel costs as well as footprint clearance.
 
 Shots require initial target acquisition. Each rifle soldier fires separately with a fraction of the old section damage; the AT team consists of a launcher operator and rifle assistant. Damage and casualties resolve at the shot event. A bounded 128-entry projectile presentation queue renders travel and delayed impacts within three fixed pools (480 volume, 256 glow, 48 ground instances); it does not implement physical projectile hit detection. Benchmark runs ignore command input and report simulated time/sample count to distinguish active simulation from accidental pauses.
+
+## Regional atlas and battlefield loading
+
+The Black Sea Coast atlas places Harbor, Bayhead Rail Valley, Limestone Pass and South Inlet on one north-up geographic layout. Water, settlements, woods, ridges, roads, railways, ferry links and battlefield bounds share its 1200×840 schematic coordinate system. The geography is an original, compressed fictional adaptation informed by historic Sevastopol / Heraclean Peninsula references recorded in the metadata; battlefield streets, distances, forces and objectives are authored for play. Atlas coordinates are separate from tactical world coordinates.
+
+| Battlefield | Tactical extent | Authored emphasis |
+|---|---|---|
+| Black Sea Harbor | 1024×768 | Existing dense harbor city, waterfront infrastructure and mixed land/sea approaches |
+| Bayhead Rail Valley | 448×320 | Freight yards, static rail corridors and valley settlement |
+| Limestone Pass | 448×320 | Rock barriers, road bends, hamlets and alternate farm approaches; land/air forces |
+| South Inlet | 448×320 | Larger water area, coastal settlements and restricted land approaches |
+
+`ScenarioCatalog.entries()` returns lightweight descriptors. `config(index, reload_external)` resolves and copies the selected full configuration; each new simulation requests an external reload, so editor **Save & build** changes appear on the next deployment or restart. Legacy source data remains cached. `Simulation` passes its selected configuration directly to `Terrain`; renderers, environment details and ground materials read that same configuration. `terrain.compiled_map` opts into the shared city pipeline through `map_renderer: "harbor"`, with index 6 retained for legacy fixtures. It is not a test for one battlefield's ID.
+
+The atlas reads metadata without constructing another simulation. Opening it pauses the current battle, blocks gameplay input and disables hidden 3D rendering. Closing it or selecting the current battlefield preserves the battle and restores its prior pause/render state. Selecting another battlefield during live play requires confirmation before a scene reload; cancel keeps the active battle intact. The atlas supports bounded pan/zoom, keyboard selection and scrollable descriptions, and disables deployment for missing map files. Only one battlefield simulation runs at a time. There is no seamless regional streaming, travel simulation, persistent strategic campaign or cross-map force transfer.
+
+The maps reuse existing land/sea clearance, swept footprints, roads, vegetation, building cover, weather, destruction and reinforcement rules. Regional rock formations are low solid ridge scenery around planar traversable ground; there are no climbable slopes or elevation bonuses. Track meshes are traversable static detail and parked rolling stock is solid scenery. Moving trains, bridges and tunnels are not implemented by this expansion.
 
 ## Interference and congestion
 
@@ -139,7 +162,7 @@ At camera size>45, infantry keep their animated meshes but use one instanced sof
 Parcels retain existing collision footprints while using varied connected masses and courtyard/service details. Foliage keeps128 triangles per cluster with tapered folded geometry. Materials remain original sampled/procedural hybrids calibrated in GL Compatibility; alternative renderer validation does not imply identical color response.
 
 ### Scenario dimensions and actor return recovery
-`terrain.world_size` is Vector2; `terrain.fog_grid_size` is Vector2i with ceil(size/2); fine navigation uses ceil(size) cells. SIZE/GRID constants remain legacy defaults. Cached weights and temporary actor exclusions use instance bounds. Fog, minimap world conversion and camera pan use the same extent. Camera zoom limits remain 24–84. Terrain construction optionally accepts a complete config override for isolated fixtures.
+`terrain.world_size` is Vector2; fog and navigation grid bounds are Vector2i values derived from the extent and authored `fog_cell_size` / `nav_cell_size` (legacy defaults 2 / 1). SIZE/GRID constants remain legacy defaults. Cached weights and temporary actor exclusions use instance bounds. Fog, minimap world conversion and camera pan use the same extent. Camera zoom spans 24–84 on small legacy maps; maps with an extent of at least 256 use `camera_max_zoom` (default 220) and scaled pan margins. Terrain construction accepts the selected full configuration, or an override for isolated fixtures.
 
 Group movement retains conservative footprint AStar routes and local steering. Actors can cache bounded return routes within their ten-unit leash, with stable-goal retries at one-second intervals. An anchor pauses for reunion, then resumes its retained command. Seeking shelter is allowed to finish until stalled; no actor teleport or clearance reduction. See plan 9-1 for regression evidence and remaining group congestion. This changes behavior and does not establish a speedup.
 
@@ -155,19 +178,29 @@ Effects use volume/glow/ground MultiMesh pools, 128 projectiles, 96 delayed cues
 
 `asset_library.gd` unifies JSON-backed street, rural, waterfront and battlefield builders with adapters for existing architectural/roadside families. `environment_palette.gd` isolates environmental color from mutable faction palettes. Each ID has a placement envelope and context; emitted render bounds are measured separately. Placement validation reads context tags, receiving drainage and entrance access zones, preserving conservative whole-footprint blocking for overhead assemblies pending part-level integration. Geometry creation alone installs no navigation/physics.
 
-`tools/asset_gallery.gd` supplies native category browsing, enlarged/rotated inspection and shared-scale comparison; native capture writes category sheets, per-model previews, metadata and source hashes. `tools/build_asset_review.py` creates the offline search/filter review from those artifacts. No general visual map editor is implemented; the harbor town is generated deterministically by `tools/build_harbor_map.py` from district rules.
+`tools/asset_gallery.gd` supplies native category browsing, enlarged/rotated inspection and shared-scale comparison; native capture writes category sheets, per-model previews, metadata and source hashes. `tools/build_asset_review.py` creates the offline search/filter review from those artifacts. The original Harbor remains generated by `tools/build_harbor_map.py`; the regional visual editor authors the three additional battlefield blueprints through that same compiler foundation.
+
+## Regional map authoring
+
+`tools/edit_region.sh` launches the Python-standard-library local service and browser interface. The editor provides selection/dragging, vertex and corner handles, snapping, pan/zoom, an inspector, undo/redo, JSON import/export and an unsaved-change guard. Authors edit water, roads, railways, districts, woods, rock parcels, buildings, scenery, objectives and insertion positions. Generated scenery and collision overlays expose the compiled result for review; the regional atlas metadata itself remains JSON-authored.
+
+The source of truth is `resources/maps/blueprints/<id>.json`. `regional_map_schema.py` checks structure and supported geometry, and `build_region_maps.py` passes the blueprint through `build_harbor_map.py` to emit `resources/maps/region/<id>.json`. Shared city wall profiles and asset-library footprints supply physical bodies, low obstacles and prop blockers. Road corridors, rail reservations, water domains, placement clearance and coarse objective/insertion connectivity are checked before a save is accepted. These authoring checks complement native Godot tests; they do not prove every runtime route or collision case.
+
+Preview compiles and validates without writing files. **Save & build** validates again, checks the source revision before and after compilation, and replaces the source and derived map. The service binds to localhost, uses a session token and limits file access to known regional blueprints. Replacements are atomic per file with source rollback on a second-file I/O failure; they are not a durable two-file transaction across process or power loss. A compiler rebuild restores the derived map from its blueprint. Changes take effect when that battlefield is redeployed, rather than mutating an active simulation. See [16: Regional map](plans/16-regional-map.md).
 
 ## Field Operations mode
 
-Black Sea Harbor (scenario6, the default) and the hidden Riverside fixture (scenario5) use `field_ops.gd` and `field_units.json`. `sim.field_ops` is populated while `sim.classic` stays empty. One supply balance funds off-map reinforcement spawning and engineer construction. The old classic mode remains as hidden scenario4 and frozen legacy test fixtures.
+All four public battlefields and the hidden Riverside fixture (scenario 5) use `field_ops.gd` and `field_units.json`; Black Sea Harbor (scenario 6) remains the default. `sim.field_ops` is populated while `sim.classic` stays empty. One supply balance funds off-map reinforcement spawning and engineer construction. `available_domains` controls both `FieldOps.purchase_choices(sim)` in the HUD and purchase validation, preventing sea reinforcements on inland maps. The old classic mode remains as hidden scenario 4 and frozen legacy test fixtures.
 
 Field-operations victory requires every objective to be owned and free of enemies for the authored hold duration. Autonomous missions also wait until more than 20 seconds after the scheduled reserve dispatch, with `counterattack_sent` true. If all authored enemy command posts and ammo depots are destroyed before dispatch, the reserve cannot form and that reserve requirement is satisfied without changing `counterattack_sent`. Destroying logistics after dispatch does not bypass the existing delay; maps without authored logistics retain the normal reserve rule. Objective resolution preserves an existing terminal result, including defeat recorded earlier in the same tick when every player mobile unit is lost.
+
+Mission guidance follows the selected operation: authored enemy logistics enables the optional post/depot objective; maps without those structures show reserve/hold advice instead. The original Harbor tutorial stays specific to Harbor.
 
 Engineers use three articulated infantry actors and explicit construction assignments. Field units are stationary, destroyable structures with `build_left`, builder/work-point state and shared rectangle blockers. Completed sandbags provide terrain cover; observation adds normal sight; repair/aid apply disengaged healing without resurrecting soldiers. Construction appearance is synchronized by `field_models.gd` from authoritative progress.
 
 Non-solid engineer works (wire, hedgehogs, trench, berm, net) are terrain zones: `terrain.field_zones` hold per-profile speed multipliers, cover classes, concealment and a berm front, indexed in 8 m buckets. Their units use collision layer `field_zone`, so they never act as bodies. Hedgehogs additionally make navigation cells solid for tracked/wheeled grids and `movement_clear` refuses vehicle entry. Zone changes refresh only local navigation weights/solids. A completed, unthreatened and route-connected forward supply point replaces the land insertion for purchases.
 
-Harbor city buildings come from `city_buildings.gd` (design table, height caps, dispatch) with `city_buildings_urban.gd` and `city_buildings_works.gd` as parametric builders; decor comes from `assets_city.gd`/`assets_city.json`. Harbor props render as MultiMesh groups and buildings are chunk-merged per ~96 u tile. Rules: [harbor-city-design.md](harbor-city-design.md).
+Compiled city buildings come from `city_buildings.gd` (design table, height caps, dispatch) with `city_buildings_urban.gd` and `city_buildings_works.gd` as parametric builders; decor comes from `assets_city.gd`/`assets_city.json`. Harbor and the three regional maps share MultiMesh prop groups and buildings chunk-merged per ~96 u tile. Rules: [harbor-city-design.md](harbor-city-design.md).
 
 `city_building_geometry.json` supplies shared local ground-body profiles to those builders through `city_building_geometry.gd` and to `tools/build_harbor_map.py`. The compiler keeps placement parcels, transforms and yaw snapping unchanged, then emits body collision separately with a 0.15-unit decomposition tolerance. Fourteen supported families account for 381 of Harbor's 478 buildings; 97 custom/compound buildings explicitly retain `collision_geometry: "parcel_fallback"`. Roof overhangs and decorative parcel margins do not become wall blockers.
 

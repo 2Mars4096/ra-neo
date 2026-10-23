@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-23 — Regional atlas, battlefields and visual authoring
+
+- Add the Black Sea Coast atlas, connecting the existing Harbor operation with Bayhead Rail Valley, Limestone Pass and South Inlet. The map provides geographic context, terrain briefings, zoom/pan, keyboard selection and safe return to the current battle; an active operation requires an explicit abandon choice before switching.
+- Author three 448 × 320 battlefields through district/street rules and shared asset contracts. The rail valley has connected sidings, aligned stationary freight wagons and industrial/residential frontage; the pass has solid rock masses and alternate farm tracks; South Inlet is about 58% water with a continuous shore route and naval approaches. All detailed layouts are original compressed adaptations of broad regional geography, with sources recorded in the manifest and guide.
+- Add a local visual blueprint editor with road/rail/polygon/terrain handles, building and prop placement, physical footprint inspection, undo/redo and import/export. Preview compiles without writing; Save & build validates both outputs, rejects stale revisions, and restores the source if the paired output replacement fails. Launch with `Map Editor.command` or `./tools/edit_region.sh`.
+- Generalize the scenario catalog and compiled-map rendering while preserving legacy indices 0–6 and unchanged Harbor output. Fresh deployments reload only the selected external map. Per-map ground configuration replaces the Harbor-only cache, and available reinforcement domains prevent inland naval queues. Mission text now describes the actual reserve/logistics rules of each battlefield.
+- Keep existing navigation, collision, cover, garrison, destruction, water and crushable-object rules. The region is an operation selector; ground is planar and trains are stationary. Persistent campaigns, walkable elevation and moving rail logistics remain future work.
+- Validation: Godot 4.5.1 regional physics **1,841 checks**, regional UI **77**, HUD **1,413**, presentation cache **20**, plus seven affected baseline suites, all zero failures. Python authoring/editor suites pass **20 tests**; a real-browser editor review passes nine workflows with no browser errors. Harbor and regional compiler output checks pass. Native atlas and all three battlefield compositions were rendered and inspected. Controlled mission checks and software-rendered images do not establish human balance or performance acceptance.
+- Add both regional suites to the release gate and `--group regional` for focused integration. Commands, source attribution, screenshots and limits: [regional map guide](regional-map.md), [plan 16](plans/16-regional-map.md), [validation](validation.md).
+
 ## 2026-10-23 — For Every Dawn
 
 - Adopt **For Every Dawn** as the game name in Godot, the live HUD, source launcher, documentation, and environment/equipment review tools. The HUD reads the project title and measures its width before placing the scenario label.

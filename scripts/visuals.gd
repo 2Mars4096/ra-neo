@@ -69,13 +69,10 @@ func ring(parent: Node3D, radius: float, color: Color) -> MeshInstance3D:
 	return node
 
 func make_world(parent: Node3D, terrain: BattleTerrain) -> void:
-	if terrain.scenario_id==6:
-		var configs:Array=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
-		if configs.size()>6:make_harbor_world(parent,terrain,configs[6])
-		else:push_error("Harbor scenario6 configuration is missing")
+	if terrain.compiled_map:
+		make_harbor_world(parent,terrain,terrain.config)
 		return
 	var dimensions:Vector2=terrain.world_size
-	var scenario_data:Array=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
 	box(parent, Vector3(dimensions.x/2,-1.1,dimensions.y/2), Vector3(dimensions.x+16,2,dimensions.y+16), Color("173e4b"))
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -189,7 +186,7 @@ void fragment(){
 	mat.set_shader_parameter("material_atlas",MATERIAL_ATLAS)
 	mat.set_shader_parameter("landscape",terrain.scenario_id)
 	if terrain.scenario_id==5:
-		mat.set_shader_parameter("land_use_mask",preload("res://scripts/environment_detail.gd").land_use_texture(terrain,scenario_data[5]))
+		mat.set_shader_parameter("land_use_mask",preload("res://scripts/environment_detail.gd").land_use_texture(terrain,terrain.config))
 		mat.set_shader_parameter("land_use_size",terrain.world_size)
 	mat.set_shader_parameter("shore_x",terrain.shore_x)
 	mat.set_shader_parameter("rubble_region",Vector4(terrain.rubble.position.x,terrain.rubble.position.y,terrain.rubble.size.x,terrain.rubble.size.y))
@@ -197,7 +194,7 @@ void fragment(){
 	ground.material_override = mat
 	ground_material=mat
 	parent.add_child(ground)
-	var architecture:Array=scenario_data[terrain.scenario_id].get("architecture",[])
+	var architecture:Array=terrain.config.get("architecture",[])
 	# A readable, deliberately authored diorama: ridge, warehouse, radar and harbor.
 	for i in terrain.blocks.size():
 		var r: Rect2 = terrain.blocks[i]
@@ -326,7 +323,7 @@ void fragment(){
 			box(parent,Vector3(rut_x,0.017,rut_z),Vector3(0.18,0.008,0.94),Color("34352c"))
 
 	preload("res://scripts/environment_detail.gd").build(self,parent,terrain,architecture)
-	make_footpaths(parent,terrain,scenario_data[terrain.scenario_id])
+	make_footpaths(parent,terrain,terrain.config)
 	preload("res://scripts/roadside_props.gd").build(self,parent,terrain)
 	bake_model(parent)
 
@@ -528,7 +525,7 @@ func make_footpaths(parent:Node3D,terrain:BattleTerrain,config:Dictionary)->void
 				var path=box(parent,Vector3(p.x,0.009,p.y),Vector3(1.25,0.007,a.distance_to(b)/count+0.025),Color("625c47"))
 				path.rotation.y=atan2(b.x-a.x,b.y-a.y)
 
-# Harbor-only path: two masked surfaces, per-parcel batches, spatial vegetation
+# Compiled battlefield path: two masked surfaces, per-parcel batches, spatial vegetation
 # groups and registry props. No global bake: preserve shared meshes and culling.
 func make_harbor_world(parent:Node3D,terrain,config:Dictionary)->void:
 	make_harbor_surfaces(parent,terrain,config)

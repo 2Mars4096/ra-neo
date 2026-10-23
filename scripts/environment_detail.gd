@@ -4,7 +4,7 @@ extends RefCounted
 # Ground markings are flat; substantial details stay in existing building blockers.
 static func build(art,parent:Node3D,terrain,architecture:Array=[])->void:
 	if terrain.style!="showcase":return
-	if terrain.scenario_id==6:
+	if terrain.compiled_map:
 		_build_harbor(art,parent,terrain,architecture)
 		return
 	for index in terrain.blocks.size():
@@ -101,7 +101,7 @@ static func _frontage_link(art,parent,terrain,r:Rect2,spec:Dictionary)->void:
 # One low-resolution semantic mask, built once; RGB = town soil / freight gravel / field.
 # Only appearance changes. These surfaces intentionally read as unsealed ground.
 static func land_use_at(terrain,config:Dictionary,p:Vector2)->Color:
-	if terrain.scenario_id==6:return _harbor_sample(terrain,_harbor_context(terrain,config),p)
+	if terrain.compiled_map:return _harbor_sample(terrain,_harbor_context(terrain,config),p)
 	if terrain.scenario_id!=5 or terrain.is_water(p):return Color(0,0,0,1)
 	var town:=0.0;var freight:=0.0;var farm:=0.0
 	for district in config.get("districts",[]):
@@ -141,7 +141,7 @@ static func land_use_at(terrain,config:Dictionary,p:Vector2)->Color:
 	return Color(town*offroad,freight*offroad,farm*offroad,1)
 
 static func land_use_texture(terrain,config:Dictionary)->ImageTexture:
-	if terrain.scenario_id==6:
+	if terrain.compiled_map:
 		var resolution:=Vector2i((terrain.world_size/4.0).ceil())
 		var image:=Image.create(resolution.x,resolution.y,false,Image.FORMAT_RGB8)
 		var context:=_harbor_context(terrain,config)
@@ -160,18 +160,10 @@ static func land_use_texture(terrain,config:Dictionary)->ImageTexture:
 # Raised registry scenery is placed by HarborProps with shared terrain bounds.
 # Ground zones (squares, port aprons, yards) come from the compiled scenario's
 # open_spaces/urban_blocks, so buildings never need to be paired with blocks.
-static var _harbor_config_cache:Dictionary={}
-
 static func _harbor_config(terrain)->Dictionary:
-	if not _harbor_config_cache.is_empty():return _harbor_config_cache
-	var all=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
-	if all is Array:
-		for entry in all:
-			if entry is Dictionary and entry.get("id","")=="black_sea_harbor" and Vector2(entry.size[0],entry.size[1])==terrain.world_size:
-				_harbor_config_cache=entry
-	# Fixtures share the world size; only the compiled map has matching blockers/roads.
-	if _harbor_config_cache.is_empty() or _harbor_config_cache.blocks.size()!=terrain.blocks.size() or _harbor_config_cache.roads.edges.size()!=terrain.roads.segments.size():return {}
-	return _harbor_config_cache
+	# The terrain and renderer share the exact selected config. A global harbor
+	# cache leaked ground zones when loading a different regional battlefield.
+	return terrain.config if terrain.compiled_map else {}
 
 static func _poly(points:Array)->PackedVector2Array:
 	var out:=PackedVector2Array()
@@ -384,7 +376,7 @@ const HARBOR_SURFACE:={
 	"village":Color(0.0,0.0,0.35),"garages":Color(0.05,0.45,0.10),"compound":Color(0.05,0.60,0.0),
 	"square":Color(0.95,0.0,0.0),"cathedral_close":Color(0.35,0.0,0.0),"hill_park":Color(0.0,0.0,0.0),
 	"seafront":Color(0.25,0.0,0.0),"stockyard":Color(0.0,1.0,0.0),"tank_farm":Color(0.0,0.95,0.0),
-	"parade":Color(0.0,0.90,0.0),"vineyard":Color(0.0,0.0,1.0),"field":Color(0.0,0.0,0.9),
+	"parade":Color(0.0,0.90,0.0),"railway":Color(0.08,0.70,0.0),"vineyard":Color(0.0,0.0,1.0),"field":Color(0.0,0.0,0.9),
 	"ravine":Color(0.0,0.0,0.6),"cemetery":Color(0.10,0.0,0.15),"courtyard":Color(0.65,0.0,0.0)}
 
 static func _harbor_context(terrain,config:Dictionary)->Dictionary:

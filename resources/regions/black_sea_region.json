@@ -1,0 +1,688 @@
+{
+  "schema_version": 1,
+  "id": "black_sea_region",
+  "name": "BLACK SEA COAST",
+  "size": [
+    1200,
+    840
+  ],
+  "description": "One coastal region: a working harbor, a railway valley, limestone passes and a sheltered southern inlet. Select a battlefield to inspect its approaches and deploy.",
+  "water_polygons": [
+    [
+      [
+        0,
+        0
+      ],
+      [
+        200,
+        0
+      ],
+      [
+        205,
+        120
+      ],
+      [
+        220,
+        200
+      ],
+      [
+        205,
+        250
+      ],
+      [
+        230,
+        330
+      ],
+      [
+        205,
+        400
+      ],
+      [
+        235,
+        475
+      ],
+      [
+        280,
+        550
+      ],
+      [
+        360,
+        615
+      ],
+      [
+        460,
+        660
+      ],
+      [
+        530,
+        700
+      ],
+      [
+        600,
+        710
+      ],
+      [
+        640,
+        680
+      ],
+      [
+        690,
+        690
+      ],
+      [
+        705,
+        755
+      ],
+      [
+        780,
+        760
+      ],
+      [
+        870,
+        735
+      ],
+      [
+        960,
+        700
+      ],
+      [
+        1070,
+        660
+      ],
+      [
+        1200,
+        650
+      ],
+      [
+        1200,
+        840
+      ],
+      [
+        0,
+        840
+      ]
+    ],
+    [
+      [
+        180,
+        240
+      ],
+      [
+        250,
+        223
+      ],
+      [
+        330,
+        230
+      ],
+      [
+        450,
+        240
+      ],
+      [
+        550,
+        265
+      ],
+      [
+        610,
+        285
+      ],
+      [
+        660,
+        300
+      ],
+      [
+        640,
+        333
+      ],
+      [
+        550,
+        350
+      ],
+      [
+        440,
+        345
+      ],
+      [
+        330,
+        330
+      ],
+      [
+        210,
+        335
+      ]
+    ],
+    [
+      [
+        400,
+        325
+      ],
+      [
+        430,
+        325
+      ],
+      [
+        440,
+        375
+      ],
+      [
+        425,
+        425
+      ],
+      [
+        404,
+        412
+      ]
+    ]
+  ],
+  "woods": [
+    [
+      [
+        785,
+        360
+      ],
+      [
+        865,
+        345
+      ],
+      [
+        915,
+        395
+      ],
+      [
+        880,
+        445
+      ],
+      [
+        820,
+        430
+      ]
+    ],
+    [
+      [
+        1005,
+        400
+      ],
+      [
+        1120,
+        420
+      ],
+      [
+        1150,
+        515
+      ],
+      [
+        1090,
+        560
+      ],
+      [
+        1025,
+        510
+      ]
+    ],
+    [
+      [
+        710,
+        500
+      ],
+      [
+        765,
+        480
+      ],
+      [
+        810,
+        540
+      ],
+      [
+        775,
+        585
+      ],
+      [
+        725,
+        565
+      ]
+    ],
+    [
+      [
+        455,
+        510
+      ],
+      [
+        500,
+        505
+      ],
+      [
+        530,
+        575
+      ],
+      [
+        485,
+        600
+      ]
+    ]
+  ],
+  "ridges": [
+    {
+      "name": "LIMESTONE RIDGES",
+      "points": [
+        [
+          870,
+          425
+        ],
+        [
+          925,
+          455
+        ],
+        [
+          945,
+          485
+        ],
+        [
+          970,
+          500
+        ],
+        [
+          1000,
+          550
+        ],
+        [
+          1055,
+          575
+        ],
+        [
+          1110,
+          590
+        ]
+      ]
+    },
+    {
+      "name": "VALLEY ESCARPMENT",
+      "points": [
+        [
+          785,
+          180
+        ],
+        [
+          820,
+          235
+        ],
+        [
+          820,
+          285
+        ],
+        [
+          855,
+          320
+        ]
+      ]
+    },
+    {
+      "name": "COASTAL HEIGHTS",
+      "points": [
+        [
+          735,
+          620
+        ],
+        [
+          810,
+          670
+        ],
+        [
+          910,
+          655
+        ],
+        [
+          1000,
+          625
+        ]
+      ]
+    }
+  ],
+  "roads": [
+    {
+      "name": "Bayhead arterial",
+      "points": [
+        [
+          340,
+          385
+        ],
+        [
+          370,
+          460
+        ],
+        [
+          500,
+          480
+        ],
+        [
+          620,
+          470
+        ],
+        [
+          720,
+          360
+        ],
+        [
+          725,
+          280
+        ],
+        [
+          790,
+          230
+        ]
+      ]
+    },
+    {
+      "name": "Southern coast road",
+      "points": [
+        [
+          500,
+          480
+        ],
+        [
+          580,
+          550
+        ],
+        [
+          690,
+          650
+        ],
+        [
+          820,
+          590
+        ],
+        [
+          930,
+          540
+        ]
+      ]
+    },
+    {
+      "name": "Pass road",
+      "points": [
+        [
+          720,
+          360
+        ],
+        [
+          830,
+          400
+        ],
+        [
+          895,
+          455
+        ],
+        [
+          930,
+          540
+        ],
+        [
+          1030,
+          575
+        ],
+        [
+          1140,
+          610
+        ]
+      ]
+    },
+    {
+      "name": "North shore road",
+      "points": [
+        [
+          265,
+          185
+        ],
+        [
+          420,
+          185
+        ],
+        [
+          550,
+          210
+        ],
+        [
+          650,
+          250
+        ],
+        [
+          725,
+          280
+        ]
+      ]
+    }
+  ],
+  "railways": [
+    {
+      "name": "Port and valley railway",
+      "points": [
+        [
+          530,
+          370
+        ],
+        [
+          610,
+          375
+        ],
+        [
+          700,
+          360
+        ],
+        [
+          720,
+          290
+        ],
+        [
+          780,
+          250
+        ],
+        [
+          900,
+          210
+        ],
+        [
+          1040,
+          140
+        ]
+      ]
+    }
+  ],
+  "ferries": [
+    {
+      "name": "Coastal sea route",
+      "points": [
+        [
+          310,
+          300
+        ],
+        [
+          210,
+          300
+        ],
+        [
+          160,
+          390
+        ],
+        [
+          200,
+          490
+        ],
+        [
+          300,
+          610
+        ],
+        [
+          450,
+          700
+        ],
+        [
+          590,
+          745
+        ],
+        [
+          650,
+          735
+        ],
+        [
+          668,
+          700
+        ]
+      ]
+    }
+  ],
+  "settlements": [
+    {
+      "name": "Harbor city",
+      "at": [
+        350,
+        390
+      ]
+    },
+    {
+      "name": "Bayhead works",
+      "at": [
+        740,
+        335
+      ]
+    },
+    {
+      "name": "Pass hamlet",
+      "at": [
+        1010,
+        490
+      ]
+    },
+    {
+      "name": "South inlet town",
+      "at": [
+        720,
+        655
+      ]
+    },
+    {
+      "name": "Vineyard belt",
+      "at": [
+        510,
+        565
+      ]
+    },
+    {
+      "name": "North shore",
+      "at": [
+        420,
+        170
+      ]
+    }
+  ],
+  "battlefields": [
+    {
+      "id": "black_sea_harbor",
+      "scenario_id": "black_sea_harbor",
+      "name": "BLACK SEA HARBOR",
+      "bounds": [
+        260,
+        220,
+        250,
+        188
+      ],
+      "summary": "The existing harbor operation anchors the region: dense streets, freight quays, bayhead detours and combined arms.",
+      "features": [
+        "Dense urban blocks",
+        "Connected working harbor",
+        "Land, air and naval support"
+      ],
+      "terrain": "Harbor city",
+      "connections": [
+        "bayhead_rail_valley",
+        "south_inlet"
+      ]
+    },
+    {
+      "id": "bayhead_rail_valley",
+      "scenario_id": "bayhead_rail_valley",
+      "name": "BAYHEAD RAIL VALLEY",
+      "bounds": [
+        610,
+        235,
+        210,
+        150
+      ],
+      "summary": "A river-bank industrial corridor links the harbor to the interior. Track beds remain crossable; parked freight wagons break sight lines and channel movement.",
+      "features": [
+        "Connected railway and sidings",
+        "Freight sheds and service yards",
+        "River-bank approaches"
+      ],
+      "terrain": "Rail and industry",
+      "connections": [
+        "black_sea_harbor",
+        "limestone_pass"
+      ],
+      "map_path": "res://resources/maps/region/bayhead_rail_valley.json"
+    },
+    {
+      "id": "limestone_pass",
+      "scenario_id": "limestone_pass",
+      "name": "LIMESTONE PASS",
+      "bounds": [
+        850,
+        460,
+        220,
+        157
+      ],
+      "summary": "A winding road threads limestone ridges. The longer farm tracks provide alternate approaches; rock outcrops use the same movement and sight blocking as the harbor.",
+      "features": [
+        "Rock-bound passes",
+        "Winding road and flanking tracks",
+        "Small hillside settlements"
+      ],
+      "terrain": "Ridges and woodland",
+      "connections": [
+        "bayhead_rail_valley",
+        "south_inlet"
+      ],
+      "map_path": "res://resources/maps/region/limestone_pass.json"
+    },
+    {
+      "id": "south_inlet",
+      "scenario_id": "south_inlet",
+      "name": "SOUTH INLET",
+      "bounds": [
+        610,
+        590,
+        180,
+        150
+      ],
+      "summary": "Open water dominates the coast. Land forces follow the shore around a narrow inlet while boats maneuver through its mouth and support the quays.",
+      "features": [
+        "Sea-dominant battlefield",
+        "Narrow inlet and coastal road",
+        "Quays, fishing town and headland"
+      ],
+      "terrain": "Coast and sea",
+      "connections": [
+        "black_sea_harbor",
+        "limestone_pass"
+      ],
+      "map_path": "res://resources/maps/region/south_inlet.json"
+    }
+  ],
+  "attribution": "Original authored, compressed fictional adaptation of the Sevastopol / Heraclean Peninsula geography. Public historic maps inform bay, valley, rail and settlement relationships; all battlefield streets, dimensions, forces and objectives are invented. No survey or current infrastructure accuracy is claimed.",
+  "sources": [
+    {
+      "title": "Ancient City of Tauric Chersonese and its Chora — UNESCO",
+      "url": "https://whc.unesco.org/en/list/1411/",
+      "use": "Historic urban grid and agricultural/vineyard hinterland morphology; consulted 2026-10-23."
+    },
+    {
+      "title": "Sebastopol and Western Crimea, 1919 — University of South Florida Maps ETC",
+      "url": "https://etc.usf.edu/maps/pages/2500/2582/2582.htm",
+      "use": "Broad coast, relief, railway-valley and settlement relationships only; consulted 2026-10-23. No map imagery copied."
+    },
+    {
+      "title": "Plan de la Chersonèse — Library of Congress",
+      "url": "https://www.loc.gov/item/2002695526/",
+      "use": "Historic peninsula / bay relationship reference; no historical fortifications or troop positions reproduced."
+    }
+  ]
+}

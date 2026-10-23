@@ -13,7 +13,9 @@
 
 - The original tactical missions remain short under scripted policies. Canal Watch adds a counterattack and autonomy; classic skirmish adds production/economy, but supply networks and a broader strategic planner are still absent. Enemy tactical repairs currently have no resource budget.
 
-- Seven scenario configurations share a map framework with authored extents; Black Sea Harbor is the only one visible in normal play, and six earlier configurations remain hidden fixtures. No multiplayer, campaign, save/load, or standalone export packaging.
+- Four public battlefields share the Black Sea Coast atlas: Black Sea Harbor, Bayhead Rail Valley, Limestone Pass and South Inlet. Six earlier configurations remain hidden fixtures; the catalog has ten entries while the legacy seven-entry file and its indices stay unchanged. The atlas loads separate operations, with no seamless streaming, cross-map force transfer, campaign, save/load, multiplayer or standalone export packaging. Switching away from a live battle discards its progress after confirmation.
+- Regional geography is compressed and fictional, informed by historic coast/valley/settlement references. Atlas connections are selection-map geography, not simulated travel or a current infrastructure survey. Traversable ground remains planar; the pass's low solid rock ridges create barriers and sight constraints without climbable slopes, elevation advantages or high terrain. Rails are static traversable meshes and parked trains are solid scenery; moving rail traffic, bridges and tunnels remain unimplemented.
+- The visual editor currently covers the three new battlefield blueprints. Atlas metadata and the original Harbor generator workflow remain separate. Editor placement/connectivity checks are conservative authoring checks, not substitutes for runtime physics tests or human balance review. Source and compiled files are replaced atomically one at a time, with I/O rollback; interruption between replacements can require rebuilding the derived map from its blueprint.
 - Squad formations use conservative circular envelopes and local avoidance. This sacrifices tight formations and can cause yielding in congested areas; arbitrary crowd deadlocks are not exhaustively tested.
 - Infantry have individual combat/health/position records and procedural articulation, but share squad routing and stable formation slots. The showcase adds local cover selection and procedural flat-ground foot placement; independent long-range paths, uneven-ground foot IK and skeletal animation remain unimplemented.
 - Flight uses fixed altitude bands; no takeoff, landing, terrain following, or projectile ballistics.
@@ -43,6 +45,17 @@
 - A building-detail loop needed an explicit float type in GDScript. Fixed the parse error and reran checks before release.
 
 ## Resolved during implementation
+
+### 2026-10-23 — Regional map integration
+
+- Direct legacy-JSON readers and Harbor-ID checks could select the wrong scenery for an external battlefield. `ScenarioCatalog` now preserves legacy indices, adds lightweight regional descriptors and lazily resolves the selected map. Simulation passes that complete configuration to Terrain, and shared city rendering, environment details and ground land-use masks read it.
+- Caching external maps for the entire process hid editor saves on redeployment. Each new simulation now rereads only its selected external map, while catalog metadata and legacy fixtures stay cached. Returned configuration copies prevent fixture changes from contaminating another battle.
+- Inland operations exposed naval reinforcements that could not spawn on their terrain. Both the HUD choices and purchase validation now honor `available_domains`; Limestone Pass offers land/air forces only.
+- Harbor-specific mission widgets omitted goals on new maps, and shared text proposed destroying posts/depots that those maps did not contain. Compiled field operations now display their own mission state, and optional logistics guidance requires authored logistics; other maps show applicable reserve/hold advice.
+- Regional browsing now preserves the active simulation and prior pause/render state, blocks gameplay input under the atlas and confirms progress loss before a different operation starts. The live-battle selector uses the same confirmation path; choosing the current field returns without a reload. Missing external map files disable deployment. Native atlas review also caught and corrected a selected-footprint caption overlapping a settlement label.
+- Editor review found three state-consistency defects: refresh lost the session token after its URL fragment was removed, cancelling/changing tools during a drag could lose its undo snapshot, and source text/revision could come from different reads. The editor retains its local session token, handles active drags explicitly and hashes the loaded source snapshot. Save validates compiled output and rejects stale source revisions before and after compilation.
+
+These changes reuse the established collision, mobility, visibility and combat rules. Regional validation and native review are recorded in [16: Regional map](plans/16-regional-map.md); existing physics, congestion and performance issues below remain open.
 
 ### 2026-10-20 — Physical cover contact
 

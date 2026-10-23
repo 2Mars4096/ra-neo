@@ -1,0 +1,714 @@
+{
+  "schema_version": 3,
+  "compiler": "tools/build_region_maps.py",
+  "proposal": {
+    "status": "authored fictional regional battlefield; gameplay and art acceptance remain provisional",
+    "inspiration": "Original authored, compressed fictional adaptation of the Sevastopol / Heraclean Peninsula geography. Public historic maps inform bay, valley, rail and settlement relationships; all battlefield streets, dimensions, forces and objectives are invented. No survey or current infrastructure accuracy is claimed.",
+    "sources": [
+      {
+        "title": "Ancient City of Tauric Chersonese and its Chora \u2014 UNESCO",
+        "url": "https://whc.unesco.org/en/list/1411/",
+        "use": "Historic urban grid and agricultural/vineyard hinterland morphology; consulted 2026-10-23."
+      },
+      {
+        "title": "Sebastopol and Western Crimea, 1919 \u2014 University of South Florida Maps ETC",
+        "url": "https://etc.usf.edu/maps/pages/2500/2582/2582.htm",
+        "use": "Broad coast, relief, railway-valley and settlement relationships only; consulted 2026-10-23. No map imagery copied."
+      },
+      {
+        "title": "Plan de la Cherson\u00e8se \u2014 Library of Congress",
+        "url": "https://www.loc.gov/item/2002695526/",
+        "use": "Historic peninsula / bay relationship reference; no historical fortifications or troop positions reproduced."
+      }
+    ],
+    "assumptions": [
+      "The region is a geographic selection layer, not a persistent strategic simulation.",
+      "Battlefield roads, parcels and scenery use the existing shared Harbor collision and mobility rules.",
+      "Mountains are impassable rock formations around a planar navigable valley floor; there are no traversable slopes, height bonuses or tunnels.",
+      "Rails are static, crossable track meshes. Parked rail vehicles are solid scenery; there is no moving-train simulation."
+    ]
+  },
+  "scenario": {
+    "id": "south_inlet",
+    "name": "SOUTH INLET",
+    "brief": "Secure the fishing quay, inlet head and northern landing. The land road follows the coast around the bay; naval forces support shore fighting without crossing land.",
+    "size": [
+      448,
+      320
+    ],
+    "mode": "field_ops",
+    "map_renderer": "harbor",
+    "style": "showcase",
+    "port": false,
+    "shore_x": 448,
+    "available_domains": [
+      "land",
+      "air",
+      "sea"
+    ],
+    "field_insertion": [
+      386,
+      280
+    ],
+    "field_enemy_insertion": [
+      420,
+      108
+    ],
+    "objectives": [
+      [
+        270,
+        205
+      ],
+      [
+        350,
+        160
+      ],
+      [
+        280,
+        75
+      ]
+    ],
+    "sectors": [
+      "FISHING QUAY",
+      "INLET HEAD",
+      "NORTHERN LANDING"
+    ],
+    "woods": [
+      [
+        398,
+        229,
+        20,
+        23
+      ]
+    ],
+    "water_polygons": [
+      [
+        [
+          0,
+          0
+        ],
+        [
+          240,
+          0
+        ],
+        [
+          250,
+          65
+        ],
+        [
+          235,
+          105
+        ],
+        [
+          253,
+          138
+        ],
+        [
+          319,
+          143
+        ],
+        [
+          329,
+          160
+        ],
+        [
+          315,
+          176
+        ],
+        [
+          260,
+          180
+        ],
+        [
+          240,
+          220
+        ],
+        [
+          270,
+          270
+        ],
+        [
+          265,
+          320
+        ],
+        [
+          0,
+          320
+        ]
+      ]
+    ],
+    "rubble": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "mud": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "districts": [],
+    "player_force": [
+      {
+        "kind": "engineer",
+        "position": [
+          386,
+          280
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          376,
+          272
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          396,
+          272
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          400,
+          288
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          379,
+          290
+        ]
+      },
+      {
+        "kind": "aa",
+        "position": [
+          390,
+          296
+        ]
+      },
+      {
+        "kind": "drone",
+        "position": [
+          378,
+          266
+        ]
+      },
+      {
+        "kind": "helo",
+        "position": [
+          407,
+          280
+        ]
+      },
+      {
+        "kind": "boat",
+        "position": [
+          195,
+          275
+        ]
+      },
+      {
+        "kind": "boat",
+        "position": [
+          175,
+          255
+        ]
+      }
+    ],
+    "enemy_force": [
+      {
+        "kind": "rifle",
+        "position": [
+          277,
+          214
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          287,
+          207
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          358,
+          169
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          367,
+          157
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          287,
+          84
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          299,
+          74
+        ]
+      },
+      {
+        "kind": "aa",
+        "position": [
+          414,
+          112
+        ]
+      },
+      {
+        "kind": "drone",
+        "position": [
+          335,
+          110
+        ]
+      },
+      {
+        "kind": "boat",
+        "position": [
+          205,
+          80
+        ]
+      },
+      {
+        "kind": "boat",
+        "position": [
+          295,
+          160
+        ]
+      }
+    ],
+    "enemy_works": [],
+    "reserve_force": [
+      {
+        "kind": "tank",
+        "position": [
+          420,
+          108
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          420,
+          108
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          420,
+          108
+        ]
+      }
+    ],
+    "field_supply": 3200,
+    "field_income": 6,
+    "hold": 60,
+    "field_sea_insertion": [
+      195,
+      275
+    ]
+  },
+  "streets": [
+    {
+      "name": "Coastal ring road",
+      "points": [
+        [
+          386,
+          300
+        ],
+        [
+          386,
+          280
+        ],
+        [
+          382,
+          235
+        ],
+        [
+          377,
+          190
+        ],
+        [
+          370,
+          148
+        ],
+        [
+          360,
+          110
+        ],
+        [
+          310,
+          90
+        ],
+        [
+          285,
+          55
+        ]
+      ],
+      "width": 14,
+      "class": "arterial",
+      "purpose": "coastal road around the inlet head"
+    },
+    {
+      "name": "Fishing quay approach",
+      "points": [
+        [
+          382,
+          235
+        ],
+        [
+          300,
+          235
+        ],
+        [
+          270,
+          205
+        ]
+      ],
+      "width": 12,
+      "class": "boulevard",
+      "purpose": "fishing town waterfront boulevard"
+    },
+    {
+      "name": "Inlet service spur",
+      "points": [
+        [
+          370,
+          148
+        ],
+        [
+          350,
+          160
+        ]
+      ],
+      "width": 10,
+      "class": "port",
+      "purpose": "quay service access"
+    },
+    {
+      "name": "North landing street",
+      "points": [
+        [
+          310,
+          90
+        ],
+        [
+          280,
+          75
+        ],
+        [
+          273,
+          45
+        ]
+      ],
+      "width": 10,
+      "class": "street",
+      "purpose": "northern landing town street"
+    },
+    {
+      "name": "Northern bypass",
+      "points": [
+        [
+          360,
+          110
+        ],
+        [
+          420,
+          108
+        ],
+        [
+          428,
+          154
+        ]
+      ],
+      "width": 12,
+      "class": "lane",
+      "purpose": "north town lane around the inlet"
+    }
+  ],
+  "city_districts": [
+    {
+      "id": "fishing_town",
+      "name": "Fishing town and working quay",
+      "polygon": [
+        [
+          263,
+          187
+        ],
+        [
+          364,
+          187
+        ],
+        [
+          405,
+          305
+        ],
+        [
+          279,
+          305
+        ]
+      ],
+      "morphology": "private"
+    },
+    {
+      "id": "north_landing",
+      "name": "Northern landing settlement",
+      "polygon": [
+        [
+          257,
+          22
+        ],
+        [
+          437,
+          22
+        ],
+        [
+          437,
+          138
+        ],
+        [
+          263,
+          138
+        ]
+      ],
+      "morphology": "private"
+    },
+    {
+      "id": "quay_services",
+      "name": "Inlet-head service yards",
+      "polygon": [
+        [
+          340,
+          139
+        ],
+        [
+          435,
+          139
+        ],
+        [
+          435,
+          220
+        ],
+        [
+          342,
+          220
+        ]
+      ],
+      "morphology": "port"
+    }
+  ],
+  "rock_parcels": [
+    [
+      410,
+      173,
+      25,
+      39
+    ],
+    [
+      389,
+      38,
+      41,
+      44
+    ],
+    [
+      301,
+      270,
+      43,
+      27
+    ]
+  ],
+  "open_spaces": [
+    {
+      "name": "North headland pines",
+      "kind": "headland",
+      "polygon": [
+        [
+          299,
+          25
+        ],
+        [
+          358,
+          25
+        ],
+        [
+          358,
+          65
+        ],
+        [
+          300,
+          65
+        ]
+      ]
+    },
+    {
+      "name": "Working quay forecourt",
+      "kind": "square",
+      "polygon": [
+        [
+          347,
+          178
+        ],
+        [
+          367,
+          178
+        ],
+        [
+          367,
+          204
+        ],
+        [
+          347,
+          204
+        ]
+      ]
+    }
+  ],
+  "landmarks": [
+    {
+      "design": "port_admin",
+      "position": [
+        320,
+        255
+      ],
+      "source_size": [
+        24,
+        12
+      ],
+      "district": "fishing_town",
+      "rotation_degrees": 0,
+      "floors": 3
+    },
+    {
+      "design": "stone_house",
+      "position": [
+        281,
+        110
+      ],
+      "source_size": [
+        10,
+        8
+      ],
+      "district": "north_landing",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "workshop_hall",
+      "position": [
+        400,
+        150
+      ],
+      "source_size": [
+        28,
+        16
+      ],
+      "district": "quay_services",
+      "rotation_degrees": 0,
+      "floors": 1
+    }
+  ],
+  "decor": [
+    {
+      "id": "small_boat.rowing",
+      "position": [
+        238,
+        205
+      ],
+      "context": "small fishing boat moored in sheltered water",
+      "rotation_degrees": 90,
+      "domain": "sea"
+    },
+    {
+      "id": "small_boat.outboard",
+      "position": [
+        233,
+        217
+      ],
+      "context": "small fishing boat beside quay",
+      "rotation_degrees": 90,
+      "domain": "sea"
+    },
+    {
+      "id": "mooring_rope.bollard",
+      "position": [
+        261,
+        194
+      ],
+      "context": "land-backed quay mooring",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "lifebuoy.post",
+      "position": [
+        267,
+        186
+      ],
+      "context": "lifebuoy at fishing quay",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "bench.park",
+      "position": [
+        302,
+        104
+      ],
+      "context": "bench behind the north landing street",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "bus_stop.timber_lean_to",
+      "position": [
+        396,
+        260
+      ],
+      "context": "coast-road bus stop",
+      "rotation_degrees": 0,
+      "domain": "land"
+    }
+  ],
+  "railways": [],
+  "layout_validation": {
+    "physical_rules": "existing Harbor footprints, water domains, mobility and line-of-sight rules",
+    "native_validation": "tests/test_regional_physics.gd",
+    "sea_route_points": [
+      [
+        195,
+        275
+      ],
+      [
+        150,
+        160
+      ],
+      [
+        295,
+        160
+      ],
+      [
+        205,
+        80
+      ]
+    ]
+  },
+  "generate_enemy_defences": false
+}

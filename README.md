@@ -14,7 +14,7 @@ Alternatively, import `project.godot` in Godot and press F6 on `scenes/main.tscn
 
 Upgrading an older checkout: [Godot's per-project user-data folder](https://docs.godotengine.org/en/4.5/tutorials/io/data_paths.html#accessing-persistent-user-data-user) now uses `For Every Dawn`. Local preferences start fresh; previous settings and diagnostic reports remain in the old folder.
 
-The game opens in **Black Sea Harbor**, the only scenario shown in the normal selector. Press **Deploy**. One supply pool buys off-map reinforcements and engineer-built support. There are no factories, refineries, harvesters or power requirements in this mode. Capture **Harbor Approach**, **Old Town** and **Freight Yard**, and hold all three objectives uncontested for **90 seconds**. You can prevent the enemy reserve from deploying by destroying all its command posts and ammo depots before it launches.
+The game opens in **Black Sea Harbor**. Press **Deploy**, or open **Region** to choose one of four battlefields on the Black Sea Coast atlas. One supply pool buys off-map reinforcements and engineer-built support. There are no factories, refineries, harvesters or power requirements in this mode. In Harbor, capture **Harbor Approach**, **Old Town** and **Freight Yard**, and hold all three objectives uncontested for **90 seconds**. You can prevent its enemy reserve from deploying by destroying all its command posts and ammo depots before it launches.
 
 Select the **engineer section**, choose **Cover**, **Observation**, **Repair** or **Aid**, then click a visible clear site. Supply is charged only for an accepted site. The engineer must reach its work position and remain available while construction progresses. New orders pause work; unfinished sites can be resumed by an available engineer or cancelled for the unused-cost refund. Completed support can be destroyed.
 
@@ -41,6 +41,29 @@ On Black Sea Harbor each objective is a prepared enemy position: wire, trenches,
 
 Starting supply is **3,200**, incoming supply is **6/sec**, and extra engineer sections cost **120**. The supply and income are deliberately doubled for current testing; they are not final balance. Six earlier scenario configurations remain as hidden development and regression fixtures. The previous classic economy is deferred for future work.
 
+## Regional map and editor
+
+The regional atlas connects the existing Harbor operation with three new battlefields. Select a numbered area to read its terrain and approach briefing, then open that battlefield. Wheel zoom, drag to pan, and **Fit region** let you inspect the wider coast. Opening **Region** during play pauses the current battle; returning restores it. Switching to another battlefield asks before abandoning the current operation.
+
+| Battlefield | Authored size | Distinct routes and terrain |
+|---|---|---|
+| Black Sea Harbor | 1024 × 768 | Existing dense city, freight quays, bayhead detours and prepared enemy positions |
+| Bayhead Rail Valley | 448 × 320 | Connected railway and sidings, parked freight wagons, workshops, workers' housing and a river corridor |
+| Limestone Pass | 448 × 320 | Solid rock outcrops, a winding main road, longer flanking farm tracks, woods and small settlements |
+| South Inlet | 448 × 320 | A majority-water battlefield, narrow inlet, fishing quays, coastal land route and naval support |
+
+Each new battlefield uses the existing supply, engineer, capture, reserve and **60-second hold** rules. Inland operations offer land and air reinforcements; Harbor and South Inlet also support naval units. The geography is an original compressed adaptation of broad Sevastopol / Heraclean Peninsula relationships. Detailed streets and tactical dimensions are authored for play. The atlas loads one battle at a time; strategic persistence and seamless travel between maps are future work. Ground remains planar, rock masses block movement and sight, and trains are parked scenery.
+
+For visual authoring of the **three new battlefields**, double-click **`Map Editor.command`** on macOS, or run:
+
+```sh
+./tools/edit_region.sh
+```
+
+The editor requires Python 3 and a desktop browser, with no extra packages. Draw or reshape roads, railway lines, water, districts and ridges; place building landmarks and registered props; inspect collision footprints; undo/redo edits; and import/export blueprints. **Preview** validates and compiles without saving. **Save & build** writes the source and playable map only after validation, and rejects stale saves after another writer changes the source. Restart or redeploy the selected battlefield to load the saved build.
+
+See the [regional map and authoring guide](docs/regional-map.md) for controls, geography sources, validation contracts and native screenshots. Harbor continues to use its existing deterministic generator.
+
 ## Controls
 
 | Input | Action |
@@ -55,10 +78,11 @@ Starting supply is **3,200**, incoming supply is **6/sec**, and extra engineer s
 | Ctrl or Cmd + 1–9 / 1–9 | Assign / recall group |
 | Tab | Select all sections |
 | Arrows / screen edges | Pan |
-| Wheel or trackpad pinch / F | Smooth zoom (24–84) / focus selection |
+| Wheel or trackpad pinch / F | Smooth zoom (24–220 on regional battlefields; 24–84 on small legacy maps) / focus selection |
 | Minimap left / right click | Pan / issue order |
 | Space / Esc | Tactical pause; Esc also cancels targeting |
 | F1 / M | Guide / mute audio |
+| Region button | Browse the coast; return to the current battle or choose another operation |
 
 Retreating units stop firing and withdraw faster. In Field Operations, use aid/repair posts to restore health after disengagement; rally-point healing belongs to the older tactical modes. Heavily suppressed sections fire more slowly and cannot advance capture progress.
 
@@ -75,13 +99,17 @@ Rifles cannot chip away at armored hulls. The small UAV is hard to hit but disab
 - Articulated infantry, independently tracking turrets, wheel/rotor motion, recoil, damage smoke, missile trails, and terrain-sensitive movement.
 - Original equipment geometry, an angled RTS camera, textured terrain, industrial scenery, muzzle flashes, impacts, sparks, explosions, delayed smoke, dust, wakes, animated water, and synthesized audio.
 - Conservative model envelopes, safe deployment/formation slots, swept unit clearance, scenery clearance, and separated aircraft altitude bands.
+- Regional atlas with four playable operations, stable legacy scenario indices, and a validated visual authoring workflow for the three new maps.
 
-This is a **tactical MVP**, not an AAA release. It contains seven scenario configurations on a shared map framework: **Black Sea Harbor is available in normal play; six legacy fixtures are hidden**. Movement/combat and opponent behavior remain simplified, and the art is procedural. Multiplayer, save/load, a campaign, full skeletal animation, and production assets are not implemented. Building garrisons are abstracted; detailed room-by-room interior gameplay, general tactical crawling and vaulting are not implemented. Human usability testing and broader hardware coverage remain open.
+This is a **tactical MVP**, not an AAA release. It contains ten scenario configurations on a shared map framework: **four regional battlefields are available in normal play; six legacy fixtures are hidden**. Movement/combat and opponent behavior remain simplified, and the art is procedural. Multiplayer, save/load, a campaign, full skeletal animation, and production assets are not implemented. Building garrisons are abstracted; detailed room-by-room interior gameplay, general tactical crawling and vaulting are not implemented. Human usability testing and broader hardware coverage remain open.
 
 ## Verify
 
 ```sh
 python3 tools/check.py
+python3 tools/check.py --group regional
+python3 tools/build_region_maps.py --check
+python3 -m unittest discover -s tools -p 'test_regional_*.py'
 ./tools/play.sh --audio-driver Dummy --script tests/render_review.gd
 ./tools/play.sh --audio-driver Dummy --script tests/model_review.gd
 ./tools/play.sh --audio-driver Dummy -- --benchmark

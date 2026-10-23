@@ -42,6 +42,8 @@ var _static_near_index:Dictionary={}
 var field_mode:=false
 var roads=preload("res://scripts/road_network.gd").new()
 var scenario_id:=0
+var config:Dictionary={}
+var compiled_map:=false
 var style:="coast"
 var port:=true
 var shore_x:=82.0
@@ -81,8 +83,13 @@ var woods: Array[Rect2] = [Rect2(20, 12, 10, 14), Rect2(40, 44, 10, 16), Rect2(5
 
 func _init(preset:int=0, config_override:Dictionary={}) -> void:
 	scenario_id=preset
-	var definitions:Array=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
-	var config:Dictionary=definitions[clampi(preset,0,definitions.size()-1)] if config_override.is_empty() else config_override
+	if config_override.is_empty():
+		var catalog=preload("res://scripts/scenario_catalog.gd")
+		config=catalog.config(clampi(preset,0,catalog.entries().size()-1))
+	else:config=config_override
+	# Index 6 remains the original harbor/harbor-fixture renderer contract.
+	# New catalog entries opt in explicitly rather than depending on their index.
+	compiled_map=config.get("map_renderer","")=="harbor" or preset==6
 	var dimensions:Array=config.get("size",[96,72])
 	world_size=Vector2(dimensions[0],dimensions[1])
 	nav_cell_size=maxf(0.25,float(config.get("nav_cell_size",1.0)))

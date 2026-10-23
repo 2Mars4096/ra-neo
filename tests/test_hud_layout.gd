@@ -67,7 +67,7 @@ func run() -> void:
 		await process_frame
 		await process_frame
 		var scenario_count:int=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json")).filter(func(config):return not config.get("hidden",false) or config.id==battle.sim.scenario.id).size()
-		check(battle.hud.hits.size()==scenario_count+1,"guide lists playable scenarios and deploy")
+		check(battle.hud.hits.size()==scenario_count+2,"guide lists playable scenarios, regional map and deploy")
 		for hit in battle.hud.hits:
 			if hit.id.begins_with("scenario:"):check(Rect2(Vector2.ZERO,Vector2(dimensions)).encloses(hit.rect),"%s selector fits viewport"%hit.id)
 		check(battle.hud.action_at(Vector2(3,90))=="blocked","guide modal blocks battlefield")

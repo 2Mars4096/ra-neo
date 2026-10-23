@@ -15,6 +15,7 @@ const Infantry = preload("res://scripts/infantry.gd")
 const VehicleDamage = preload("res://scripts/vehicle_damage.gd")
 const SectionRecovery = preload("res://scripts/section_recovery.gd")
 const Terrain = preload("res://scripts/terrain.gd")
+const Scenarios = preload("res://scripts/scenario_catalog.gd")
 static var scenario_selection:=5
 var scenario:Dictionary
 
@@ -24,11 +25,9 @@ static func _static_init() -> void:
 	scenario_selection=default_selection()
 
 static func default_selection() -> int:
-	var presets=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
-	if not presets is Array or presets.is_empty():return 0
-	for index in presets.size():
-		if presets[index].get("id","")=="black_sea_harbor":return index
-	return mini(5,presets.size()-1)
+	var harbor:=Scenarios.index_for_id("black_sea_harbor")
+	if harbor>=0:return harbor
+	return maxi(0,mini(5,Scenarios.entries().size()-1))
 var terrain:BattleTerrain
 var definitions: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://resources/units.json"))
 var effectiveness:Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://resources/combat.json"))
@@ -83,14 +82,14 @@ var visibility_cache: Dictionary = {}
 
 func _init(populate: bool = true, preset:int=-1) -> void:
 	combat_rng.seed=47291
-	var presets:Array=JSON.parse_string(FileAccess.get_file_as_string("res://resources/scenarios.json"))
+	var presets:Array=Scenarios.entries()
 	var choice:=clampi(scenario_selection if preset<0 else preset,0,presets.size()-1)
-	scenario=presets[choice]
+	scenario=Scenarios.config(choice,true)
 	# Authored town rooflines require separated flight bands above their tallest structures.
 	for kind in scenario.get("air_altitudes",{}):
 		if definitions.has(kind) and definitions[kind].domain=="air":
 			definitions[kind].altitude=float(scenario.air_altitudes[kind])
-	terrain=Terrain.new(choice)
+	terrain=Terrain.new(choice,scenario)
 	# One objective per authored sector/pole pair; legacy maps author two, the harbor three.
 	objectives.clear()
 	for i in mini(scenario.get("sectors",[]).size(),terrain.poles.size()):

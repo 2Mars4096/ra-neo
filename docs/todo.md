@@ -30,6 +30,8 @@
 
 ## Active reviewed plan
 
+- [x] [16: Regional map and shared battlefield authoring](plans/16-regional-map.md) — four-operation atlas, three new physically validated battlefields and visual blueprint editor on `codex/regional-map`; functional and native visual review complete, human balance/performance acceptance remains open (2026-10-23).
+
 - [ ] [14: Harbor city realism](plans/14-harbor-city-realism.md) — district layout, 27 building families, city decor, tier-1 engineers done; old-town continuity, microdistrict density, native review and performance open.
 
 - [x] [14-1: Soldiers reach physical cover](plans/14-1-cover-contact.md) — reachable sandbag goals, shared physical building profiles and stale/blocked occupation recovery; native arrivals verified and 24 selected integration suites pass. The 97 complex-building fallbacks and remaining cover-cost timing failures are documented follow-ups (2026-10-20).

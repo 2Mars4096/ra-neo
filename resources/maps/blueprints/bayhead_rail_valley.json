@@ -1,0 +1,781 @@
+{
+  "schema_version": 3,
+  "compiler": "tools/build_region_maps.py",
+  "proposal": {
+    "status": "authored fictional regional battlefield; gameplay and art acceptance remain provisional",
+    "inspiration": "Original authored, compressed fictional adaptation of the Sevastopol / Heraclean Peninsula geography. Public historic maps inform bay, valley, rail and settlement relationships; all battlefield streets, dimensions, forces and objectives are invented. No survey or current infrastructure accuracy is claimed.",
+    "sources": [
+      {
+        "title": "Ancient City of Tauric Chersonese and its Chora \u2014 UNESCO",
+        "url": "https://whc.unesco.org/en/list/1411/",
+        "use": "Historic urban grid and agricultural/vineyard hinterland morphology; consulted 2026-10-23."
+      },
+      {
+        "title": "Sebastopol and Western Crimea, 1919 \u2014 University of South Florida Maps ETC",
+        "url": "https://etc.usf.edu/maps/pages/2500/2582/2582.htm",
+        "use": "Broad coast, relief, railway-valley and settlement relationships only; consulted 2026-10-23. No map imagery copied."
+      },
+      {
+        "title": "Plan de la Cherson\u00e8se \u2014 Library of Congress",
+        "url": "https://www.loc.gov/item/2002695526/",
+        "use": "Historic peninsula / bay relationship reference; no historical fortifications or troop positions reproduced."
+      }
+    ],
+    "assumptions": [
+      "The region is a geographic selection layer, not a persistent strategic simulation.",
+      "Battlefield roads, parcels and scenery use the existing shared Harbor collision and mobility rules.",
+      "Mountains are impassable rock formations around a planar navigable valley floor; there are no traversable slopes, height bonuses or tunnels.",
+      "Rails are static, crossable track meshes. Parked rail vehicles are solid scenery; there is no moving-train simulation."
+    ]
+  },
+  "scenario": {
+    "id": "bayhead_rail_valley",
+    "name": "BAYHEAD RAIL VALLEY",
+    "brief": "Secure the station approach, sorting yard and eastern junction. Use service roads around parked wagons and scout the exposed railway crossings.",
+    "size": [
+      448,
+      320
+    ],
+    "mode": "field_ops",
+    "map_renderer": "harbor",
+    "style": "showcase",
+    "port": false,
+    "shore_x": 448,
+    "available_domains": [
+      "land",
+      "air"
+    ],
+    "field_insertion": [
+      45,
+      270
+    ],
+    "field_enemy_insertion": [
+      414,
+      74
+    ],
+    "objectives": [
+      [
+        110,
+        192
+      ],
+      [
+        275,
+        192
+      ],
+      [
+        400,
+        82
+      ]
+    ],
+    "sectors": [
+      "STATION APPROACH",
+      "SORTING YARD",
+      "EASTERN JUNCTION"
+    ],
+    "woods": [
+      [
+        12,
+        166,
+        20,
+        40
+      ],
+      [
+        205,
+        259,
+        18,
+        38
+      ]
+    ],
+    "water_polygons": [
+      [
+        [
+          0,
+          28
+        ],
+        [
+          70,
+          34
+        ],
+        [
+          145,
+          26
+        ],
+        [
+          228,
+          38
+        ],
+        [
+          320,
+          26
+        ],
+        [
+          448,
+          12
+        ],
+        [
+          448,
+          34
+        ],
+        [
+          320,
+          48
+        ],
+        [
+          228,
+          58
+        ],
+        [
+          145,
+          46
+        ],
+        [
+          70,
+          56
+        ],
+        [
+          0,
+          50
+        ]
+      ]
+    ],
+    "rubble": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "mud": [
+      255,
+      285,
+      55,
+      18
+    ],
+    "districts": [],
+    "player_force": [
+      {
+        "kind": "engineer",
+        "position": [
+          45,
+          270
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          35,
+          262
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          55,
+          262
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          59,
+          278
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          38,
+          280
+        ]
+      },
+      {
+        "kind": "aa",
+        "position": [
+          49,
+          286
+        ]
+      },
+      {
+        "kind": "drone",
+        "position": [
+          37,
+          256
+        ]
+      },
+      {
+        "kind": "helo",
+        "position": [
+          66,
+          270
+        ]
+      }
+    ],
+    "enemy_force": [
+      {
+        "kind": "rifle",
+        "position": [
+          118,
+          181
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          127,
+          194
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          265,
+          180
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          287,
+          184
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          390,
+          74
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          414,
+          86
+        ]
+      },
+      {
+        "kind": "aa",
+        "position": [
+          414,
+          122
+        ]
+      },
+      {
+        "kind": "drone",
+        "position": [
+          390,
+          90
+        ]
+      }
+    ],
+    "enemy_works": [],
+    "reserve_force": [
+      {
+        "kind": "tank",
+        "position": [
+          414,
+          74
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          414,
+          74
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          414,
+          74
+        ]
+      }
+    ],
+    "field_supply": 3200,
+    "field_income": 6,
+    "hold": 60
+  },
+  "streets": [
+    {
+      "name": "Valley freight road",
+      "points": [
+        [
+          20,
+          196
+        ],
+        [
+          110,
+          196
+        ],
+        [
+          220,
+          196
+        ],
+        [
+          300,
+          196
+        ],
+        [
+          400,
+          196
+        ],
+        [
+          428,
+          196
+        ]
+      ],
+      "width": 16,
+      "class": "arterial",
+      "purpose": "industrial freight arterial"
+    },
+    {
+      "name": "Western arrival",
+      "points": [
+        [
+          45,
+          294
+        ],
+        [
+          45,
+          270
+        ],
+        [
+          45,
+          196
+        ]
+      ],
+      "width": 14,
+      "class": "track",
+      "purpose": "insertion and service track"
+    },
+    {
+      "name": "Station access",
+      "points": [
+        [
+          110,
+          196
+        ],
+        [
+          110,
+          140
+        ],
+        [
+          110,
+          76
+        ]
+      ],
+      "width": 12,
+      "class": "street",
+      "purpose": "station street and level crossing"
+    },
+    {
+      "name": "Eastern level crossing",
+      "points": [
+        [
+          400,
+          280
+        ],
+        [
+          400,
+          196
+        ],
+        [
+          400,
+          140
+        ],
+        [
+          400,
+          82
+        ],
+        [
+          420,
+          70
+        ]
+      ],
+      "width": 14,
+      "class": "street",
+      "purpose": "freight road and railway level crossing"
+    },
+    {
+      "name": "Residential loop",
+      "points": [
+        [
+          75,
+          226
+        ],
+        [
+          190,
+          226
+        ],
+        [
+          190,
+          298
+        ],
+        [
+          75,
+          298
+        ],
+        [
+          75,
+          226
+        ]
+      ],
+      "width": 10,
+      "class": "lane",
+      "purpose": "residential town lane"
+    },
+    {
+      "name": "Residential connector",
+      "points": [
+        [
+          130,
+          226
+        ],
+        [
+          130,
+          196
+        ]
+      ],
+      "width": 10,
+      "class": "lane",
+      "purpose": "town lane"
+    },
+    {
+      "name": "Workshop service road",
+      "points": [
+        [
+          370,
+          196
+        ],
+        [
+          370,
+          240
+        ],
+        [
+          310,
+          240
+        ]
+      ],
+      "width": 10,
+      "class": "port",
+      "purpose": "industrial service yard access"
+    }
+  ],
+  "city_districts": [
+    {
+      "id": "station",
+      "name": "Station and river-bank works",
+      "polygon": [
+        [
+          65,
+          64
+        ],
+        [
+          384,
+          64
+        ],
+        [
+          384,
+          172
+        ],
+        [
+          65,
+          172
+        ]
+      ],
+      "morphology": "port"
+    },
+    {
+      "id": "residential",
+      "name": "Railway workers neighborhood",
+      "polygon": [
+        [
+          66,
+          210
+        ],
+        [
+          198,
+          210
+        ],
+        [
+          198,
+          312
+        ],
+        [
+          66,
+          312
+        ]
+      ],
+      "morphology": "private"
+    },
+    {
+      "id": "workshops",
+      "name": "Road-served workshop yards",
+      "polygon": [
+        [
+          240,
+          210
+        ],
+        [
+          389,
+          210
+        ],
+        [
+          389,
+          306
+        ],
+        [
+          240,
+          306
+        ]
+      ],
+      "morphology": "port"
+    }
+  ],
+  "rock_parcels": [
+    [
+      186,
+      8,
+      30,
+      15
+    ],
+    [
+      350,
+      6,
+      40,
+      8
+    ]
+  ],
+  "open_spaces": [
+    {
+      "name": "Station forecourt",
+      "kind": "square",
+      "polygon": [
+        [
+          122,
+          88
+        ],
+        [
+          165,
+          88
+        ],
+        [
+          165,
+          98
+        ],
+        [
+          122,
+          98
+        ]
+      ]
+    },
+    {
+      "name": "River margin",
+      "kind": "headland",
+      "polygon": [
+        [
+          24,
+          64
+        ],
+        [
+          85,
+          64
+        ],
+        [
+          85,
+          82
+        ],
+        [
+          24,
+          82
+        ]
+      ]
+    }
+  ],
+  "landmarks": [
+    {
+      "design": "port_admin",
+      "position": [
+        143,
+        78
+      ],
+      "source_size": [
+        24,
+        12
+      ],
+      "district": "station",
+      "rotation_degrees": 0,
+      "floors": 3
+    },
+    {
+      "design": "transit_shed",
+      "position": [
+        285,
+        76
+      ],
+      "source_size": [
+        60,
+        20
+      ],
+      "district": "station",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "workshop_hall",
+      "position": [
+        326,
+        267
+      ],
+      "source_size": [
+        36,
+        18
+      ],
+      "district": "workshops",
+      "rotation_degrees": 0,
+      "floors": 1
+    }
+  ],
+  "decor": [
+    {
+      "id": "freight_wagon.boxcar",
+      "position": [
+        252,
+        130
+      ],
+      "context": "parked boxcar on sorting siding",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "freight_wagon.boxcar",
+      "position": [
+        282,
+        130
+      ],
+      "context": "parked boxcar on sorting siding",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "freight_wagon.boxcar",
+      "position": [
+        318,
+        130
+      ],
+      "context": "parked boxcar with access gap",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "freight_wagon.boxcar",
+      "position": [
+        300,
+        118
+      ],
+      "context": "boxcar beside loading shed",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "water_tower.farm",
+      "position": [
+        360,
+        267
+      ],
+      "context": "workshop water tower",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "transformer.pad_mounted",
+      "position": [
+        350,
+        251
+      ],
+      "context": "workshop electric service",
+      "rotation_degrees": 0,
+      "domain": "land"
+    }
+  ],
+  "railways": [
+    {
+      "name": "Valley main line",
+      "points": [
+        [
+          16,
+          106
+        ],
+        [
+          432,
+          106
+        ]
+      ]
+    },
+    {
+      "name": "Arrival turnout",
+      "points": [
+        [
+          144,
+          106
+        ],
+        [
+          240,
+          130
+        ]
+      ]
+    },
+    {
+      "name": "Sorting siding",
+      "points": [
+        [
+          240,
+          130
+        ],
+        [
+          336,
+          130
+        ]
+      ]
+    },
+    {
+      "name": "Departure turnout",
+      "points": [
+        [
+          336,
+          130
+        ],
+        [
+          432,
+          106
+        ]
+      ]
+    },
+    {
+      "name": "Loading siding",
+      "points": [
+        [
+          168,
+          106
+        ],
+        [
+          240,
+          118
+        ],
+        [
+          336,
+          118
+        ],
+        [
+          408,
+          106
+        ]
+      ]
+    }
+  ],
+  "layout_validation": {
+    "physical_rules": "existing Harbor footprints, water domains, mobility and line-of-sight rules",
+    "native_validation": "tests/test_regional_physics.gd"
+  },
+  "generate_enemy_defences": false
+}

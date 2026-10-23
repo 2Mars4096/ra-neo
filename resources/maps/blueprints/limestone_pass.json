@@ -1,0 +1,618 @@
+{
+  "schema_version": 3,
+  "compiler": "tools/build_region_maps.py",
+  "proposal": {
+    "status": "authored fictional regional battlefield; gameplay and art acceptance remain provisional",
+    "inspiration": "Original authored, compressed fictional adaptation of the Sevastopol / Heraclean Peninsula geography. Public historic maps inform bay, valley, rail and settlement relationships; all battlefield streets, dimensions, forces and objectives are invented. No survey or current infrastructure accuracy is claimed.",
+    "sources": [
+      {
+        "title": "Ancient City of Tauric Chersonese and its Chora \u2014 UNESCO",
+        "url": "https://whc.unesco.org/en/list/1411/",
+        "use": "Historic urban grid and agricultural/vineyard hinterland morphology; consulted 2026-10-23."
+      },
+      {
+        "title": "Sebastopol and Western Crimea, 1919 \u2014 University of South Florida Maps ETC",
+        "url": "https://etc.usf.edu/maps/pages/2500/2582/2582.htm",
+        "use": "Broad coast, relief, railway-valley and settlement relationships only; consulted 2026-10-23. No map imagery copied."
+      },
+      {
+        "title": "Plan de la Cherson\u00e8se \u2014 Library of Congress",
+        "url": "https://www.loc.gov/item/2002695526/",
+        "use": "Historic peninsula / bay relationship reference; no historical fortifications or troop positions reproduced."
+      }
+    ],
+    "assumptions": [
+      "The region is a geographic selection layer, not a persistent strategic simulation.",
+      "Battlefield roads, parcels and scenery use the existing shared Harbor collision and mobility rules.",
+      "Mountains are impassable rock formations around a planar navigable valley floor; there are no traversable slopes, height bonuses or tunnels.",
+      "Rails are static, crossable track meshes. Parked rail vehicles are solid scenery; there is no moving-train simulation."
+    ]
+  },
+  "scenario": {
+    "id": "limestone_pass",
+    "name": "LIMESTONE PASS",
+    "brief": "Secure the western bend, pass crossroads and upper hamlet. Scout beyond the rock walls; longer farm tracks offer flanking approaches around the main road.",
+    "size": [
+      448,
+      320
+    ],
+    "mode": "field_ops",
+    "map_renderer": "harbor",
+    "style": "showcase",
+    "port": false,
+    "shore_x": 448,
+    "available_domains": [
+      "land",
+      "air"
+    ],
+    "field_insertion": [
+      36,
+      270
+    ],
+    "field_enemy_insertion": [
+      414,
+      64
+    ],
+    "objectives": [
+      [
+        128,
+        218
+      ],
+      [
+        250,
+        166
+      ],
+      [
+        384,
+        112
+      ]
+    ],
+    "sectors": [
+      "WESTERN BEND",
+      "PASS CROSSROADS",
+      "UPPER HAMLET"
+    ],
+    "woods": [
+      [
+        71,
+        183,
+        20,
+        25
+      ],
+      [
+        345,
+        202,
+        18,
+        20
+      ],
+      [
+        361,
+        42,
+        16,
+        30
+      ]
+    ],
+    "water_polygons": [],
+    "rubble": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "mud": [
+      245,
+      285,
+      80,
+      18
+    ],
+    "districts": [],
+    "player_force": [
+      {
+        "kind": "engineer",
+        "position": [
+          36,
+          270
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          26,
+          262
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          46,
+          262
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          50,
+          278
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          29,
+          280
+        ]
+      },
+      {
+        "kind": "aa",
+        "position": [
+          40,
+          286
+        ]
+      },
+      {
+        "kind": "drone",
+        "position": [
+          28,
+          256
+        ]
+      },
+      {
+        "kind": "helo",
+        "position": [
+          57,
+          270
+        ]
+      }
+    ],
+    "enemy_force": [
+      {
+        "kind": "rifle",
+        "position": [
+          137,
+          207
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          146,
+          218
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          259,
+          155
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          265,
+          170
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          393,
+          121
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          408,
+          108
+        ]
+      },
+      {
+        "kind": "aa",
+        "position": [
+          420,
+          95
+        ]
+      },
+      {
+        "kind": "drone",
+        "position": [
+          382,
+          90
+        ]
+      }
+    ],
+    "enemy_works": [],
+    "reserve_force": [
+      {
+        "kind": "tank",
+        "position": [
+          414,
+          64
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          414,
+          64
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          414,
+          64
+        ]
+      }
+    ],
+    "field_supply": 3200,
+    "field_income": 6,
+    "hold": 60
+  },
+  "streets": [
+    {
+      "name": "Pass road",
+      "points": [
+        [
+          36,
+          270
+        ],
+        [
+          100,
+          270
+        ],
+        [
+          128,
+          218
+        ],
+        [
+          218,
+          218
+        ],
+        [
+          250,
+          166
+        ],
+        [
+          334,
+          166
+        ],
+        [
+          384,
+          112
+        ],
+        [
+          414,
+          72
+        ]
+      ],
+      "width": 14,
+      "class": "arterial",
+      "purpose": "mountain pass road through the valley floor"
+    },
+    {
+      "name": "Western farm track",
+      "points": [
+        [
+          100,
+          270
+        ],
+        [
+          56,
+          218
+        ],
+        [
+          56,
+          170
+        ],
+        [
+          94,
+          160
+        ],
+        [
+          168,
+          160
+        ],
+        [
+          218,
+          218
+        ]
+      ],
+      "width": 8,
+      "class": "track",
+      "purpose": "farm track around the western ridge"
+    },
+    {
+      "name": "Southern flanking track",
+      "points": [
+        [
+          218,
+          218
+        ],
+        [
+          240,
+          278
+        ],
+        [
+          375,
+          278
+        ],
+        [
+          390,
+          226
+        ],
+        [
+          334,
+          166
+        ]
+      ],
+      "width": 8,
+      "class": "track",
+      "purpose": "long farm track around the southern limestone ridge"
+    }
+  ],
+  "city_districts": [
+    {
+      "id": "lower_village",
+      "name": "Lower valley village",
+      "polygon": [
+        [
+          9,
+          224
+        ],
+        [
+          117,
+          224
+        ],
+        [
+          117,
+          310
+        ],
+        [
+          9,
+          310
+        ]
+      ],
+      "morphology": "village"
+    },
+    {
+      "id": "pass_services",
+      "name": "Roadside pass services",
+      "polygon": [
+        [
+          152,
+          184
+        ],
+        [
+          230,
+          184
+        ],
+        [
+          230,
+          252
+        ],
+        [
+          152,
+          252
+        ]
+      ],
+      "morphology": "village"
+    },
+    {
+      "id": "upper_hamlet",
+      "name": "Upper hamlet",
+      "polygon": [
+        [
+          349,
+          34
+        ],
+        [
+          440,
+          34
+        ],
+        [
+          440,
+          153
+        ],
+        [
+          349,
+          153
+        ]
+      ],
+      "morphology": "private"
+    }
+  ],
+  "rock_parcels": [
+    [
+      62,
+      62,
+      35,
+      64
+    ],
+    [
+      110,
+      54,
+      63,
+      70
+    ],
+    [
+      195,
+      66,
+      28,
+      90
+    ],
+    [
+      153,
+      249,
+      54,
+      40
+    ],
+    [
+      253,
+      215,
+      69,
+      36
+    ],
+    [
+      281,
+      48,
+      45,
+      77
+    ],
+    [
+      415,
+      193,
+      24,
+      64
+    ],
+    [
+      13,
+      98,
+      22,
+      80
+    ]
+  ],
+  "open_spaces": [
+    {
+      "name": "Southern pasture",
+      "kind": "field",
+      "polygon": [
+        [
+          245,
+          286
+        ],
+        [
+          330,
+          286
+        ],
+        [
+          330,
+          309
+        ],
+        [
+          245,
+          309
+        ]
+      ]
+    },
+    {
+      "name": "Pine slope margin",
+      "kind": "headland",
+      "polygon": [
+        [
+          230,
+          72
+        ],
+        [
+          263,
+          72
+        ],
+        [
+          263,
+          133
+        ],
+        [
+          230,
+          133
+        ]
+      ]
+    }
+  ],
+  "landmarks": [
+    {
+      "design": "petrol_station",
+      "position": [
+        180,
+        239
+      ],
+      "source_size": [
+        18,
+        12
+      ],
+      "district": "pass_services",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "stone_house",
+      "position": [
+        90,
+        230
+      ],
+      "source_size": [
+        10,
+        8
+      ],
+      "district": "lower_village",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "outbuilding",
+      "position": [
+        104,
+        236
+      ],
+      "source_size": [
+        5,
+        4
+      ],
+      "district": "lower_village",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "stone_house",
+      "position": [
+        420,
+        143
+      ],
+      "source_size": [
+        9,
+        8
+      ],
+      "district": "upper_hamlet",
+      "rotation_degrees": 0,
+      "floors": 1
+    }
+  ],
+  "decor": [
+    {
+      "id": "direction_sign.fingerpost",
+      "position": [
+        226,
+        184
+      ],
+      "context": "signed junction outside pass carriageway",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "water_tower.farm",
+      "position": [
+        200,
+        240
+      ],
+      "context": "roadside settlement water supply",
+      "rotation_degrees": 0,
+      "domain": "land"
+    },
+    {
+      "id": "tractor.open_utility",
+      "position": [
+        277,
+        292
+      ],
+      "context": "farm vehicle on southern pasture margin",
+      "rotation_degrees": 0,
+      "domain": "land"
+    }
+  ],
+  "railways": [],
+  "layout_validation": {
+    "physical_rules": "existing Harbor footprints, water domains, mobility and line-of-sight rules",
+    "native_validation": "tests/test_regional_physics.gd"
+  },
+  "generate_enemy_defences": false
+}

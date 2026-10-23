@@ -9,10 +9,14 @@ const StructureDamage = preload("res://scripts/structure_damage.gd")
 const Notice = preload("res://scripts/notice_feed.gd")
 const PlayerSettings = preload("res://scripts/player_settings.gd")
 const BattleMenu = preload("res://scripts/battle_menu.gd")
+const RegionalMap = preload("res://scripts/regional_map.gd")
 var settings:=PlayerSettings.new()
 var settings_path:=PlayerSettings.PATH
 var menu:Control
 var menu_was_paused:=true
+var regional_map:Control
+var region_was_paused:=true
+var region_had_3d_disabled:=false
 var window_focused:=true
 var pointer_in_window:=true
 var sim := Sim.new()
@@ -191,6 +195,10 @@ func _ready() -> void:
 	menu.restart_confirmed.connect(restart_now)
 	menu.defaults_requested.connect(reset_settings)
 	menu.report_requested.connect(copy_bug_report)
+	regional_map=RegionalMap.new()
+	layer.add_child(regional_map)
+	regional_map.closed.connect(close_region)
+	regional_map.battlefield_requested.connect(select_region_battlefield)
 	add_child(sound)
 	sound.volume_db = -19
 	apply_settings()
@@ -248,7 +256,36 @@ func release_pointer() -> void:
 	build_drag=false
 
 func menu_open() -> bool:
-	return is_instance_valid(menu) and menu.visible
+	return (is_instance_valid(menu) and menu.visible) or region_open()
+
+func region_open() -> bool:
+	return is_instance_valid(regional_map) and regional_map.visible
+
+func open_region() -> void:
+	if region_open():return
+	if menu_open():close_menu()
+	region_was_paused=paused
+	region_had_3d_disabled=get_viewport().disable_3d
+	paused=true
+	# The atlas is opaque 2D. Preserve the battle, but do not draw the entire
+	# hidden town underneath it while the player browses another operation.
+	get_viewport().disable_3d=true
+	cancel_targeting(false)
+	middle_panning=false
+	regional_map.show_region(str(sim.scenario.get("id","")),sim.time>0 and sim.result=="")
+
+func close_region() -> void:
+	if not region_open():return
+	regional_map.dismiss()
+	get_viewport().disable_3d=region_had_3d_disabled
+	paused=region_was_paused
+	hud.queue_redraw()
+
+func select_region_battlefield(index:int) -> void:
+	if index<0 or index>=Sim.Scenarios.entries().size():return
+	if region_open():get_viewport().disable_3d=region_had_3d_disabled
+	Sim.scenario_selection=index
+	get_tree().reload_current_scene()
 
 func prepare_menu() -> void:
 	if not menu_open():menu_was_paused=paused
@@ -263,6 +300,9 @@ func open_settings() -> void:
 	if ResourceLoader.exists(release_path):menu.status.text=str(load(release_path).label())+" · Scale limited to fit window."
 
 func close_menu() -> void:
+	if region_open():
+		close_region()
+		return
 	if not menu_open():return
 	if menu.mode=="settings":
 		var error:Error=settings.save_preferences(settings_path)
@@ -1113,6 +1153,7 @@ func ui_action(action: String, p: Vector2) -> void:
 		"help": show_help=true
 		"pause": paused=not paused
 		"restart": request_restart()
+		"region": open_region()
 		"settings": open_settings()
 		"bug-report": copy_bug_report()
 		"attack":
@@ -1135,7 +1176,19 @@ func ui_action(action: String, p: Vector2) -> void:
 			camera_focus=Vector3(target.x,0,target.y)
 		_:
 			if action.begins_with("scenario:"):
-				Sim.scenario_selection=int(action.trim_prefix("scenario:"))
+				var next_index:=int(action.trim_prefix("scenario:"))
+				if next_index==sim.terrain.scenario_id:return
+				var entries:Array=Sim.Scenarios.entries()
+				if next_index<0 or next_index>=entries.size():return
+				if sim.time>0 and sim.result=="":
+					var region_data:Dictionary=RegionalMap.Catalog.data()
+					var field_id:String=RegionalMap.Catalog.for_scenario(region_data,str(entries[next_index].id))
+					if field_id!="":
+						open_region()
+						regional_map.select_battlefield(field_id)
+						regional_map.request_battlefield()
+						return
+				Sim.scenario_selection=next_index
 				get_tree().reload_current_scene()
 			elif action.begins_with("build:") and not sim.field_ops.is_empty():
 				var kind:=action.trim_prefix("build:")
@@ -1271,6 +1324,12 @@ func _input(event: InputEvent) -> void:
 	if not is_instance_valid(hud):
 		return
 	if event is InputEventMouse:pointer=event.position
+	if region_open():
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ESCAPE,KEY_F10]:
+			if regional_map.confirming:regional_map.cancel_confirmation()
+			else:close_region()
+			get_viewport().set_input_as_handled()
+		return
 	if menu_open():
 		if event is InputEventKey and event.pressed and not event.echo:
 			if event.keycode in [KEY_ESCAPE,KEY_F10]:

@@ -1,4 +1,47 @@
-# MVP validation — 2026-10-14
+# Validation evidence
+
+## Regional atlas and authoring — 2026-10-23
+
+Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, from the renamed game's `e97e82f` baseline plus the regional implementation. This is a focused integration pass; it does not claim a rerun of every historical suite below.
+
+| Verification | Result |
+|---|---|
+| Regional physics and mission gates | 1,841 checks, 0 failures |
+| Regional atlas, switching and restart | 77 checks, 0 failures |
+| Existing HUD layout | 1,413 checks, 0 failures |
+| Existing presentation cache | 20 checks, 0 failures |
+| Field operations, scenario dimensions, road network, Harbor gameplay, Harbor visuals, field victory, large terrain | All 7 affected suites pass, 0 failures |
+| Python authoring validation | 11 tests pass |
+| Python editor API and file-write behavior | 9 tests pass |
+| Real-browser editor workflows | 9 workflows pass, 0 browser errors |
+| Harbor and regional deterministic output | Both compiler `--check` commands pass |
+
+Regional physics checks use all three compiled maps. They verify exact initial and reserve force counts, legal unit footprints, infantry and tracked routes from both insertion areas to every objective, boat approaches on South Inlet, rejected inland boat purchases, ridge movement/sight blocking, shared building rendering, and isolated ground configuration when returning to Harbor. Tracked-route checks apply the existing crushable-furniture rule; collision tolerances were not relaxed to make the maps pass. Controlled infantry capture tests exercise incomplete progress, ownership, reserve grace, the full 60-second hold requirement, eventual victory and no repeated reserve deployment. **These mission checks are state-based regressions, not full human or AI battle playthroughs.**
+
+The UI suite exercises the actual scene transition from Harbor to Limestone Pass and restart on the selected battlefield, alongside retained simulation/pause state while browsing, protected live switching, missing-map handling, input isolation, zoom/pan and 1120 × 720, 1440 × 900 and 1920 × 1080 layouts. Mission guidance was corrected after native review found that the new maps were being told to destroy nonexistent logistics posts.
+
+The editor was run against temporary copies of the blueprints and compiled outputs using the real Python backend and Playwright with Chrome for Testing 131. The browser review loaded all three maps, refreshed the session, cancelled an unfinished drag, dragged a road vertex with undo/redo, rejected an invalid objective without writing, previewed without saving, saved and reloaded both outputs, rejected an external-edit conflict and checked a smaller desktop layout. API tests separately cover unauthorized requests, invalid/nonfinite JSON, path restrictions, validation failure, conflicting revisions and rollback after a simulated output-write failure. User project maps were not changed by browser save tests.
+
+Native Godot captures use **GL Compatibility / llvmpipe software rendering**. Nine battlefield views (overview, medium, detail for each map) were captured and inspected, plus the atlas. The selected composition images deliberately reveal fog and label that state; they are not normal starting visibility. The editor image is an actual browser capture. Evidence:
+
+- [Regional atlas](images/regional-atlas.png)
+- [Map editor](images/regional-editor.png)
+- [Bayhead Rail Valley](images/regional-rail-valley.png)
+- [Limestone Pass](images/regional-limestone-pass.png)
+- [South Inlet](images/regional-south-inlet.png)
+
+Reproduce the functional and authoring gates with:
+
+```sh
+python3 tools/check.py --group regional
+python3 -m unittest discover -s tools -p 'test_regional_*.py'
+python3 tools/build_region_maps.py --check
+python3 tools/build_harbor_map.py --check
+```
+
+Set `GODOT_BIN` to the 4.5.1 executable if it is not on the path. `tests/regional_native_review.gd` and `tests/regional_ui_review.gd` capture the real game with a graphical display; the authoring tool needs Python 3 and a desktop browser. The regional suites are also included in the default discovery and release selection.
+
+No frame-rate, full-combat balance or supported-hardware acceptance is claimed for this increment. Ground remains planar with the existing solid rock obstacles; railcars are static. The atlas is geographic context and operation selection, with one tactical simulation loaded at a time. The [regional guide](regional-map.md) records the compressed geography and source attribution; prior performance findings below remain historical and unresolved where marked.
 
 ## Integrated team revamp — 2026-10-14
 

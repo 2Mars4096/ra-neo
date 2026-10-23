@@ -3,7 +3,8 @@
 
 Default: core/combat/probes/regression functional suites. Hardware-sensitive
 cover-cost and busy-combat CPU timing are explicit: --group performance. --group release selects
-current Harbor/player-facing coverage; --group playthrough runs full battles.
+current Harbor/regional player-facing coverage; --group regional checks the new
+battlefields and their affected integration paths; --group playthrough runs full battles.
 Use --list without an installed engine. Reports/logs go into a fresh temp folder
 and artifacts/checks.json. Dedicated performance results are never implied by a
 functional pass; existing timing guards in mixed functional suites stay intact.
@@ -50,11 +51,20 @@ RELEASE_SUITES = {
     "test_cover_candidates.gd", "test_review_usability.gd", "test_harbor_diagnostics.gd",
     "test_wreck_section_recovery.gd",
     "test_riverside_navigation.gd", "test_scenario_dimensions.gd",
-    "test_presentation_cache.gd",
+    "test_presentation_cache.gd", "test_regional_physics.gd", "test_regional_ui.gd",
 }
 GROUPS["release"] = [(script, marker) for group, entries in GROUPS.items()
                      if group not in ("performance", "playthrough")
                      for script, marker in entries if script in RELEASE_SUITES]
+REGIONAL_SUITES = {
+    "test_regional_physics.gd", "test_regional_ui.gd", "test_scenario_dimensions.gd",
+    "test_road_network.gd", "test_field_ops.gd", "test_field_victory.gd",
+    "test_harbor_gameplay.gd", "test_harbor_visuals.gd", "test_large_terrain.gd",
+    "test_hud_layout.gd", "test_presentation_cache.gd",
+}
+GROUPS["regional"] = [(script, marker) for group, entries in GROUPS.items()
+                      if group in ("core", "combat", "regression")
+                      for script, marker in entries if script in REGIONAL_SUITES]
 LONG = {"classic_playthrough.gd": 600, "test_city_urban.gd": 180,
         "harbor_playthrough.gd": 1800, "test_vehicle_jam.gd": 240,
         "test_harvester_dock.gd": 240, "test_harvester_threat.gd": 240,
