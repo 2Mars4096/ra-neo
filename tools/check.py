@@ -117,7 +117,7 @@ def main(argv=None):
     version = subprocess.check_output([engine, "--version"], text=True).strip()
     if not version.startswith("4.5.1."):
         parser.error(f"Expected Godot 4.5.1, found {version}")
-    log_dir = Path(tempfile.mkdtemp(prefix="ra-neo-check-"))
+    log_dir = Path(tempfile.mkdtemp(prefix="for-every-dawn-check-"))
     # Fresh checkouts need Godot's global class and resource import cache.
     # Isolate Linux user settings/reports without changing HOME or the host.
     environment = os.environ.copy()

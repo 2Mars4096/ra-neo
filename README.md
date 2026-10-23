@@ -1,16 +1,18 @@
-# RA Neo
+# For Every Dawn
 
 A playable, local single-player Godot RTS prototype about securing a coastal corridor with infantry, armor, reconnaissance drones, gunships, and naval fire support. Inspired by the pace and readable command of classic RTS games, with original procedural models, a painted military miniature visual direction, and a modern military setting.
 
 ## Play
 
-Requires **Godot 4.5.1**. On this Mac, double-click **`Play RA Neo.command`**, or run:
+Requires **Godot 4.5.1**. On this Mac, double-click **`Play For Every Dawn.command`**, or run:
 
 ```sh
 ./tools/play.sh
 ```
 
 Alternatively, import `project.godot` in Godot and press F6 on `scenes/main.tscn` or F5 for the project. The launcher detects `/Applications/Godot.app`; elsewhere set `GODOT_BIN` to the engine executable. No third-party runtime packages or asset downloads are required.
+
+Upgrading an older checkout: [Godot's per-project user-data folder](https://docs.godotengine.org/en/4.5/tutorials/io/data_paths.html#accessing-persistent-user-data-user) now uses `For Every Dawn`. Local preferences start fresh; previous settings and diagnostic reports remain in the old folder.
 
 The game opens in **Black Sea Harbor**, the only scenario shown in the normal selector. Press **Deploy**. One supply pool buys off-map reinforcements and engineer-built support. There are no factories, refineries, harvesters or power requirements in this mode. Capture **Harbor Approach**, **Old Town** and **Freight Yard**, and hold all three objectives uncontested for **90 seconds**. You can prevent the enemy reserve from deploying by destroying all its command posts and ammo depots before it launches.
 

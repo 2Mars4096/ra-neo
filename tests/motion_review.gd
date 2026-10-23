@@ -10,7 +10,7 @@ func _init() -> void:
 	call_deferred("run")
 func draw_labels() -> void:
 	overlay.draw_rect(Rect2(0,0,1600,92),Color("111c22"))
-	overlay.draw_string(font,Vector2(32,42),"RA / NEO     •     EQUIPMENT STUDY",HORIZONTAL_ALIGNMENT_LEFT,-1,25,Color("e6ece7"))
+	overlay.draw_string(font,Vector2(32,42),"FOR EVERY DAWN     •     EQUIPMENT STUDY",HORIZONTAL_ALIGNMENT_LEFT,-1,25,Color("e6ece7"))
 	overlay.draw_string(font,Vector2(32,69),"Original game models  /  Silhouette, running gear, equipment and material pass",HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color("96aaa8"))
 	for label in labels:
 		var p:Vector2=camera.unproject_position(label.pos)

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-23 — For Every Dawn
+
+- Adopt **For Every Dawn** as the game name in Godot, the live HUD, source launcher, documentation, and environment/equipment review tools. The HUD reads the project title and measures its width before placing the scenario label.
+- Rename the Mac launcher to `Play For Every Dawn.command`, release targets to `For-Every-Dawn` filenames, and diagnostic/build/check prefixes to `for-every-dawn`.
+- Preserve the `ra-neo` repository address, historical evidence paths, and actual scenario names. Godot's default user-data folder now follows the new project name; previous preferences and reports are not migrated or deleted.
+- Validation: branding-reference audit, Python AST parsing, shell syntax, launcher executable permission, and `git diff --check` pass. Godot is unavailable in this environment, so native launch/layout checks were not rerun. Standalone packaging remains incomplete because the existing exporter references three absent inputs; see [known limitations](bugs.md).
+- Scope and verification: [game-name plan](plans/15-for-every-dawn.md).
+
 ## 2026-10-20 — Soldiers reach physical cover
 
 - Soldiers can reach normal and rotated sandbag faces: work goals use the actual body/terrain clearance, and rectangular field works no longer add an oversized circular actor exclusion. Work slots are separated enough for a returning soldier to fit between settled squadmates; reservations also account for adjoining works and nearby sections.

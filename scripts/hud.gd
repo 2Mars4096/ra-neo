@@ -341,8 +341,10 @@ func draw_world(sim) -> void:
 		cv.draw_rect(rect,TEAL,false,1)
 	# A compact field console keeps the central battle unobstructed.
 	console_panel(Rect2(0,0,w,42))
-	text_at("RA / NEO",Vector2(16,27),16,WHITE,true)
-	text_at(fit_bold(sim.scenario.name.to_upper(),w-856,12),Vector2(120,27),12,MUTED,true)
+	var game_title:=str(ProjectSettings.get_setting("application/config/name")).to_upper()
+	var scenario_x:=32.0+bold.get_string_size(game_title,HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
+	text_at(game_title,Vector2(16,27),16,WHITE,true)
+	text_at(fit_bold(sim.scenario.name.to_upper(),maxf(0,w-736-scenario_x),12),Vector2(scenario_x,27),12,MUTED,true)
 	text_at("SUPPLY  %04d" % int(sim.credits),Vector2(w-560,27),15,TEAL,true)
 	text_at("%02d:%02d" % [int(sim.time)/60,int(sim.time)%60],Vector2(w-392,27),13,WHITE)
 	button("settings","SETTINGS",Rect2(w-333,7,72,28))

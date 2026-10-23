@@ -59,7 +59,7 @@ func run()->void:
 	await shoot("06-settings-1280")
 	# Exercise the actual focused Control and its signal wiring. Clear any old
 	# report first so a stale X11 clipboard cannot make a disconnected button pass.
-	DisplayServer.clipboard_set("RA NEO clipboard probe")
+	DisplayServer.clipboard_set("For Every Dawn clipboard probe")
 	var report_buttons:Array=battle.menu.find_children("*","Button",true,false).filter(func(button):return button.text=="Copy bug report")
 	if report_buttons.size()!=1:
 		failures+=1

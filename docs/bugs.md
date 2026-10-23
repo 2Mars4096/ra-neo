@@ -2,6 +2,8 @@
 
 ## Known limitations
 
+- Release tooling is incomplete in the current source checkout (confirmed during the 2026-10-23 rename): `tools/export_release.py` references absent `export_presets.cfg`, `resources/build_info.json`, and `docs/playtest-readme.txt`. The staging/export path and build-version-dependent release tests require those inputs; changing the release filenames does not establish standalone-export readiness.
+
 - Harbor physical wall profiles currently cover 381 of 478 buildings. The remaining 97 custom/compound buildings retain conservative parcel collision; their courtyard/gateway geometry needs a separate compound-profile pass. Garrison window posts still use merged building bounds for every family, so rotated buildings and bounds including low pieces remain approximate. A parked vehicle can still obstruct a local shelter approach, causing bounded retries instead of a vehicle-aware long detour. Existing crowd and local-path limits still apply.
 
 - The physical-cover pass does not complete performance acceptance. The unchanged cover-search benchmark still exceeds its 25 ms limit at two contact locations (one on the original baseline). The slow `(500,680)` case improved from the initial 89.5 ms regression to 29.1 ms, but its final paired original baseline is 17.3 ms. Overall warm peaks are 28.6/29.1 ms and total benchmark process times are 16.82/21.24 s before/after; see [the measured comparison](plans/14-1-cover-contact.md#performance-review). Full-battle rendered performance remains a separate open gate.

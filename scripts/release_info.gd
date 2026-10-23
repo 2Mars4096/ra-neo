@@ -55,7 +55,7 @@ static func write_report(sim, reason: String = "player-report", directory: Strin
 	if error != OK:
 		return {"ok":false, "path":"", "text":text, "error":"Could not create report folder (%s)" % error}
 	var stamp := Time.get_datetime_string_from_system(true).replace(":", "-")
-	var path := directory.path_join("ra-neo-%s-%d.json" % [stamp, Time.get_ticks_msec()])
+	var path := directory.path_join("for-every-dawn-%s-%d.json" % [stamp, Time.get_ticks_msec()])
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return {"ok":false, "path":"", "text":text, "error":"Could not write report (%s)" % FileAccess.get_open_error()}

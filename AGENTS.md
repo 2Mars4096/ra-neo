@@ -1,4 +1,4 @@
-# RA Neo Repository Guide
+# For Every Dawn Repository Guide
 
 This file is the central Codex instruction file for this repository.
 
@@ -6,7 +6,7 @@ If `CLAUDE.md` also exists, keep the tracking sections aligned and treat `AGENTS
 
 ## Project Contract
 
-RA Neo is a Godot modern-warfare RTS inspired by Red Alert 2's pace and accessible command. Preserve the full-game vision of infantry, land, air, sea, and drones; meaningful terrain; easy squad controls; and high production quality with smooth runtime performance.
+For Every Dawn is a Godot modern-warfare RTS inspired by Red Alert 2's pace and accessible command. Preserve the full-game vision of infantry, land, air, sea, and drones; meaningful terrain; easy squad controls; and high production quality with smooth runtime performance.
 
 The repository now contains a Godot 4.5.1 tactical RTS prototype and automated checks. Do not report proposed architecture, aspirational AAA quality, or performance targets as implemented or measured. Follow the first playable slice before expanding content. Record assumptions as provisional until validated.
 

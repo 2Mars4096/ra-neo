@@ -24,7 +24,7 @@
 | `scripts/effects.gd` | Fixed 640-slot particle pool, effect timing and synthesized combat audio |
 | `resources/units.json` | Unit roles, combat/movement stats, prices, visible member counts, radii, and flight altitude |
 | `tests/`, `tools/check.py` | Behavior, input/restart, clearance, effects, playthrough, and rendered reviews |
-| `tools/play.sh`, `Play RA Neo.command` | Source-project launchers; not exported standalone binaries |
+| `tools/play.sh`, `Play For Every Dawn.command` | Source-project launchers; not exported standalone binaries |
 | `artifacts/` | Generated measurements and review screenshots |
 
 ## Simulation and navigation

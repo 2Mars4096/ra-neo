@@ -1,8 +1,8 @@
-; RA Neo — Godot 4.5.1
+; For Every Dawn — Godot 4.5.1
 config_version=5
 
 [application]
-config/name="RA NEO — Coastal Spear"
+config/name="For Every Dawn"
 run/main_scene="res://scenes/main.tscn"
 run/max_fps=60
 config/features=PackedStringArray("4.5", "GL Compatibility")

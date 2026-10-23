@@ -20,9 +20,9 @@ from datetime import datetime, timezone
 ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_DIRECTORIES = ("assets", "resources", "scenes", "scripts", "shaders")
 TARGETS = {
-    "linux": (0, "Linux x86_64", "linux_release.x86_64", "RA-Neo.x86_64"),
-    "windows": (1, "Windows x86_64", "windows_release_x86_64.exe", "RA-Neo.exe"),
-    "macos": (2, "macOS universal", "macos.zip", "RA-Neo.zip"),
+    "linux": (0, "Linux x86_64", "linux_release.x86_64", "For-Every-Dawn.x86_64"),
+    "windows": (1, "Windows x86_64", "windows_release_x86_64.exe", "For-Every-Dawn.exe"),
+    "macos": (2, "macOS universal", "macos.zip", "For-Every-Dawn.zip"),
 }
 
 
@@ -177,7 +177,7 @@ def main(argv=None):
         parser.error(str(error))
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    work = Path(tempfile.mkdtemp(prefix="ra-neo-export-"))
+    work = Path(tempfile.mkdtemp(prefix="for-every-dawn-export-"))
     stage = work / "project"
     stage.mkdir()
     environment = os.environ.copy()
@@ -190,7 +190,7 @@ def main(argv=None):
             environment, work / "import.log")
         for platform in platforms:
             _, preset, _, executable = TARGETS[platform]
-            folder = output / f"ra-neo-{args.version}-{metadata['commit'][:8]}-{platform}"
+            folder = output / f"for-every-dawn-{args.version}-{metadata['commit'][:8]}-{platform}"
             # Never mix an older candidate's files or evidence into a new build.
             # A deliberate rerun chooses a fresh --output directory.
             if folder.exists():

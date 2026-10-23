@@ -25,7 +25,7 @@ func run()->void:
 	var margin:=MarginContainer.new();control.add_child(margin);margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left","right","top","bottom"]:margin.add_theme_constant_override("margin_"+side,18)
 	var stack:=VBoxContainer.new();stack.add_theme_constant_override("separation",12);margin.add_child(stack)
-	var heading:=Label.new();heading.text="RA / NEO — ENVIRONMENT ASSET LIBRARY";heading.add_theme_font_size_override("font_size",24);stack.add_child(heading)
+	var heading:=Label.new();heading.text="FOR EVERY DAWN — ENVIRONMENT ASSET LIBRARY";heading.add_theme_font_size_override("font_size",24);stack.add_child(heading)
 	var info:=Label.new();info.text="Original runtime models · Fitted previews by default; shared-scale comparison available · Bounds in world units; no automatic collision/cover";stack.add_child(info)
 	var row:=HBoxContainer.new();stack.add_child(row)
 	selector=OptionButton.new();row.add_child(selector)

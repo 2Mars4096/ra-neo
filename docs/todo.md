@@ -20,6 +20,8 @@
 
 ## Latest completed work
 
+- [x] [15: For Every Dawn game name](plans/15-for-every-dawn.md) — project/window title, HUD, launcher, release/report filenames, gallery labels, and documentation renamed; static checks pass (2026-10-23).
+
 - [x] [4: Combat relationships and communications](plans/4-combat-relationships.md) — numerical counters, fragile UAVs, hit/miss resolution, interference, and regression review.
 
 - [x] [5: Vehicle stability and scenario identity](plans/5-stability-and-map-identity.md) — tank motion and genuinely different land layouts.

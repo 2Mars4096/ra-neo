@@ -6,14 +6,14 @@
 
 - [RA2 publisher screenshots](https://store.steampowered.com/app/2229850/): first naval assault image (`ss_e46d63df85e3c001e8488d48dba44a0d9e0869b0`). Service ramps, vents, ribs, concrete pads, perimeter walls, wheel tracks, craters and a varied shore establish purpose and contact. Bright faction accents coexist with readable shaded machinery. It is stylized, yet objects describe their function.
 - [AoE II DE official gallery](https://www.ageofempires.com/news/visual-look-at-aoe2de/): Barbarossa waterfront screenshot. Roof overhangs, masonry faces, narrow streets, connected enclosures and waterfront foundations give construction logic. Repeated houses form a settlement instead of isolated display pieces. Open squares are framed and usable; trees form masses.
-- [Songs of Syx publisher screenshots](https://store.steampowered.com/app/1162750/Songs_of_Syx/): first night-city image (`ss_f2d8c5d47a23f8d54560d144fdad30677c602817`). Thick room boundaries, door connections, furniture/storage arrangements, planted paths and pools distinguish functions. Repetition works because it builds coherent rooms and streets; varied rooms interrupt it. Local lights reinforce occupation, though this is no argument to add hundreds of runtime lights to RA Neo.
+- [Songs of Syx publisher screenshots](https://store.steampowered.com/app/1162750/Songs_of_Syx/): first night-city image (`ss_f2d8c5d47a23f8d54560d144fdad30677c602817`). Thick room boundaries, door connections, furniture/storage arrangements, planted paths and pools distinguish functions. Repetition works because it builds coherent rooms and streets; varied rooms interrupt it. Local lights reinforce occupation, though this is no argument to add hundreds of runtime lights to For Every Dawn.
 - [AoE DE developer explanation](https://www.ageofempires.com/news/age-empires-definitive-edition-3d-2d-game/): explicitly describes 3D source models rendered into 2D images and separate rendered zoom levels. This is about AoE DE, not proof of every named game's pipeline. The relevant lesson is to judge assets at intended gameplay scale, not assume real-time polygon or texture count establishes quality.
 
 The browser's Google search encountered a verification page; direct publisher pages remained accessible. No verification bypass, asset extraction into runtime, or licensing assumption.
 
-## Decisions for RA Neo
+## Decisions for For Every Dawn
 
-| Detail | Why it matters | RA Neo action / acceptance |
+| Detail | Why it matters | For Every Dawn action / acceptance |
 |---|---|---|
 | Roof eaves, openings, foundations | Explains construction and thickness | Existing geometry retained; inspect readable dark recesses and roof/wall separation at zoom44 and70 |
 | Door–path–street connection | Makes a building belong to the town | Reduce selected main-street setbacks, preserve driving clearance; further continuous frontage remains needed |
