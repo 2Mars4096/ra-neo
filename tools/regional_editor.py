@@ -64,7 +64,7 @@ def catalog() -> dict:
     assets = load_library()
     return {"maps": maps, "designs": designs, "assets": assets, "morphologies": sorted(MORPHOLOGIES),
             "rules": ["Roads do not bridge water. Keep land routes connected.",
-                      "Ridges are solid terrain; ground movement remains planar.",
+                      "Solid ridges block movement; elevation plateaus add walkable ground and slope constraints.",
                       "Building walls, low steps and props retain the shared physical footprints.",
                       "Generated street frontage updates on Preview; authored landmarks stay explicit."]}
 

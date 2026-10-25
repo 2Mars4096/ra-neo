@@ -212,6 +212,85 @@ def validate_blueprint(data: dict) -> list[str]:
         errors.append("Each objective needs one sector name; at least one objective is required.")
     for i, p in enumerate(objectives):
         point(p, f"Objective {i+1}")
+    # Operations use stable objective indices. Reject broken references before
+    # the editor can save a mission whose logistics or victory gate cannot work.
+    operation = sc.get("operation", {})
+    if not isinstance(operation, dict):
+        errors.append("scenario.operation must be an object.")
+    else:
+        def objective_index(value, label):
+            if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value < len(objectives):
+                errors.append(f"{label}: expected an existing objective index.")
+
+        def index_list(values, label):
+            if not isinstance(values, list):
+                errors.append(f"{label}: expected an array of objective indices.")
+                return
+            if len({str(value) for value in values}) != len(values):
+                errors.append(f"{label}: objective indices must be unique.")
+            for value in values:
+                objective_index(value, label)
+
+        for key in ["kind", "title", "brief"]:
+            if key in operation and not isinstance(operation[key], str):
+                errors.append(f"operation.{key} must be text.")
+        facilities = operation.get("facilities", [])
+        if not isinstance(facilities, list):
+            errors.append("operation.facilities must be an array.")
+        else:
+            for i, facility in enumerate(facilities):
+                label = f"Facility {i+1}"
+                if not isinstance(facility, dict):
+                    errors.append(f"{label} must be an object.")
+                    continue
+                objective_index(facility.get("objective"), label)
+                income = facility.get("income", 0)
+                if not _number(income) or not 0 <= income <= 20:
+                    errors.append(f"{label}: income must be between 0 and 20 supply per second.")
+                if "forward_position" in facility:
+                    point(facility["forward_position"], f"{label} forward insertion")
+                if "requires_naval_control" in facility:
+                    if not isinstance(facility["requires_naval_control"], bool):
+                        errors.append(f"{label}: requires_naval_control must be true or false.")
+                    elif facility["requires_naval_control"] and "naval_zone" not in operation:
+                        errors.append(f"{label}: naval-controlled logistics require a naval control zone.")
+        index_list(operation.get("deny_reserve_objectives", []), "Reserve route")
+        if "reserve_delay" in operation:
+            delay = operation["reserve_delay"]
+            if not _number(delay) or not 0 <= delay <= 300:
+                errors.append("operation.reserve_delay must be between 0 and 300 seconds.")
+        if "naval_zone" in operation:
+            zone = operation["naval_zone"]
+            if not isinstance(zone, dict):
+                errors.append("operation.naval_zone must be an object.")
+            else:
+                point(zone.get("position"), "Naval control zone")
+                if "name" in zone and not isinstance(zone["name"], str):
+                    errors.append("Naval control zone: name must be text.")
+                if not _number(zone.get("radius")) or not 4 <= zone["radius"] <= 100:
+                    errors.append("Naval control zone: radius must be between 4 and 100.")
+                index_list(zone.get("requires_objectives", []), "Naval control prerequisites")
+                if "sea" not in sc.get("available_domains", ["land", "air"]):
+                    errors.append("A naval control zone requires sea units on this battlefield.")
+
+    elevation = sc.get("elevation", [])
+    if not isinstance(elevation, list) or len(elevation) > 16:
+        errors.append("scenario.elevation must contain at most 16 plateau patches.")
+    else:
+        for i, patch in enumerate(elevation):
+            label = f"Elevation {i+1}"
+            if not isinstance(patch, dict):
+                errors.append(f"{label} must be an object.")
+                continue
+            rect(patch.get("rect"), label)
+            if not _number(patch.get("height")) or not 0 <= patch["height"] <= 40:
+                errors.append(f"{label}: height must be between 0 and 40.")
+            if not _number(patch.get("ramp")) or not 4 <= patch["ramp"] <= 120:
+                errors.append(f"{label}: ramp width must be between 4 and 120.")
+    if "elevation_mesh_step" in sc:
+        step = sc["elevation_mesh_step"]
+        if not _number(step) or not 1 <= step <= 4:
+            errors.append("scenario.elevation_mesh_step must be between 1 and 4.")
     for key in ["field_insertion", "field_enemy_insertion"]:
         point(sc.get(key), key)
     if "field_sea_insertion" in sc:

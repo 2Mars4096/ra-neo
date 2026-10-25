@@ -10,6 +10,10 @@ const Notice = preload("res://scripts/notice_feed.gd")
 const PlayerSettings = preload("res://scripts/player_settings.gd")
 const BattleMenu = preload("res://scripts/battle_menu.gd")
 const RegionalMap = preload("res://scripts/regional_map.gd")
+const Campaign = preload("res://scripts/regional_campaign.gd")
+var campaign:=Campaign.new()
+var campaign_path:=Campaign.storage_path
+var campaign_message:=""
 var settings:=PlayerSettings.new()
 var settings_path:=PlayerSettings.PATH
 var menu:Control
@@ -103,6 +107,17 @@ func flap(key:String,started:int)->int:
 
 func _ready() -> void:
 	settings.load_preferences(settings_path)
+	var campaign_error:Error=campaign.load_state(campaign_path) if Campaign.enabled else ERR_FILE_NOT_FOUND
+	if Campaign.enabled and not Campaign.session_loaded:
+		Campaign.session_loaded=true
+		if campaign.data.started and Sim.scenario_selection==Sim.default_selection():
+			var resume_index:int=Sim.Scenarios.index_for_id(str(campaign.data.last_battlefield))
+			if resume_index>=0 and resume_index!=sim.terrain.scenario_id:
+				Sim.scenario_selection=resume_index
+				sim=Sim.new(true,resume_index)
+	campaign.prepare(sim)
+	if campaign_error not in [OK,ERR_FILE_NOT_FOUND]:campaign_message="Campaign save unavailable · progress will not be saved"
+	elif campaign.recovered:campaign_message="Campaign recovered from its previous save"
 	get_window().focus_entered.connect(func():
 		window_focused=true
 		pointer_in_window=get_viewport().get_visible_rect().has_point(get_viewport().get_mouse_position()))
@@ -161,6 +176,7 @@ func _ready() -> void:
 			art.ring(deposit,3.3,Color("b59b59"))
 			for i in 9:art.make_rock(deposit,Vector3(sin(i*2.4)*2,0.3,cos(i*2.4)*2),Vector3(0.65,0.6,0.7),i)
 	add_child(effects)
+	effects.set_ground_terrain(sim.terrain)
 	effects.set_world_bounds(sim.terrain.world_size,sim.terrain.shore_x)
 	audio=preload("res://scripts/audio_fx.gd").new();audio.setup(sim,effects);add_child(audio)
 	add_child(weather_fx)
@@ -172,11 +188,18 @@ func _ready() -> void:
 	for obj in sim.objectives:
 		var root := Node3D.new()
 		add_child(root)
-		root.position = Vector3(obj.pos.x,0,obj.pos.y)
+		root.position = Vector3(obj.pos.x,sim.terrain.height_at(obj.pos),obj.pos.y)
 		art.ring(root,6.8,Color("f0ba75"))
 		art.cylinder(root,Vector3(0,2.7,0),0.1,5.4,Color("c3c8b6"))
 		art.box(root,Vector3(0.9,4.5,0),Vector3(1.8,0.8,0.09),Color("f0ba75"))
 		objective_nodes.append(root)
+	var sea_zone:Dictionary=sim.scenario.get("operation",{}).get("naval_zone",{})
+	if not sea_zone.is_empty():
+		var zone:=Node3D.new()
+		zone.name="SeaControlZone"
+		add_child(zone)
+		zone.position=Vector3(float(sea_zone.position[0]),0.12,float(sea_zone.position[1]))
+		art.ring(zone,float(sea_zone.radius),Color("75bad1"))
 	marker = Node3D.new()
 	add_child(marker)
 	art.ring(marker,1.5,Visuals.BLUE)
@@ -199,9 +222,11 @@ func _ready() -> void:
 	layer.add_child(regional_map)
 	regional_map.closed.connect(close_region)
 	regional_map.battlefield_requested.connect(select_region_battlefield)
+	regional_map.reset_requested.connect(reset_campaign)
 	add_child(sound)
 	sound.volume_db = -19
 	apply_settings()
+	if campaign_status_error()!="":notify(campaign_status_error(),Notice.ALERT)
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--capture="):
 			screenshot_path=arg.trim_prefix("--capture=")
@@ -263,6 +288,7 @@ func region_open() -> bool:
 
 func open_region() -> void:
 	if region_open():return
+	finish_campaign()
 	if menu_open():close_menu()
 	region_was_paused=paused
 	region_had_3d_disabled=get_viewport().disable_3d
@@ -272,7 +298,10 @@ func open_region() -> void:
 	get_viewport().disable_3d=true
 	cancel_targeting(false)
 	middle_panning=false
-	regional_map.show_region(str(sim.scenario.get("id","")),sim.time>0 and sim.result=="")
+	regional_map.show_region(str(sim.scenario.get("id","")),sim.time>0 and sim.result=="",campaign)
+	if campaign.active and not campaign.blocked:
+		var deployed:int=sim.living(0).filter(func(unit):return not unit.get("structure",false)).size()
+		regional_map.campaign_summary.text="%d secured · %d deployed · %d in reserve · %d supply" % [campaign.data.secured.size(),deployed,campaign.parked.size(),int(sim.credits)]
 
 func close_region() -> void:
 	if not region_open():return
@@ -283,8 +312,35 @@ func close_region() -> void:
 
 func select_region_battlefield(index:int) -> void:
 	if index<0 or index>=Sim.Scenarios.entries().size():return
+	if campaign.active and campaign.begun:
+		var outcome:String=sim.result if sim.result!="" else "WITHDRAWN"
+		var error:Error=campaign.record_outcome(sim,outcome,campaign_path)
+		if error!=OK:
+			campaign_message="Could not save campaign · "+error_string(error)
+			if region_open():regional_map.status.text=campaign_message
+			return
 	if region_open():get_viewport().disable_3d=region_had_3d_disabled
 	Sim.scenario_selection=index
+	get_tree().reload_current_scene()
+
+func finish_campaign() -> void:
+	if sim.result=="" or not campaign.begun or campaign.finished:return
+	var error:Error=campaign.record_outcome(sim,sim.result,campaign_path)
+	campaign_message=("Campaign saved · %d surviving sections" % campaign.data.roster.size()) if error==OK else "Campaign save failed · "+error_string(error)
+	if error!=OK:notify(campaign_message,Notice.ALERT)
+
+func campaign_status_error() -> String:
+	if not campaign.active:return ""
+	if campaign.blocked:return "Campaign save unavailable · reset it through Region → New campaign"
+	if campaign.last_error!=OK:return "Campaign progress not saved · "+error_string(campaign.last_error)
+	return ""
+
+func reset_campaign() -> void:
+	var error:Error=campaign.reset(campaign_path) if Campaign.enabled else OK
+	if error!=OK:
+		regional_map.status.text="Could not reset campaign · "+error_string(error)
+		return
+	if region_open():get_viewport().disable_3d=region_had_3d_disabled
 	get_tree().reload_current_scene()
 
 func prepare_menu() -> void:
@@ -318,6 +374,17 @@ func request_restart() -> void:
 	menu.show_restart(str(sim.scenario.name))
 
 func restart_now() -> void:
+	finish_campaign()
+	if sim.result!="" and campaign.begun and campaign.last_error!=OK:
+		var save_error:Error=campaign.record_outcome(sim,sim.result,campaign_path)
+		if save_error!=OK:
+			notify("Could not save the outcome · "+error_string(save_error))
+			return
+	if sim.result=="DEFEAT" and campaign.active and not campaign.data.get("retry",{}).is_empty():
+		var error:Error=campaign.retry(campaign_path)
+		if error!=OK:
+			notify("Could not load deployment checkpoint · "+error_string(error))
+			return
 	get_tree().reload_current_scene()
 
 func change_setting(key:String,value:Variant) -> void:
@@ -452,6 +519,7 @@ func clamp_focus() -> void:
 
 func update_camera() -> void:
 	clamp_focus()
+	camera_focus.y=sim.terrain.height_at(Vector2(camera_focus.x,camera_focus.z))
 	camera.size=camera_size
 	camera.position=camera_focus+Vector3(26,64,46)
 	camera.look_at(camera_focus,Vector3.UP)
@@ -461,12 +529,16 @@ func update_camera() -> void:
 func camera_shake() -> Vector3:
 	return effects.camera_shake(camera_focus,camera_size,camera.basis)*float(settings.values.camera_shake)
 
-func screen_pos(p: Vector2, height: float = 0) -> Vector2:
-	return camera.unproject_position(Vector3(p.x,height,p.y))
+func screen_pos(p: Vector2, height: float = 0, absolute:bool=false) -> Vector2:
+	return camera.unproject_position(Vector3(p.x,height+(0.0 if absolute else sim.terrain.height_at(p)),p.y))
 
 func world_pos(p: Vector2) -> Vector2:
 	var origin:=camera.project_ray_origin(p)
 	var direction:=camera.project_ray_normal(p)
+	if sim.terrain.has_elevation():
+		var hit:Vector3=sim.terrain.ground_intersection(origin,direction)
+		if is_finite(hit.x):return Vector2(hit.x,hit.z)
+		return Vector2(-1,-1)
 	var ground=Plane(Vector3.UP,0).intersects_ray(origin,direction)
 	if ground==null:
 		# At the widest zoom the orthographic ray for the bottom screen strip
@@ -482,7 +554,7 @@ func show_wreck(node:Node3D,u:Dictionary)->void:
 		_wreck_material=StandardMaterial3D.new()
 		_wreck_material.albedo_color=Color(0.07,0.065,0.06)
 		_wreck_material.roughness=1.0
-	node.position=Vector3(u.pos.x,0.0,u.pos.y)
+	node.position=Vector3(u.pos.x,sim.terrain.height_at(u.pos),u.pos.y)
 	var model:Node3D=node.get_meta("model")
 	model.rotation.y=atan2(-u.facing.x,-u.facing.y)
 	model.rotation.z=0.06
@@ -492,7 +564,7 @@ func show_wreck(node:Node3D,u:Dictionary)->void:
 
 func altitude(u: Dictionary) -> float:
 	# Strike drones carry a live altitude while they dive.
-	return float(u.get("altitude",sim.definitions[u.kind].altitude))
+	return sim.unit_altitude(u)
 
 func is_structure(u: Dictionary) -> bool:
 	return bool(u.get("structure",false)) or bool(sim.definitions.get(u.get("kind",""),{}).get("structure",false))
@@ -529,7 +601,7 @@ void fragment() { vec4 f = texture(fog_map, UV); ALBEDO=vec3(0.055,0.058,0.052);
 	var plane:=MeshInstance3D.new()
 	var mesh:=PlaneMesh.new()
 	mesh.size=sim.terrain.world_size
-	plane.mesh=mesh
+	plane.mesh=art.heightfield_mesh(sim.terrain) if sim.terrain.has_elevation() else mesh
 	plane.position=Vector3(sim.terrain.world_size.x/2,0.055,sim.terrain.world_size.y/2)
 	plane.material_override=material
 	plane.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -569,6 +641,12 @@ func refresh_fog_pixels() -> bool:
 
 func _physics_process(dt: float) -> void:
 	if benchmark or (not paused and not show_help and not menu_open()):
+		if Campaign.enabled and not benchmark and campaign.active and not campaign.begun and not campaign.blocked:
+			var error:Error=campaign.begin(sim,campaign_path)
+			if error!=OK:
+				campaign_message="Campaign save failed · "+error_string(error)
+				notify(campaign_message,Notice.ALERT)
+		campaign.tick(sim,dt)
 		var start:=Time.get_ticks_usec()
 		# Pre-tick poses for render interpolation, refreshed in place each tick.
 		for unit in sim.units:
@@ -584,6 +662,7 @@ func _physics_process(dt: float) -> void:
 			members.resize(unit.members.size())
 			for i in members.size():members[i]=unit.members[i].pos
 		sim.tick(dt)
+		finish_campaign()
 		if not pending_actions.is_empty():run_pending()
 		if benchmark and benchmark_ready and Time.get_ticks_msec()-bench_started>2000:
 			sim_costs.append((Time.get_ticks_usec()-start)/1000.0)
@@ -641,7 +720,7 @@ func _process(dt: float) -> void:
 				if not sim.alive(unit) or not unit.visible: continue
 				var old: Vector2=unit_last_positions.get(unit.id,unit.pos)
 				if old.distance_to(unit.pos)>0.12 and unit.kind in ["tank","aa","boat"]:
-					effects.dust(Vector3(unit.pos.x,0.15,unit.pos.y),unit.facing,unit.kind=="boat")
+					effects.dust(Vector3(unit.pos.x,sim.terrain.height_at(unit.pos)+0.15,unit.pos.y),unit.facing,unit.kind=="boat")
 				unit_last_positions[unit.id]=unit.pos
 				if unit.hp<unit.max_hp*0.4 and unit.kind in ["tank","aa","helo","boat"]:
 					effects.damage_smoke(Vector3(unit.pos.x,altitude(unit)+1,unit.pos.y),unit.hp/unit.max_hp)
@@ -717,7 +796,7 @@ func sync_units(dt: float) -> void:
 			if not node.has_meta("wreck_shown"):show_wreck(node,u)
 			# A light wreck shoved aside by a tank slides to its new spot.
 			elif node.position.x!=u.pos.x or node.position.z!=u.pos.y:
-				node.position=Vector3(u.pos.x,0.0,u.pos.y)
+				node.position=Vector3(u.pos.x,sim.terrain.height_at(u.pos),u.pos.y)
 				node.get_meta("model").rotation.y=atan2(-u.facing.x,-u.facing.y)
 			continue
 		# A lost boat that was on screen slips under over SINK_SECONDS of sim time, then hides.
@@ -746,13 +825,15 @@ func sync_units(dt: float) -> void:
 			for i in u.members.size():
 				display_members[i]=(history.members[i] as Vector2).lerp(u.members[i].pos,fraction)
 		if garrisoned(u):display_pos=display_anchor(u)
-		Motion.set_position(node,Vector3(display_pos.x,altitude(u),display_pos.y))
+		var display_height:float=altitude(u)
+		if sim.definitions[u.kind].domain=="land":display_height+=sim.terrain.height_at(display_pos)-sim.terrain.height_at(u.pos)
+		Motion.set_position(node,Vector3(display_pos.x,display_height,display_pos.y))
 		model.set_meta("display_pos",display_pos)
 		if distant_shadows and not u.members.is_empty():
 			for i in u.members.size():
 				if u.members[i].hp<=0:continue
 				var p:Vector2=display_members[i] if i<display_members.size() else u.members[i].pos
-				contact_shadows.multimesh.set_instance_transform(contact_shadow_count,Transform3D(Basis.IDENTITY,Vector3(p.x+0.16,0.045,p.y+0.10)))
+				contact_shadows.multimesh.set_instance_transform(contact_shadow_count,Transform3D(Basis.IDENTITY,Vector3(p.x+0.16,sim.terrain.height_at(p)+0.045,p.y+0.10)))
 				contact_shadow_count+=1
 		var heading:=atan2(-u.facing.x,-u.facing.y)
 		if u.get("structure",false) and not sim.field_ops.is_empty():
@@ -765,7 +846,7 @@ func sync_units(dt: float) -> void:
 		else:Motion.set_rotation_axis(model,1,lerp_angle(model.rotation.y,heading,minf(1,dt*10)))
 		var selection_node:Node3D=node.get_meta("selection")
 		selection_node.visible=selected.has(u.id)
-		Motion.set_position_axis(selection_node,1,0.13-altitude(u))
+		Motion.set_position_axis(selection_node,1,0.13+sim.terrain.height_at(display_pos)-display_height)
 		# A garrisoned section's ring encircles its building.
 		var ring_scale:=1.0
 		if garrisoned(u):
@@ -845,7 +926,7 @@ func consume_events() -> void:
 		elif event.type=="destroyed" and event.visible:
 			var kind:String=event.get("kind","")
 			var height:=maxf(0.7,float(sim.definitions[kind].altitude)) if sim.definitions.has(kind) else 0.7
-			effects.destroyed(kind,Vector3(event.pos.x,height,event.pos.y),sim.terrain.is_water(event.pos))
+			effects.destroyed(kind,Vector3(event.pos.x,height+sim.terrain.height_at(event.pos),event.pos.y),sim.terrain.is_water(event.pos))
 	sim.events.clear()
 
 # A re-crewed or captured vehicle is a new unit: wherever its old hull or the
@@ -902,13 +983,13 @@ func display_anchor(u:Dictionary)->Vector2:
 
 # Label height: above the roof for a garrisoned section.
 func label_height(u:Dictionary)->float:
-	if garrisoned(u):return float(sim.Garrison.index(sim).buildings[u.garrison].height)+1.0
+	if garrisoned(u):return sim.terrain.height_at(display_anchor(u))+float(sim.Garrison.index(sim).buildings[u.garrison].height)+1.0
 	return altitude(u)+2.4
 
 # Screen points that select a unit: its anchor and every living soldier, so a
 # click on any visible soldier picks the section even when it is spread out.
 func click_points(u:Dictionary) -> Array:
-	var points:Array=[screen_pos(display_anchor(u),altitude(u)+0.8)]
+	var points:Array=[screen_pos(display_anchor(u),altitude(u)+0.8,true)]
 	for member in u.members:
 		if member.hp>0:points.append(screen_pos(member.pos,0.8))
 	return points
@@ -1007,7 +1088,7 @@ func give_order(p: Vector2, attack: bool, queued: bool) -> void:
 				if sim.alive(ordered) and not ordered.orders.is_empty():
 					destination=ordered.orders[-1].pos
 					break
-		marker.position=Vector3(destination.x,0.1,destination.y)
+		marker.position=Vector3(destination.x,sim.terrain.height_at(destination)+0.1,destination.y)
 		marker_time=1.0
 		var status:=lead+("Nearest accessible position" if sim.order_adjusted else ("Queued" if queued else "Order confirmed"))
 		# A large group's last targets resolve over the next ticks: the real count follows.
@@ -1188,8 +1269,7 @@ func ui_action(action: String, p: Vector2) -> void:
 						regional_map.select_battlefield(field_id)
 						regional_map.request_battlefield()
 						return
-				Sim.scenario_selection=next_index
-				get_tree().reload_current_scene()
+				select_region_battlefield(next_index)
 			elif action.begins_with("build:") and not sim.field_ops.is_empty():
 				var kind:=action.trim_prefix("build:")
 				set_targeting("")
@@ -1430,7 +1510,7 @@ func _input(event: InputEvent) -> void:
 				for u in sim.living(0):
 					# Box selection gathers sections; click a field structure to inspect it.
 					if not sim.field_ops.is_empty() and is_structure(u):continue
-					if rectangle.has_point(screen_pos(display_anchor(u),altitude(u))) and not selected.has(u.id):
+					if rectangle.has_point(screen_pos(display_anchor(u),altitude(u),true)) and not selected.has(u.id):
 						selected.append(u.id)
 	if event is InputEventKey and event.pressed and not event.echo:
 		if sim.result!="":

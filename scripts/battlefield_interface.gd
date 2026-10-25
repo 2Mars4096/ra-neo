@@ -187,6 +187,8 @@ func mission_lines(sim)->Array[String]:
 		if not sim.FieldOps.enemy_logistics_alive(sim):second="Enemy logistics neutralised · already deployed forces remain."
 	elif not sim.FieldOps.reserve_records(sim).is_empty():
 		second="Enemy reserve deployed · secure and hold every sector." if sim.counterattack_sent else "Taking a sector brings enemy reserves. Prepare support."
+	var operation_status:String=sim.FieldOps.OperationRules.status(sim)
+	if operation_status!="":second=operation_status
 	return [first,second]
 
 func draw_mission(hud)->void:
@@ -197,6 +199,8 @@ func draw_mission(hud)->void:
 	var lines:=mission_lines(sim)
 	hud.text_at(hud.fit_text(lines[0],r.size.x-20,13),r.position+Vector2(10,19),13,hud.TEAL,true)
 	hud.text_at(hud.fit_text(lines[1],r.size.x-20,11),r.position+Vector2(10,37),11,hud.MUTED)
+	var brief:String=sim.FieldOps.OperationRules.brief(sim.scenario)
+	if brief!="" and r.has_point(hud.pointer()):hud.sidebar_hint(brief,r.end.y+8)
 	if not last_alert.is_empty() and sim.time-float(last_alert.time)<25.0:
 		hud.button("alert:focus","LOCATE  "+hud.fit_text(last_alert.text,r.size.x-94,11),Rect2(r.position+Vector2(0,52),Vector2(r.size.x,25)))
 

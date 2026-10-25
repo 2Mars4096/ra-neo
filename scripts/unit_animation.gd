@@ -112,7 +112,7 @@ static func pose(model:Node3D,u:Dictionary,sim,dt:float) -> void:
 			var down:bool=wound=="SEVERE" or wound=="KIA"
 			# Garrisoned soldiers are inside the building: hidden, marked by the HUD.
 			# The fallen stay on the ground (SEVERE wounded and KIA bodies).
-			part.visible=(member.hp>0 or down) and u.get("garrison",-1)<0 and not member.get("indoors",false)
+			part.visible=(member.hp>0 or down) and u.get("garrison",-1)<0 and not member.get("indoors",false) and not member.get("campaign_absent",false)
 			if part.has_meta("corpse")!=(wound=="KIA") and part.visible:mark_corpse(part,wound=="KIA")
 			if not part.visible:continue
 			var member_moving:bool=member.travel>0.001
@@ -120,6 +120,7 @@ static func pose(model:Node3D,u:Dictionary,sim,dt:float) -> void:
 			var local:Vector3=inverse_heading*Vector3(member_pos.x-center.x,0,member_pos.y-center.y)
 			# Soldiers inside a dug trench stand in it: drop the figure below ground level.
 			local.y=-0.55 if member.get("in_trench",false) else 0.0
+			if sim.terrain.has_elevation():local.y+=sim.terrain.height_at(member_pos)-sim.terrain.height_at(center)
 			set_position(part,local)
 			set_rotation_axis(part,1,lerp_angle(part.rotation.y,atan2(-member.facing.x,-member.facing.y)-model.rotation.y,minf(1,dt*9)))
 			var member_recoil:=maxf(0,1-(sim.time-member.last_shot)/0.24)

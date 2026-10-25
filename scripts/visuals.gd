@@ -530,22 +530,31 @@ func make_footpaths(parent:Node3D,terrain:BattleTerrain,config:Dictionary)->void
 func make_harbor_world(parent:Node3D,terrain,config:Dictionary)->void:
 	make_harbor_surfaces(parent,terrain,config)
 	var architecture:Array=config.get("architecture",[])
-	make_harbor_building_chunks(parent,terrain.blocks,architecture)
+	make_harbor_building_chunks(parent,terrain.blocks,architecture,terrain)
 	# Keep roads/junctions, but suppress legacy index-paired parcel borders for
 	# the new layout: its collision rectangles are not independent parcels.
 	var legacy_detail:Array=[] if architecture.any(func(spec):return spec.has("collision")) else architecture
 	preload("res://scripts/environment_detail.gd").build(self,parent,terrain,legacy_detail)
+	if terrain.has_elevation() and parent.has_node("HarborGroundDetail"):
+		drape_ground_detail(parent.get_node("HarborGroundDetail"),terrain)
 	for route in config.get("footpaths",[]):
 		var path:=Node3D.new();path.name="HarborFootpath";parent.add_child(path)
 		make_footpaths(path,terrain,{"footpaths":[route]})
+		if terrain.has_elevation():drape_ground_detail(path,terrain)
 		bake_model(path)
 	var compiled=terrain.get("map_props")
+	if terrain.has_elevation() and compiled is Array:
+		compiled=compiled.duplicate(true)
+		for prop in compiled:
+			var point=prop.get("pos",prop.get("position",[0,0]))
+			var pos:Vector2=point if point is Vector2 else Vector2(float(point[0]),float(point[1]))
+			prop["elevation"]=float(prop.get("elevation",0.0))+terrain.height_at(pos)
 	preload("res://scripts/harbor_props.gd").build(self,parent,{"map_props":compiled} if compiled is Array else config)
 	make_harbor_trees(parent,terrain.trees,terrain)
 
 # Buildings are authored once, then flattened into spatial/material batches.
 # Bounds on each mesh come from its vertices, preserving tile frustum culling.
-func make_harbor_building_chunks(parent:Node3D,blocks:Array,architecture:Array)->Node3D:
+func make_harbor_building_chunks(parent:Node3D,blocks:Array,architecture:Array,terrain:BattleTerrain=null)->Node3D:
 	var group:=Node3D.new();group.name="HarborBuildings";parent.add_child(group)
 	var tiles:Dictionary={};var placements:Array=[]
 	var staging:=Node3D.new()
@@ -561,6 +570,7 @@ func make_harbor_building_chunks(parent:Node3D,blocks:Array,architecture:Array)-
 		else:continue
 		var building:Node3D=make_authored_building(staging,bounds,i,spec)
 		var center:Vector2=bounds.get_center()
+		if terrain!=null:building.position.y=terrain.height_at(center)
 		var tile:=Vector2i(floori(center.x/96.0),floori(center.y/96.0))
 		if not tiles.has(tile):tiles[tile]={"surfaces":{},"materials":{}}
 		_harbor_collect_meshes(building,Transform3D.IDENTITY,tiles[tile])
@@ -646,6 +656,120 @@ func harbor_water_image(terrain,config:Dictionary)->Image:
 			mask.set_pixel(x,y,Color.WHITE if terrain.is_water(p) else Color.BLACK)
 	return mask
 
+# A shared triangulated heightfield, centred exactly like PlaneMesh. Fog and
+# other ground overlays can reuse it; simulation and vertices read one model.
+func heightfield_mesh(terrain:BattleTerrain) -> ArrayMesh:
+	var step:=clampf(float(terrain.config.get("elevation_mesh_step",2.0)),1.0,4.0)
+	var cells:=Vector2i((terrain.world_size/step).ceil())
+	var size:Vector2=terrain.world_size/Vector2(cells)
+	var half:Vector2=terrain.world_size*0.5
+	var surface:=SurfaceTool.new();surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for y in cells.y:
+		for x in cells.x:
+			var p:=Vector2(x,y)*size
+			for offset in [Vector2.ZERO,size,Vector2(0,size.y),Vector2.ZERO,Vector2(size.x,0),size]:
+				var point:Vector2=p+offset
+				surface.set_normal(terrain.elevation.normal_at(point))
+				surface.set_uv(point/terrain.world_size)
+				surface.add_vertex(Vector3(point.x-half.x,terrain.height_at(point),point.y-half.y))
+	surface.index()
+	return surface.commit()
+
+# Roads, kerbs and paint follow the same relief instead of being hidden under
+# it. Only ground-detail groups use this deformation; rigid structures do not.
+func drape_ground_detail(node:Node3D,terrain:BattleTerrain,ancestor:Transform3D=Transform3D.IDENTITY) -> void:
+	var transform:Transform3D=ancestor*node.transform
+	if node is MeshInstance3D and node.mesh!=null:
+		var result:=ArrayMesh.new()
+		for index in node.mesh.get_surface_count():
+			_drape_surface(node.mesh.surface_get_arrays(index),terrain,transform).commit(result)
+			result.surface_set_material(index,node.get_active_material(index))
+		node.mesh=result
+	for child in node.get_children():
+		if child is Node3D:drape_ground_detail(child,terrain,transform)
+
+# Split overlay triangles at the land grid and its diagonal before deforming.
+# Sampling only the corners of a road cap makes long chords through a curved
+# slope, producing exposed land wedges and floating shoulders at junctions.
+# Barycentric vertices retain the original UVs, colors and hard-edge normals.
+func _drape_surface(arrays:Array,terrain:BattleTerrain,transform:Transform3D) -> SurfaceTool:
+	var surface:=SurfaceTool.new();surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var vertices:PackedVector3Array=arrays[Mesh.ARRAY_VERTEX]
+	var indices:PackedInt32Array=arrays[Mesh.ARRAY_INDEX]
+	if indices.is_empty():
+		indices.resize(vertices.size())
+		for i in indices.size():indices[i]=i
+	var step:=clampf(float(terrain.config.get("elevation_mesh_step",2.0)),1.0,4.0)
+	var cell:Vector2=terrain.world_size/Vector2(Vector2i((terrain.world_size/step).ceil()))
+	var inverse:=transform.affine_inverse()
+	for i in range(0,indices.size(),3):
+		var ids:=Vector3i(indices[i],indices[i+1],indices[i+2])
+		var triangle:Array[Vector3]=[transform*vertices[ids.x],transform*vertices[ids.y],transform*vertices[ids.z]]
+		var bounds:=Rect2(Vector2(triangle[0].x,triangle[0].z),Vector2.ZERO)
+		for v in triangle:bounds=bounds.expand(Vector2(v.x,v.z))
+		var polygon:Array[Vector3]=[Vector3.RIGHT,Vector3.UP,Vector3.BACK]
+		var relief:=false
+		for patch in terrain.elevation.patches:
+			if patch.bounds.intersects(bounds,true):relief=true;break
+		if not relief:
+			_drape_polygon(surface,polygon,triangle,ids,arrays,terrain,cell,transform,inverse)
+			continue
+		var low:=Vector2i((bounds.position/cell).floor())
+		var high:=Vector2i((bounds.end/cell).ceil()-Vector2.ONE).max(low)
+		for y in range(low.y,high.y+1):
+			for x in range(low.x,high.x+1):
+				var origin:=Vector2(x,y)*cell
+				var clipped:=_clip_relief_polygon(polygon,triangle,Vector2.LEFT,-origin.x)
+				clipped=_clip_relief_polygon(clipped,triangle,Vector2.RIGHT,origin.x+cell.x)
+				clipped=_clip_relief_polygon(clipped,triangle,Vector2.UP,-origin.y)
+				clipped=_clip_relief_polygon(clipped,triangle,Vector2.DOWN,origin.y+cell.y)
+				if clipped.size()<3:continue
+				var diagonal:=Vector2(1.0/cell.x,-1.0/cell.y)
+				var limit:=diagonal.dot(origin)
+				_drape_polygon(surface,_clip_relief_polygon(clipped,triangle,diagonal,limit),triangle,ids,arrays,terrain,cell,transform,inverse)
+				_drape_polygon(surface,_clip_relief_polygon(clipped,triangle,-diagonal,-limit),triangle,ids,arrays,terrain,cell,transform,inverse)
+	surface.index()
+	return surface
+
+func _clip_relief_polygon(polygon:Array[Vector3],triangle:Array[Vector3],normal:Vector2,limit:float) -> Array[Vector3]:
+	var result:Array[Vector3]=[]
+	if polygon.is_empty():return result
+	var previous:Vector3=polygon[-1]
+	var p:Vector3=triangle[0]*previous.x+triangle[1]*previous.y+triangle[2]*previous.z
+	var before:=normal.dot(Vector2(p.x,p.z))-limit
+	for vertex in polygon:
+		p=triangle[0]*vertex.x+triangle[1]*vertex.y+triangle[2]*vertex.z
+		var after:=normal.dot(Vector2(p.x,p.z))-limit
+		if (before<=0.0)!=(after<=0.0):result.append(previous.lerp(vertex,before/(before-after)))
+		if after<=0.0:result.append(vertex)
+		previous=vertex;before=after
+	return result
+
+func _drape_polygon(surface:SurfaceTool,polygon:Array[Vector3],triangle:Array[Vector3],ids:Vector3i,arrays:Array,terrain:BattleTerrain,cell:Vector2,transform:Transform3D,inverse:Transform3D) -> void:
+	var normals:PackedVector3Array=arrays[Mesh.ARRAY_NORMAL]
+	var uv:PackedVector2Array=arrays[Mesh.ARRAY_TEX_UV] if arrays[Mesh.ARRAY_TEX_UV]!=null else PackedVector2Array()
+	var uv2:PackedVector2Array=arrays[Mesh.ARRAY_TEX_UV2] if arrays[Mesh.ARRAY_TEX_UV2]!=null else PackedVector2Array()
+	var colors:PackedColorArray=arrays[Mesh.ARRAY_COLOR] if arrays[Mesh.ARRAY_COLOR]!=null else PackedColorArray()
+	for i in range(1,polygon.size()-1):
+		var a:Vector3=polygon[i]-polygon[0];var b:Vector3=polygon[i+1]-polygon[0]
+		var edge_a:Vector3=triangle[0]*a.x+triangle[1]*a.y+triangle[2]*a.z
+		var edge_b:Vector3=triangle[0]*b.x+triangle[1]*b.y+triangle[2]*b.z
+		if edge_a.cross(edge_b).length_squared()<0.0000000001:continue
+		for weight in [polygon[0],polygon[i],polygon[i+1]]:
+			var world:Vector3=triangle[0]*weight.x+triangle[1]*weight.y+triangle[2]*weight.z
+			var point:=Vector2(world.x,world.z)
+			world.y+=terrain.elevation.mesh_height_at(point,cell)
+			# Preserve flat tops and hard box edges; smoothed recalculation blends
+			# thin side faces into the road and makes subdivisions look like stairs.
+			var normal:Vector3=inverse.basis.transposed()*(normals[ids.x]*weight.x+normals[ids.y]*weight.y+normals[ids.z]*weight.z)
+			var grade:Vector2=terrain.elevation.gradient_at(point)
+			normal=Vector3(normal.x-grade.x*normal.y,normal.y,normal.z-grade.y*normal.y).normalized()
+			surface.set_normal((transform.basis.transposed()*normal).normalized())
+			if not uv.is_empty():surface.set_uv(uv[ids.x]*weight.x+uv[ids.y]*weight.y+uv[ids.z]*weight.z)
+			if not uv2.is_empty():surface.set_uv2(uv2[ids.x]*weight.x+uv2[ids.y]*weight.y+uv2[ids.z]*weight.z)
+			if not colors.is_empty():surface.set_color(colors[ids.x]*weight.x+colors[ids.y]*weight.y+colors[ids.z]*weight.z)
+			surface.add_vertex(inverse*world)
+
 func make_harbor_surfaces(parent:Node3D,terrain,config:Dictionary)->void:
 	var mask:=ImageTexture.create_from_image(harbor_water_image(terrain,config))
 	# The legacy semantic painter also pairs blocks by index. District and road
@@ -659,7 +783,8 @@ uniform sampler2D water_mask : filter_nearest, repeat_disable;
 uniform vec2 world_size=vec2(1024.0,768.0);
 uniform float wetness=0.0;
 varying vec3 world;
-void vertex(){world=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;}
+varying float ground_slope;
+void vertex(){world=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;ground_slope=1.0-clamp(NORMAL.y,0.0,1.0);}
 float wet(vec2 p){return step(0.5,texture(water_mask,clamp(p/world_size,vec2(0.0),vec2(1.0))).r);}
 float coast(vec2 p){
  float total=0.0;
@@ -690,6 +815,9 @@ void fragment(){
  vec2 tile=1.0-abs(mod(p*0.16,2.0)-1.0);
  vec3 soil=texture(material_atlas,vec2(0.501)+tile*0.498).rgb;
  color*=mix(vec3(1.0),clamp(soil/vec3(0.437,0.379,0.308),vec3(0.7),vec3(1.3)),0.35);
+ // Thin grass exposes pale soil on steep ground, making the usable incline
+ // legible at tactical zoom while level fields retain their original palette.
+ color=mix(color,vec3(0.42,0.405,0.35)*(0.91+n*0.16),smoothstep(0.025,0.17,ground_slope)*0.42);
  ALBEDO=color*(1.0-wetness*0.16);ROUGHNESS=mix(0.95,0.48,wetness);
 }
 """
@@ -707,7 +835,9 @@ void fragment(){
 """
 	for water in [false,true]:
 		var surface:=MeshInstance3D.new();surface.name="HarborWater" if water else "HarborLand"
-		var plane:=PlaneMesh.new();plane.size=terrain.world_size;surface.mesh=plane
+		if not water and terrain.has_elevation():surface.mesh=heightfield_mesh(terrain)
+		else:
+			var plane:=PlaneMesh.new();plane.size=terrain.world_size;surface.mesh=plane
 		surface.position=Vector3(terrain.world_size.x/2,0.025 if water else 0.0,terrain.world_size.y/2)
 		var shader:=Shader.new();shader.code=common+(water_code if water else land_code)
 		var paint:=ShaderMaterial.new();paint.shader=shader
@@ -744,11 +874,12 @@ func make_harbor_trees(parent:Node3D,points:Array,terrain:BattleTerrain=null)->v
 			for i in chunks[key].size():
 				var point:Vector2=chunks[key][i]
 				var offset:=Vector3(0,1.15,0) if layer==0 else Vector3(sin(i*2.1+layer*2.4)*0.42,2.0+(layer%4)*0.35,cos(i*1.9+layer*2.4)*0.42)
-				var placed:=Transform3D(Basis.from_scale(Vector3.ONE*(0.9+float(i%4)*0.04)),Vector3(point.x,0,point.y)+offset-origin)
+				var base_y:float=terrain.height_at(point) if terrain!=null else 0.0
+				var placed:=Transform3D(Basis.from_scale(Vector3.ONE*(0.9+float(i%4)*0.04)),Vector3(point.x,base_y,point.y)+offset-origin)
 				multi.set_instance_transform(i,placed)
 				var t:int=owners[key][i]
 				if fell_lookup[t]==null:fell_lookup[t]=[]
-				fell_lookup[t].append([multi,i,Vector3(point.x,0,point.y)-origin,placed])
+				fell_lookup[t].append([multi,i,Vector3(point.x,base_y,point.y)-origin,placed])
 			var instance:=MultiMeshInstance3D.new();instance.name="HarborTrees";instance.position=origin
 			instance.multimesh=multi;instance.material_override=paint;parent.add_child(instance)
 	if terrain!=null and not points.is_empty():terrain.tree_felled.connect(Callable(get_script(),"topple_tree").bind(fell_lookup))

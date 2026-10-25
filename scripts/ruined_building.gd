@@ -280,7 +280,7 @@ static func show_damage(art,root:Node3D,sim,event:Dictionary)->void:
 		"building_collapse":_collapse(art,root,sim,event)
 		"world_blast":
 			var effects=root.get("effects")
-			var pos:=Vector3(event.pos.x,0.6,event.pos.y)
+			var pos:=Vector3(event.pos.x,sim.terrain.height_at(event.pos)+0.6,event.pos.y)
 			if effects!=null:
 				match str(event.kind):
 					"collapse":effects.structure_collapse(pos)
@@ -340,7 +340,7 @@ static func _mark(root:Node3D,sim,event:Dictionary)->void:
 	var normal:Vector3=normals[face]
 	var basis:=Basis.looking_at(-normal,Vector3.UP)
 	var height:float=rng.randf_range(0.9,clampf(float(building.height)-1.2,1.0,8.0))
-	var spot:=Vector3(impact.x,height,impact.y)+normal*0.06+basis.x*rng.randf_range(-0.6,0.6)
+	var spot:=Vector3(impact.x,sim.terrain.height_at(bounds.get_center())+height,impact.y)+normal*0.06+basis.x*rng.randf_range(-0.6,0.6)
 	var state:int=int(event.state)
 	var node:=_marks(root)
 	if state<=0:
@@ -349,7 +349,7 @@ static func _mark(root:Node3D,sim,event:Dictionary)->void:
 	_add_mark(node,event.building,Transform3D(basis*Basis.from_scale(Vector3(rng.randf_range(1.0,1.6),rng.randf_range(0.8,1.3),0.05)),spot),SCORCH)
 	if state>=2:
 		_add_mark(node,event.building,Transform3D(basis*Basis.from_scale(Vector3(rng.randf_range(0.7,1.1),rng.randf_range(0.6,0.9),0.1)),spot+normal*0.02),HOLE)
-		var foot:=Vector3(impact.x,0.15,impact.y)+normal*rng.randf_range(0.5,1.3)+basis.x*rng.randf_range(-1.0,1.0)
+		var foot:=Vector3(impact.x,sim.terrain.height_at(impact)+0.15,impact.y)+normal*rng.randf_range(0.5,1.3)+basis.x*rng.randf_range(-1.0,1.0)
 		_add_mark(node,event.building,Transform3D(Basis(Vector3.UP,rng.randf()*TAU)*Basis.from_scale(Vector3(rng.randf_range(0.5,1.0),0.3,rng.randf_range(0.4,0.8))),foot),MOUND[rng.randi()%MOUND.size()])
 
 static func _collapse(art,root:Node3D,sim,event:Dictionary)->void:
@@ -361,6 +361,7 @@ static func _collapse(art,root:Node3D,sim,event:Dictionary)->void:
 		node.multimesh.set_instance_transform(slot,Transform3D(Basis.from_scale(Vector3.ONE*0.0001),Vector3(0,-20,0)))
 	var mound:=Node3D.new()
 	mound.name="Rubble_%d"%id
+	mound.position.y=sim.terrain.height_at(building.bounds.get_center())
 	root.add_child(mound)
 	rubble_mound(art,mound,building.bounds,id,int(building.floors))
 	art.bake_model(mound)

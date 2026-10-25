@@ -30,6 +30,8 @@
 
 ## Active reviewed plan
 
+- [x] [17: Distinct battles and persistent regional operations](plans/17-regional-operations.md) — rail/road/coastal logistics, checkpointed expedition and regional ownership, shared elevation proved on Limestone Pass, and Windbreak Fields; functional and native visual checks complete, human balance/performance acceptance remains open (2026-10-25).
+
 - [x] [16: Regional map and shared battlefield authoring](plans/16-regional-map.md) — four-operation atlas, three new physically validated battlefields and visual blueprint editor on `codex/regional-map`; functional and native visual review complete, human balance/performance acceptance remains open (2026-10-23).
 
 - [ ] [14: Harbor city realism](plans/14-harbor-city-realism.md) — district layout, 27 building families, city decor, tier-1 engineers done; old-town continuity, microdistrict density, native review and performance open.
@@ -93,7 +95,7 @@
 - [ ] Production art/animation/audio pipeline, more varied terrain, and more representative battlefields.
 - [ ] Larger-force navigation and performance testing; additional hardware/platforms and standalone exports.
 - [ ] Extend classic skirmish with air/naval production, defenses, research and economic balance.
-- [ ] Decide multiplayer/campaign scope before architecture commitments.
+- [ ] Decide multiplayer and any broader campaign scope beyond the implemented lightweight regional expedition.
 
 ## Showcase acceptance remaining
 - [ ] Player review: autonomy clarity, mission enjoyment, and refined art direction.

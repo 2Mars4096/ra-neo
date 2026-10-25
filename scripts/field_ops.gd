@@ -2,6 +2,7 @@ extends RefCounted
 
 const Garrison=preload("res://scripts/garrison.gd")
 const StructureDamage=preload("res://scripts/structure_damage.gd")
+const OperationRules=preload("res://scripts/operation_rules.gd")
 
 const KINDS=["tactical_cover","observation_post","repair_point","aid_post","concertina_wire","tank_obstacles","fighting_trench","vehicle_berm","camouflage_net","forward_supply_point","bunker","at_gun","command_post","ammo_depot"]
 # Linear works may be turned 90 degrees during placement.
@@ -622,6 +623,7 @@ static func swarm_rank(u:Dictionary,aim:Vector2)->float:
 # The enemy counterattack is staged from its command post or ammunition depot;
 # with both destroyed the reserve never forms. Maps without them keep the old rule.
 static func enemy_logistics_alive(sim)->bool:
+	if not OperationRules.enemy_routes_open(sim):return false
 	var authored:bool=sim.scenario.get("enemy_works",[]).any(func(w):return str(w.kind) in ["command_post","ammo_depot"])
 	if not authored:return true
 	return sim.units.any(func(u):return sim.alive(u) and u.team==1 and u.kind in ["command_post","ammo_depot"])
@@ -645,6 +647,8 @@ static func insertion_for(sim,kind:String,team:int=0)->Vector2:
 		return sim.field_ops.sea_insertion
 	if team==0 and sim.definitions[kind].domain=="land":
 		var forward:=forward_point(sim)
+		if forward.x>=0:return forward
+		forward=OperationRules.forward_point(sim)
 		if forward.x>=0:return forward
 	return sim.field_ops.insertion if team==0 else sim.field_ops.enemy_insertion
 
@@ -735,7 +739,10 @@ static func reserve_records(sim)->Array:
 	if sim.scenario.has("reserve_force"):return force_records(sim.scenario.reserve_force)
 	return ["tank","rifle","atgm"].map(func(kind):return {"kind":kind,"pos":sim.field_ops.enemy_insertion})
 
-static func reserve_target(sim)->Vector2:
+static func reserve_target(sim,domain:String="land")->Vector2:
+	if domain=="sea":
+		var zone:Dictionary=OperationRules.config(sim).get("naval_zone",{})
+		if not zone.is_empty():return point(zone.position)
 	for objective in sim.objectives:
 		if objective.owner==0:return objective.pos
 	return sim.objectives[0].pos if not sim.objectives.is_empty() else sim.field_ops.insertion
@@ -845,8 +852,15 @@ static func proposal(sim,kind:String,pos:Vector2,engineer_id:int,rotated:bool=fa
 # Works occupy their whole footprint: no buildings, water or other field works.
 static func site_ground_clear(sim,kind:String,pos:Vector2,rotated:bool)->bool:
 	var rect:=footprint(sim,kind,pos,rotated)
+	var low:=INF;var high:=-INF
 	for corner in [rect.position,Vector2(rect.end.x,rect.position.y),rect.end,Vector2(rect.position.x,rect.end.y),rect.get_center()]:
 		if not sim.terrain.inside(corner) or sim.terrain.is_water(corner) or sim.terrain.blocked(corner):return false
+		if sim.terrain.has_elevation():
+			var height:float=sim.terrain.height_at(corner)
+			low=minf(low,height);high=maxf(high,height)
+	# Rigid support works require a level footing, using the same tolerance as
+	# compiled buildings. This does not flatten or alter the underlying slope.
+	if sim.terrain.has_elevation() and high-low>0.5:return false
 	# Rectangle intersection catches thin walls wholly between corner samples.
 	for blocker in sim.terrain._static_candidates("solid",rect.get_center(),rect.size.length()*0.5):
 		if blocker.intersects(rect):return false
@@ -1137,7 +1151,7 @@ static func crush_wire(sim,wire:Dictionary)->void:
 
 static func tick(sim,dt:float)->void:
 	if sim.result!="":return
-	sim.credits+=dt*float(sim.field_ops.income_rate)
+	sim.credits+=dt*(float(sim.field_ops.income_rate)+OperationRules.income_bonus(sim))
 	process_queue(sim)
 	enemy_offensive(sim)
 	enemy_garrisons(sim)
@@ -1177,12 +1191,17 @@ static func tick(sim,dt:float)->void:
 				sim.VehicleDamage.field_repair(sim,ally,dt)
 	sync_obstacles(sim)
 	if sim.field_ops.started:
-		if sim.counterattack_at<0 and sim.objectives.any(func(objective):return objective.owner==0):sim.counterattack_at=sim.time+12
+		if sim.counterattack_at<0 and sim.objectives.any(func(objective):return objective.owner==0):sim.counterattack_at=sim.time+OperationRules.reserve_delay(sim)
 		if sim.counterattack_at>=0 and sim.time>=sim.counterattack_at and not sim.counterattack_sent and enemy_logistics_alive(sim):
 			sim.counterattack_sent=true
 			var force:Array=[]
+			var sea_force:Array=[]
 			for record in reserve_records(sim):
 				var enemy:Dictionary=sim.spawn(record.kind,1,record.pos)
-				if not enemy.is_empty():force.append(enemy.id);sim.counterattack_ids.append(enemy.id)
+				if not enemy.is_empty():
+					if sim.definitions[record.kind].domain=="sea":sea_force.append(enemy.id)
+					else:force.append(enemy.id)
+					sim.counterattack_ids.append(enemy.id)
 			sim.issue(force,reserve_target(sim),"attack_move")
+			if not sea_force.is_empty():sim.issue(sea_force,reserve_target(sim,"sea"),"attack_move")
 		if sim.living(0).filter(func(u):return not u.get("structure",false)).is_empty():sim.result="DEFEAT"

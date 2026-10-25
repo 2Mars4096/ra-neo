@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-25 — Distinct operations, persistent forces and walkable relief
+
+- Continue on `codex/regional-operations`. Keep battlefields separately loaded and independently authored; regional consequences do not require adjacent boundaries.
+- Give Rail Valley working supply facilities, a connected forward reinforcement entry and eastern-junction interdiction. Give Limestone Pass an infantry-accessible elevated lookout and a combined crossroads/hamlet dispatch gate. Require both shore control and a ship in South Inlet's marked sea lane for coastal supply and the final hold. Facility contest/loss removes benefits, while already dispatched enemies remain.
+- Add **Windbreak Fields**, a 576 × 384 agricultural operation with open maneuver lanes, interrupted windbreaks and farm compounds. The grain exchange enables forward resupply; the eastern checkpoint cuts dispatch. The atlas now has five operations, with six legacy fixtures retaining their indices.
+- Add local deployment-checkpoint and outcome saves: survivors replace the next authored starter army; soldier casualty slots/wounds, vehicle integrity/components, ammunition, remaining fire/flood hazards and unspent supply persist. Incompatible units wait in reserve. Pending purchases refund once. Victory grants unique regional supply/interdiction benefits; defeat can retry its deployment checkpoint, and campaign reset requires confirmation.
+- Add shared plateau/ramp height, profile-specific grades, route costs and live movement checks. Elevation affects actual sight, weapons and aircraft clearance, with ground, roads, scenery, units, fog, damage remains and input picking using compatible heights. Prove the system on Limestone Pass; preserve flat-map rules and palettes.
+- Extend the visual editor with elevation drawing/height/ramp controls, operation rules, protected mission references and level-foundation checks. Show full mission rules in the briefing and on mission hover; show campaign state in the atlas and actual save failures in context.
+- Validation: 14-suite regional gate and nine focused follow-up suites passed. Final focused checks: regional physics **2,301**, operation rules **50**, elevation **58**, campaign persistence **66**, campaign UI/startup **47**, atlas UI **89**, all zero failures. Python authoring/editor tests passed **17 + 9**; seven real-browser workflows passed. Both map compilers reproduce their outputs. Native GL Compatibility views were rendered and inspected; see [validation](validation.md), [plan 17](plans/17-regional-operations.md), and [regional guide](regional-map.md).
+- Remaining scope: tactical world save/load, physical inter-map travel, moving trains, bridges, amphibious unloading, human balance and sustained hardware performance. Current operational persistence and rendered review do not establish these features or acceptance gates.
+
 ## 2026-10-23 — Regional atlas, battlefields and visual authoring
 
 - Add the Black Sea Coast atlas, connecting the existing Harbor operation with Bayhead Rail Valley, Limestone Pass and South Inlet. The map provides geographic context, terrain briefings, zoom/pan, keyboard selection and safe return to the current battle; an active operation requires an explicit abandon choice before switching.

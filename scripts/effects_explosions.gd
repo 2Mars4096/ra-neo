@@ -124,8 +124,8 @@ static func heat(fx, g:Vector3, r:float, life:float) -> void:
 static func missile_burst(fx, pos:Vector3, direction:Vector3, scale:float, armor:bool) -> void:
 	var rng:RandomNumberGenerator=fx.rng
 	var r:=1.65*scale
-	var c:=pos if armor else Vector3(pos.x,maxf(pos.y,BattleEffects.FLOOR)+0.35*r,pos.z)
-	var g:=Vector3(pos.x,BattleEffects.FLOOR,pos.z)
+	var c:=pos if armor else Vector3(pos.x,maxf(pos.y,fx.ground_height(pos)+BattleEffects.FLOOR)+0.35*r,pos.z)
+	var g:=Vector3(pos.x,fx.ground_height(pos)+BattleEffects.FLOOR,pos.z)
 	fx.flash(c,3.0*r,0.035,HOT_WHITE)
 	fx.flash(c,2.2*r,0.07,HEAT_ORANGE,0.03,BattleEffects.NORMAL)
 	fx.bloom(g+Vector3(0,0.3,0),3.2*r,0.3,GROUND_GLOW)
@@ -160,11 +160,11 @@ static func masonry_hit(fx, pos:Vector3, direction:Vector3, scale:float) -> void
 		fx.debris(p,back*rng.randf_range(1.5,4.0)*scale+fx._jitter(2.0*scale,0.0)+Vector3(0,rng.randf_range(2.5,5.5)*sqrt(scale),0),rng.randf_range(0.1,0.22)*(0.6+scale*0.6),rng.randf_range(1.2,1.8),RUBBLE if n%2 else CONCRETE.darkened(0.2),true,n==0 and scale>=0.6,BattleEffects.NORMAL if n<2 else BattleEffects.OPTIONAL)
 	if scale>=0.6:
 		# Dust sliding down the face and spreading along the ground a moment later.
-		var g:=Vector3(pos.x,0.25,pos.z)
+		var g:=Vector3(pos.x,fx.ground_height(pos)+0.25,pos.z)
 		for n in 3:
 			var out:=back.rotated(Vector3.UP,rng.randf_range(-1.4,1.4))
 			fx.smoke(g+out*0.6,out*rng.randf_range(2.0,3.6)*scale,0.8*scale,rng.randf_range(2.8,3.6)*scale,rng.randf_range(2.2,3.0),Color(CONCRETE.darkened(0.08),0.6),2.0,0.05,0.12+n*0.04,BattleEffects.OPTIONAL)
-		fx.decal(Vector3(pos.x,BattleEffects.FLOOR,pos.z),BattleEffects.DUST_RING,0.8,5.0*scale,0.6,Color(CONCRETE,0.55),BattleEffects.OPTIONAL)
+		fx.decal(Vector3(pos.x,fx.ground_height(pos)+BattleEffects.FLOOR,pos.z),BattleEffects.DUST_RING,0.8,5.0*scale,0.6,Color(CONCRETE,0.55),BattleEffects.OPTIONAL)
 
 # HE shell into a wall: flash and fireball at the face, masonry burst, no soil fountain. R = 2.2 m at scale 1.
 static func shell_on_masonry(fx, pos:Vector3, direction:Vector3, scale:float) -> void:
@@ -173,7 +173,7 @@ static func shell_on_masonry(fx, pos:Vector3, direction:Vector3, scale:float) ->
 	var c:=pos-direction*0.3
 	fx.flash(c,3.0*r,0.035,Color(1.0,0.86,0.6))
 	fx.bloom(c,2.0*r,0.1,CORE,BattleEffects.ESSENTIAL)
-	fx.bloom(Vector3(pos.x,0.3,pos.z),3.2*r,0.3,GROUND_GLOW)
+	fx.bloom(Vector3(pos.x,fx.ground_height(pos)+0.3,pos.z),3.2*r,0.3,GROUND_GLOW)
 	fx.fireball(c,-direction*1.0*r+Vector3(0,0.6*r,0),0.8*r,2.4*r,0.45,0.0,BattleEffects.ESSENTIAL,1.8,0.8*r)
 	fx.sparks(c,int(6*scale),10.0,-direction*0.5+Vector3.UP*0.5,0.5,BattleEffects.OPTIONAL,1.6)
 	masonry_hit(fx,pos,direction,scale)
@@ -192,7 +192,7 @@ static func ap_strike(fx, pos:Vector3, direction:Vector3, scale:float) -> void:
 # AP round into soil: a low, fast skip spurt along the flight line instead of an HE crater.
 static func ap_ground(fx, pos:Vector3, direction:Vector3) -> void:
 	var rng:RandomNumberGenerator=fx.rng
-	var g:=Vector3(pos.x,BattleEffects.FLOOR+0.05,pos.z)
+	var g:=Vector3(pos.x,fx.ground_height(pos)+BattleEffects.FLOOR+0.05,pos.z)
 	var along:Vector3=fx._flat(direction)
 	for n in 2:
 		fx.smoke(g+along*n*0.6,along*rng.randf_range(2.5,4.2)+Vector3(0,rng.randf_range(1.2,2.0),0),0.3,rng.randf_range(1.3,1.8),rng.randf_range(0.9,1.3),Color(BattleEffects.DUST,0.65),2.6,0.0,n*0.03)
@@ -211,7 +211,7 @@ static func drone_strike(fx, pos:Vector3, water:bool, armor:bool) -> void:
 		return
 	var r:=1.3
 	var c:=Vector3(pos.x,maxf(pos.y,0.5),pos.z)
-	var g:=Vector3(pos.x,BattleEffects.FLOOR,pos.z)
+	var g:=Vector3(pos.x,fx.ground_height(pos)+BattleEffects.FLOOR,pos.z)
 	fx.flash(c,3.0*r,0.035,HOT_WHITE)
 	fx.bloom(c,2.0*r,0.08,CORE,BattleEffects.ESSENTIAL)
 	fx.bloom(g+Vector3(0,0.3,0),3.2*r,0.3,GROUND_GLOW)
@@ -240,7 +240,7 @@ const MORTAR_SPRAY:=2.2
 static func mortar_burst(fx, pos:Vector3, water:bool) -> void:
 	var rng:RandomNumberGenerator=fx.rng
 	var r:=MORTAR_R
-	var g:=Vector3(pos.x,BattleEffects.FLOOR,pos.z)
+	var g:=Vector3(pos.x,fx.ground_height(pos)+BattleEffects.FLOOR,pos.z)
 	var c:=g+Vector3(0,0.35*r,0)
 	fx.flash(c,2.6*r,0.03,HOT_WHITE)
 	fx.shake(c,0.28)
@@ -272,7 +272,7 @@ static func mortar_burst(fx, pos:Vector3, water:bool) -> void:
 static func generic_blast(fx, pos:Vector3, water:bool) -> void:
 	var r:=2.2
 	var c:=Vector3(pos.x,maxf(pos.y,0.4)+0.3*r,pos.z)
-	var g:=Vector3(pos.x,BattleEffects.FLOOR,pos.z)
+	var g:=Vector3(pos.x,fx.ground_height(pos)+BattleEffects.FLOOR,pos.z)
 	fx._boom(0.6)
 	core_flash(fx,c,g,r,Color(1.0,0.86,0.6))
 	fireball_layer(fx,c,r,1,0.55)
@@ -290,43 +290,43 @@ static func generic_blast(fx, pos:Vector3, water:bool) -> void:
 static func field_work_destroyed(fx, kind:String, pos:Vector3, water:bool) -> void:
 	var spec:Array=FIELD_WORKS[kind]
 	var k:float=spec[1]
-	var g:=Vector3(pos.x,BattleEffects.FLOOR,pos.z)
+	var g:=Vector3(pos.x,fx.ground_height(pos)+BattleEffects.FLOOR,pos.z)
 	match String(spec[0]):
 		"concrete":concrete_collapse(fx,pos,k)
 		"depot":
 			# Ammunition dump: a large kill, then a rolling chain of cook-offs and a long fire.
-			fx.vehicle_explosion(Vector3(pos.x,0.7,pos.z),k,water,false)
+			fx.vehicle_explosion(Vector3(pos.x,fx.ground_height(pos)+0.7,pos.z),k,water,false)
 			for n in 4:
 				var offset:Vector3=Vector3.FORWARD.rotated(Vector3.UP,n*TAU/4+fx.rng.randf())*fx.rng.randf_range(0.8,2.2)
-				fx.cue(0.5+n*0.6+fx.rng.randf_range(0.0,0.3),Callable(fx,"_cook_off").bind(Vector3(pos.x,0.8,pos.z)+offset))
+				fx.cue(0.5+n*0.6+fx.rng.randf_range(0.0,0.3),Callable(fx,"_cook_off").bind(Vector3(pos.x,fx.ground_height(pos)+0.8,pos.z)+offset))
 			fx.add_emitter(g,14.0,1.1,water)
-		"gun":fx.vehicle_explosion(Vector3(pos.x,0.6,pos.z),k,water,true)
+		"gun":fx.vehicle_explosion(Vector3(pos.x,fx.ground_height(pos)+0.6,pos.z),k,water,true)
 		"steel":
-			fx.armor_hit(Vector3(pos.x,0.6,pos.z),Vector3.DOWN,k)
+			fx.armor_hit(Vector3(pos.x,fx.ground_height(pos)+0.6,pos.z),Vector3.DOWN,k)
 			fx.he_burst(pos,Vector3.DOWN,0.5)
 		"earth":
 			fx.he_burst(pos,Vector3.DOWN,k)
 			_dust_skirt(fx,g,k,BattleEffects.DUST)
 		"timber":
 			fx.he_burst(pos,Vector3.DOWN,k)
-			_splinters(fx,Vector3(pos.x,1.0,pos.z),k,TIMBER)
+			_splinters(fx,Vector3(pos.x,fx.ground_height(pos)+1.0,pos.z),k,TIMBER)
 			fx.add_emitter(g,6.0,0.55,water)
 		"tent":
 			generic_blast(fx,pos,water)
-			_splinters(fx,Vector3(pos.x,0.6,pos.z),k,CANVAS)
+			_splinters(fx,Vector3(pos.x,fx.ground_height(pos)+0.6,pos.z),k,CANVAS)
 			fx.add_emitter(g,7.0,0.65*k,water)
 		_:
 			# Wire and nets: torn apart without an explosion of their own.
 			_dust_skirt(fx,g,k,BattleEffects.DUST)
-			_splinters(fx,Vector3(pos.x,0.4,pos.z),k,BattleEffects.METAL)
+			_splinters(fx,Vector3(pos.x,fx.ground_height(pos)+0.4,pos.z),k,BattleEffects.METAL)
 
 # Bunker / pillbox collapse: blast through the embrasures, then a heavy pale cloud of concrete dust that rolls
 # outward and hangs, chunks of slab bouncing, and a smouldering interior. R = 2.6 m per unit scale.
 static func concrete_collapse(fx, pos:Vector3, scale:float) -> void:
 	var rng:RandomNumberGenerator=fx.rng
 	var r:=2.6*scale
-	var c:=Vector3(pos.x,0.9+0.2*r,pos.z)
-	var g:=Vector3(pos.x,BattleEffects.FLOOR,pos.z)
+	var c:=Vector3(pos.x,fx.ground_height(pos)+0.9+0.2*r,pos.z)
+	var g:=Vector3(pos.x,fx.ground_height(pos)+BattleEffects.FLOOR,pos.z)
 	fx._boom(scale)
 	core_flash(fx,c,g,r,Color(1.0,0.86,0.6))
 	fireball_layer(fx,c,r,1,0.6)

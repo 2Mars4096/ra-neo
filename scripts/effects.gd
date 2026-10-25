@@ -143,6 +143,7 @@ class Pool extends RefCounted:
 	var front_kind:=-1
 	# Bouncing particles of this kind report where they come to rest when they expire (debris remnants).
 	var rest_kind:=-1
+	var elevation_terrain:BattleTerrain=null
 
 	func _init(count:int, is_flat:bool) -> void:
 		capacity=count
@@ -249,9 +250,10 @@ class Pool extends RefCounted:
 					var target:=wind if (bits&WIND)!=0 else Vector3.ZERO
 					v+=(target-v)*minf(1.0,k*h)
 				p+=v*h
-				if p.y<FLOOR and v.y<0.0:
+				var ground_y:float=FLOOR+(elevation_terrain.height_at(Vector2(p.x,p.z)) if elevation_terrain!=null else 0.0)
+				if p.y<ground_y and v.y<0.0:
 					if bits&BOUNCE:
-						p.y=FLOOR
+						p.y=ground_y
 						v=Vector3(v.x*0.45,-v.y*0.28,v.z*0.45)
 						spin[i]*=0.5
 					elif bits&GROUND_KILL:
@@ -371,6 +373,7 @@ var shake_strength:=PackedFloat32Array()
 var shake_age:=PackedFloat32Array()
 # Permanent craters/scorch (tiled ground-damage textures) and landed debris chunks; see effects_remains.gd.
 var remains:=Remains.new()
+var ground_terrain:BattleTerrain=null
 # Live damaged vehicles (see "live vehicle damage" below).
 var live_sim=null # explicit watch(); otherwise the parent's `sim` (battle.gd)
 var live_nodes:Dictionary={} # unit id -> root Node3D, for the hull damage pose
@@ -427,15 +430,23 @@ func reseed(value:int) -> void:
 
 # Call once after the terrain exists: effects.set_world_bounds(sim.terrain.world_size, sim.terrain.shore_x).
 # Culling boxes still follow live content; this caps them to the padded map and lets legacy calls infer water.
+func set_ground_terrain(terrain:BattleTerrain) -> void:
+	ground_terrain=terrain
+	for pool in [volume,glow,ground]:pool.elevation_terrain=terrain if terrain.has_elevation() else null
+	remains.set_terrain(terrain)
+
+func ground_height(pos:Vector3) -> float:
+	return ground_terrain.height_at(Vector2(pos.x,pos.z)) if ground_terrain!=null else 0.0
+
 func set_world_bounds(world_size:Vector2, shore:float=INF) -> void:
-	world_box=AABB(Vector3(-8,-2,-8),Vector3(world_size.x+16,62,world_size.y+16))
+	world_box=AABB(Vector3(-8,-2,-8),Vector3(world_size.x+16,62+(ground_terrain.elevation.maximum if ground_terrain!=null else 0.0),world_size.y+16))
 	world_rect=Rect2(Vector2.ZERO,world_size)
 	shore_x=shore
 	for pool in [volume,glow,ground]:pool.limit=world_box
 	remains.set_bounds(world_box,world_size)
 
 func is_water_at(pos:Vector3) -> bool:
-	return pos.x>=shore_x
+	return ground_terrain.is_water(Vector2(pos.x,pos.z)) if ground_terrain!=null else pos.x>=shore_x
 
 func _ready() -> void:
 	noise_texture=make_noise_texture()
@@ -531,7 +542,7 @@ func sparks(pos:Vector3, count:int, speed:float, bias:Vector3, life:float, prior
 		streak(pos,v,rng.randf_range(0.25,0.45)*size,0.045*sqrt(size),rng.randf_range(life*0.5,life),SPARK,v,9.8,priority)
 
 func decal(pos:Vector3, kind:int, size0:float, size1:float, life:float, col:Color, priority:int=NORMAL) -> int:
-	return ground.spawn(Vector3(pos.x,DECAL_HEIGHT+(0.004 if kind!=SCORCH else 0.0),pos.z),Vector3.ZERO,kind,size0,size1,life,col,0.0,0.0,0.0,priority,0,rng.randf()*TAU,0.0,rng.randf())
+	return ground.spawn(Vector3(pos.x,ground_height(pos)+DECAL_HEIGHT+(0.004 if kind!=SCORCH else 0.0),pos.z),Vector3.ZERO,kind,size0,size1,life,col,0.0,0.0,0.0,priority,0,rng.randf()*TAU,0.0,rng.randf())
 
 func cue(delay:float, action:Callable) -> bool:
 	if cues.size()>=CUE_CAPACITY:
@@ -557,7 +568,7 @@ func mark(pos:Vector3, radius:float, style:int) -> void:
 
 # A bouncing fragment expired on the ground: keep it as a static chunk unless it is a chip or over water.
 func _debris_rest(pos:Vector3, size:float, col:Color, turn:float) -> void:
-	if size<Remains.CHUNK_MIN_SIZE or pos.y>0.6 or is_water_at(pos):return
+	if size<Remains.CHUNK_MIN_SIZE or pos.y>ground_height(pos)+0.6 or is_water_at(pos):return
 	remains.add_chunk(pos,size,col,turn)
 
 # ---------------------------------------------------------------- camera shake
@@ -612,7 +623,7 @@ func fire(weapon:String, from:Vector3, to:Vector3, hit:bool=true, water:bool=fal
 	var start:=from+direction*float(profile.barrel)
 	var surface:=_surface(hit,water,target_kind,to,String(profile["class"]))
 	var end:=to
-	if surface in ["ground","water"]:end.y=FLOOR
+	if surface in ["ground","water"]:end.y=ground_height(end)+FLOOR
 	elif surface=="sky" and profile["class"]!="autocannon":end=to+direction*6.0
 	var side:=_flat(direction).cross(Vector3.UP)
 	var travel:=0.0
@@ -662,7 +673,7 @@ func _follow(shot:Dictionary) -> float:
 	var progress:=minf(1.0,shot.age/flight)
 	if host!=null:progress=clampf((float(host.time)-float(entry.launched))/flight,0.0,1.0)
 	var aim:Vector2=entry.end if entry.done else entry.aim
-	shot.b=Vector3(aim.x,float(entry.aim_y) if not entry.done or entry.hit else FLOOR,aim.y)
+	shot.b=Vector3(aim.x,float(entry.aim_y) if not entry.done or entry.hit else ground_height(Vector3(aim.x,0,aim.y))+FLOOR,aim.y)
 	if entry.done:shot.surface=_surface(entry.hit,is_water_at(shot.b),String(entry.target_kind),shot.b,"missile")
 	elif progress>=1.0 and shot.age<flight+5.0:progress=0.999
 	var prev:float=shot.get("progress",0.0)
@@ -714,7 +725,7 @@ func _muzzle(weapon:String, pos:Vector3, direction:Vector3, round_index:int, on_
 				var speed:=rng.randf_range(4.0,11.0)*k
 				smoke(pos+direction*rng.randf_range(0.3,1.2),direction*speed+_jitter(0.8)+Vector3(0,0.6,0),0.5*k,rng.randf_range(2.0,2.7)*k,rng.randf_range(1.8,2.8),Color(PROPELLANT,0.55),3.0,0.15,0.0,NORMAL if n<3 else OPTIONAL)
 			# Overpressure lifts ground dust or water in a forward fan below the muzzle.
-			var base:=Vector3(pos.x,0.18,pos.z)+flat*0.6
+			var base:=Vector3(pos.x,ground_height(pos)+0.18,pos.z)+flat*0.6
 			if on_water or not heavy:
 				decal(base,FOAM_RING,0.8,3.6*k,0.8,Color(FOAM,0.7))
 				for n in 5:
@@ -735,7 +746,7 @@ func _muzzle(weapon:String, pos:Vector3, direction:Vector3, round_index:int, on_
 				smoke(pos-direction*rng.randf_range(0.3,1.0),-direction*rng.randf_range(4.0,8.0)+_jitter(1.0)+Vector3(0,0.4,0),0.4,rng.randf_range(1.4,2.0),rng.randf_range(1.1,1.7),Color(PROPELLANT,0.5),3.0,0.1)
 			for n in 4:
 				var out:=(-flat).rotated(Vector3.UP,rng.randf_range(-0.9,0.9))
-				smoke(Vector3(pos.x,0.18,pos.z)-flat*1.2,out*rng.randf_range(2.0,4.0),0.4,1.8,rng.randf_range(1.2,1.8),Color(DUST,0.45),2.5,0.1)
+				smoke(Vector3(pos.x,ground_height(pos)+0.18,pos.z)-flat*1.2,out*rng.randf_range(2.0,4.0),0.4,1.8,rng.randf_range(1.2,1.8),Color(DUST,0.45),2.5,0.1)
 		"rocket":
 			flash(pos,0.55,0.05,Color(1.0,0.8,0.5))
 			streak(pos-direction*0.5,direction,0.9,0.3,0.05,FLAME)
@@ -845,7 +856,7 @@ func _arrive(shot:Dictionary) -> void:
 
 # Rifle round into soil: a small dirt spurt thrown back toward the shooter, no flash.
 func bullet_strike(pos:Vector3, direction:Vector3) -> void:
-	var p:=Vector3(pos.x,FLOOR+0.05,pos.z)
+	var p:=Vector3(pos.x,ground_height(pos)+FLOOR+0.05,pos.z)
 	var back:=-_flat(direction)
 	smoke(p,back*rng.randf_range(0.5,1.1)+Vector3(0,rng.randf_range(1.8,2.6),0),0.14,0.55,0.55,Color(DUST,0.62),2.6,-2.5)
 	for n in 2:
@@ -859,7 +870,7 @@ func ricochet(pos:Vector3, direction:Vector3, scale:float) -> void:
 	sparks(pos,3,7.0,-direction*0.6+Vector3.UP*0.4,0.25,OPTIONAL)
 
 func water_strike(pos:Vector3, scale:float) -> void:
-	var p:=Vector3(pos.x,FLOOR,pos.z)
+	var p:=Vector3(pos.x,ground_height(pos)+FLOOR,pos.z)
 	if scale<0.5:
 		# Thin bullet splash with a short-lived ring.
 		for n in 3:spray(p,_jitter(0.3,0.0)+Vector3(0,rng.randf_range(2.6,3.6),0),0.1,0.2,0.75,0.0,OPTIONAL if n>0 else NORMAL)
@@ -883,8 +894,8 @@ func water_strike(pos:Vector3, scale:float) -> void:
 # that stalls and hangs (the read that separates HE from a missile), shock ring and dust skirt, clods in arcs,
 # a lingering brown dust column and a scorch.
 func he_burst(pos:Vector3, direction:Vector3, scale:float) -> void:
-	var p:=Vector3(pos.x,maxf(pos.y,FLOOR)+0.1,pos.z)
-	var g:=Vector3(pos.x,FLOOR,pos.z)
+	var p:=Vector3(pos.x,maxf(pos.y,ground_height(pos)+FLOOR)+0.1,pos.z)
+	var g:=Vector3(pos.x,ground_height(pos)+FLOOR,pos.z)
 	var back:=-_flat(direction)*0.5
 	if scale<0.6:
 		flash(p+Vector3(0,0.2,0),1.4*scale+0.5,0.05,Color(1.0,0.8,0.48))
@@ -959,7 +970,7 @@ func _pending_arrival(pos:Vector3) -> float:
 func _destroy_now(kind:String, pos:Vector3, water:bool) -> void:
 	if kind in INFANTRY:
 		# A casualty is not an explosion: a little dust where the last soldier fell.
-		for n in 2:smoke(Vector3(pos.x,0.25,pos.z)+_jitter(0.4,0.0),Vector3(0,0.3,0)+_jitter(0.3,0.0),0.3,0.9,0.9,Color(DUST,0.45),2.0)
+		for n in 2:smoke(Vector3(pos.x,ground_height(pos)+0.25,pos.z)+_jitter(0.4,0.0),Vector3(0,0.3,0)+_jitter(0.3,0.0),0.3,0.9,0.9,Color(DUST,0.45),2.0)
 		return
 	if kind=="drone":
 		air_burst(pos,0.45,false)
@@ -986,7 +997,7 @@ func _destroy_now(kind:String, pos:Vector3, water:bool) -> void:
 # and a sustained wreck fire. Every hull vents a fuel flare; tanks then cook off their ammunition.
 func vehicle_explosion(pos:Vector3, scale:float=1.0, water:bool=false, cook_off:bool=false) -> void:
 	var r:=minf(5.0*scale,6.5)
-	var g:=Vector3(pos.x,FLOOR,pos.z)
+	var g:=Vector3(pos.x,ground_height(pos)+FLOOR,pos.z)
 	var c:=pos+Vector3(0,0.25*r,0)
 	Explosions.core_flash(self,c,g,r,Color(1.0,0.9,0.68))
 	Explosions.fireball_layer(self,c,r,4,1.0,2)
@@ -1037,16 +1048,16 @@ func air_burst(pos:Vector3, scale:float, crash:bool, water:bool=false) -> void:
 	shake(pos,0.5*scale)
 	if crash:
 		var fall:=sqrt(2.0*maxf(pos.y,0.5)/9.8)
-		cue(fall,vehicle_explosion.bind(Vector3(pos.x,0.4,pos.z),0.7,water,false))
+		cue(fall,vehicle_explosion.bind(Vector3(pos.x,ground_height(pos)+0.4,pos.z),0.7,water,false))
 
 func structure_collapse(pos:Vector3) -> void:
 	vehicle_explosion(Vector3(pos.x,0.8,pos.z),1.5,false,false)
 	for n in 3:
 		var offset:=Vector3.FORWARD.rotated(Vector3.UP,n*TAU/3+rng.randf())*rng.randf_range(1.2,2.6)
-		cue(0.35+n*0.45,he_burst.bind(Vector3(pos.x,0.6,pos.z)+offset,Vector3.DOWN,0.8))
+		cue(0.35+n*0.45,he_burst.bind(Vector3(pos.x,ground_height(pos)+0.6,pos.z)+offset,Vector3.DOWN,0.8))
 	for n in 8:
-		smoke(Vector3(pos.x,0.6,pos.z)+_jitter(3.0,0.0),Vector3(0,0.8,0)+_jitter(1.2,0.0),2.4,6.5,rng.randf_range(3.5,5.0),Color(DUST.darkened(0.2),0.7),1.2,0.6,0.3+n*0.1)
-	add_emitter(Vector3(pos.x,FLOOR,pos.z),14.0,1.4,false)
+		smoke(Vector3(pos.x,ground_height(pos)+0.6,pos.z)+_jitter(3.0,0.0),Vector3(0,0.8,0)+_jitter(1.2,0.0),2.4,6.5,rng.randf_range(3.5,5.0),Color(DUST.darkened(0.2),0.7),1.2,0.6,0.3+n*0.1)
+	add_emitter(Vector3(pos.x,ground_height(pos)+FLOOR,pos.z),14.0,1.4,false)
 
 # Sustained wreck fire. A small fixed set; the oldest is replaced when full.
 func add_emitter(pos:Vector3, duration:float, scale:float, water:bool) -> void:
@@ -1085,10 +1096,10 @@ func dust(pos:Vector3, direction:Vector2, sea:bool) -> void:
 	if sea:
 		# Stern wash and a light bow spray.
 		decal(pos-forward*1.9,FOAM_RING,0.7,2.4,1.4,Color(FOAM,0.55),OPTIONAL)
-		for s in [-1,1]:spray(Vector3(pos.x,FLOOR+0.05,pos.z)+forward*1.7+side*s*0.4,side*s*1.2+Vector3(0,1.3,0),0.12,0.3,0.5,0.0,OPTIONAL)
+		for s in [-1,1]:spray(Vector3(pos.x,ground_height(pos)+FLOOR+0.05,pos.z)+forward*1.7+side*s*0.4,side*s*1.2+Vector3(0,1.3,0),0.12,0.3,0.5,0.0,OPTIONAL)
 		return
 	for s in [-1,1]:
-		smoke(Vector3(pos.x,0.2,pos.z)-forward*1.7+side*s*0.75,-forward*0.4+Vector3(0,0.35,0)+_jitter(0.15,0.0),0.35,1.5,1.1,Color(DUST,0.3),1.8,0.0,0.0,OPTIONAL)
+		smoke(Vector3(pos.x,ground_height(pos)+0.2,pos.z)-forward*1.7+side*s*0.75,-forward*0.4+Vector3(0,0.35,0)+_jitter(0.15,0.0),0.35,1.5,1.1,Color(DUST,0.3),1.8,0.0,0.0,OPTIONAL)
 
 # hp_fraction below 0.4 smokes grey; below 0.2 adds dark smoke and flickering fire.
 # Once a simulation is bound the live-damage emitters own this (capped and view-faded); the call is ignored.
@@ -1271,7 +1282,7 @@ func _live_emit(sim, e:Dictionary, dt:float) -> void:
 				var calm:=clampf((time-float(_live_wreck_seen.get(u.id,time)))/LIVE_WRECK_SECONDS,0.0,1.0)
 				var quiet:bool=u.get("lost_quiet",false) # forced landing: no fire, lighter smoke
 				e.puff=rng.randf_range(0.45,0.6)*slow*(1.0+calm)
-				smoke(Vector3(u.pos.x,0.6,u.pos.y)+_jitter(0.3*radius,0.05),Vector3(0,rng.randf_range(0.9,1.3),0),0.4,rng.randf_range(1.6,2.2),rng.randf_range(2.2,3.0),Color(GREY_SMOKE if quiet else SOOT,(0.42 if quiet else 0.62)*alpha*(1.0-0.6*calm)),0.9,0.7,0.0,OPTIONAL)
+				smoke(Vector3(u.pos.x,ground_height(Vector3(u.pos.x,0,u.pos.y))+0.6,u.pos.y)+_jitter(0.3*radius,0.05),Vector3(0,rng.randf_range(0.9,1.3),0),0.4,rng.randf_range(1.6,2.2),rng.randf_range(2.2,3.0),Color(GREY_SMOKE if quiet else SOOT,(0.42 if quiet else 0.62)*alpha*(1.0-0.6*calm)),0.9,0.7,0.0,OPTIONAL)
 		_:
 			if e.puff<=0.0:
 				var severe:=float(u.hp)<float(u.max_hp)*0.2

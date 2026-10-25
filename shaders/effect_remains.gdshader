@@ -28,6 +28,8 @@ vec4 smooth_sample(sampler2D tex, vec2 uv) {
 }
 
 void fragment() {
+	// Relief tiles share land triangles; crop any cell crossing the tile edge.
+	if (any(lessThan(UV, vec2(0.0))) || any(greaterThan(UV, vec2(1.0)))) discard;
 	vec4 c = smooth_sample(remains, UV);
 	ALBEDO = c.rgb;
 	ALPHA = c.a;

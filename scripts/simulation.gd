@@ -126,6 +126,7 @@ func spawn(kind: String, team: int, pos: Vector2) -> Dictionary:
 	next_id += 1
 	Infantry.create(u,d)
 	if d.get("strike",false):u.merge({"strike_target":-1,"altitude":float(d.altitude),"fuse":time+float(d.get("endurance",60.0))})
+	if terrain.has_elevation() and d.domain=="air":follow_skyline(u,d)
 	if not field_ops.is_empty() and d.get("structure",false):
 		u.merge({"structure":true,"build_left":0.0,"engineer_id":-1,"build_paused":false},true)
 	units.append(u)
@@ -194,7 +195,7 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 			if not u.members.is_empty() and domain=="land" and not command.held.has(u.team):command.held[u.team]=held_spots(u,destination,ids)
 			var held_at:=destination
 			if ids.size()>1:held_at+=Vector2((index % 3 - 1) * spacing[domain], (index / 3) * spacing[domain])
-			if not terrain.traversable(held_at,domain,float(definitions[u.kind].radius)):held_at=destination
+			if not terrain.traversable(held_at,domain,float(definitions[u.kind].radius),[],terrain.mobility_profile(u.kind)):held_at=destination
 			# Should no target turn up, the unit carries on as before the click.
 			var before:Dictionary={} if queued else order_snapshot(u)
 			var waiting:=record_order(u,mode,held_at,target_id,queued,true)
@@ -265,7 +266,7 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 	var domain: String = definitions[u.kind].domain
 	var radius: float = definitions[u.kind].radius
 	var target := destination
-	if mode!="attack" and not terrain.traversable(destination,domain,radius):
+	if mode!="attack" and not terrain.traversable(destination,domain,radius,[],terrain.mobility_profile(u.kind)):
 		var sector_order:=false
 		for obj in objectives:
 			if destination.distance_to(obj.pos)<2.0 and domain=="land": sector_order=true
@@ -278,7 +279,7 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 			order_adjusted=true
 	if mode != "attack" and ids.size() > 1:
 		target += Vector2((index % 3 - 1) * command.spacing[domain], (index / 3) * command.spacing[domain])
-	if not terrain.traversable(target, domain, radius):
+	if not terrain.traversable(target, domain, radius,[],terrain.mobility_profile(u.kind)):
 		target = destination
 	if mode == "attack":
 		var enemy := get_unit(target_id)
@@ -289,7 +290,7 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 			return {}
 		# Attack orders pursue the last visible position, never hidden live positions.
 		target = enemy.pos
-		if not terrain.traversable(target, domain, radius):
+		if not terrain.traversable(target, domain, radius,[],terrain.mobility_profile(u.kind)):
 			target = attack_position(u, enemy, slots+attack_rivals(u, target_id, ids, command.queued))
 	# Over the tick's route budget, validate reachability only (grid search)
 	# and plan the route at the start of a later tick.
@@ -519,7 +520,7 @@ func attack_rivals(u:Dictionary,target_id:int,ids:Array,queued:bool)->Array[Dict
 const WRECK_SPOT_MISSES:=4
 func attack_position(u:Dictionary,enemy:Dictionary,taken:Array=[])->Vector2:
 	var d:Dictionary=definitions[u.kind]
-	var reach:float=horizontal_reach(attack_weapon(u,enemy.kind),enemy)*0.9
+	var reach:float=horizontal_reach(attack_weapon(u,enemy.kind),enemy,unit_altitude(u))*0.9
 	var hulks:Array=[]
 	if has_meta(VehicleDamage.WRECKS) and VehicleDamage.wreck_bound(self,u):
 		var span:float=u.pos.distance_to(enemy.pos)+reach+20.0
@@ -540,7 +541,7 @@ func attack_position(u:Dictionary,enemy:Dictionary,taken:Array=[])->Vector2:
 	for x in range(low.x,high.x+1):
 		for y in range(low.y,high.y+1):
 			var p:Vector2=terrain.center(Vector2i(x,y))
-			if not terrain.traversable(p,d.domain,float(d.radius)) or p.distance_to(enemy.pos)>reach:continue
+			if not terrain.traversable(p,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind)) or p.distance_to(enemy.pos)>reach:continue
 			if definitions[enemy.kind].domain!="air" and not terrain.line_clear(p,enemy.pos):continue
 			if not hulks.is_empty() and not terrain.avoids_bodies(p,p,hulks):continue
 			candidates.append({"pos":p,"distance":p.distance_squared_to(u.pos)})
@@ -715,16 +716,17 @@ func update_visibility() -> void:
 				if target.seen_by[observer.team]:continue
 				var air:bool=definitions[target.kind].domain == "air"
 				for post in posts:
-					if post.distance_squared_to(target.pos) <= radius * radius and (air or terrain.line_clear(post, target.pos)):
+					if post.distance_squared_to(target.pos) <= radius * radius and (air or terrain.line_clear(post,target.pos)) and relief_sight_clear(observer,target,post):
 						target.seen_by[observer.team] = true
 						break
 			elif observer.pos.distance_squared_to(target.pos) <= radius * radius:
-				if d.domain == "air" or definitions[target.kind].domain == "air" or terrain.line_clear(observer.pos, target.pos):
+				if (d.domain=="air" or definitions[target.kind].domain=="air" or terrain.line_clear(observer.pos,target.pos)) and relief_sight_clear(observer,target):
 					target.seen_by[observer.team] = true
 		if observer.team == 0:
 			var origin := terrain.cell(observer.pos)
 			var sight:float=float(d.sight)*float(weather.sight_scale)
 			var key := "%d:%d:%s:%.2f" % [origin.x,origin.y,observer.kind,weather.sight_scale]
+			if terrain.has_elevation() and d.domain=="air":key+=":%.2f"%unit_altitude(observer)
 			if processed_fields.has(key):continue
 			processed_fields[key]=true
 			if not visibility_cache.has(key):
@@ -737,7 +739,7 @@ func update_visibility() -> void:
 					for y in range(maxi(0, origin.y-r), mini(terrain.fog_grid_size.y, origin.y+r+1)):
 						var tile := Vector2i(x,y)
 						var p := terrain.center(tile)
-						if source.distance_squared_to(p) <= sight*sight and (d.domain=="air" or terrain.line_clear(source,p)):
+						if source.distance_squared_to(p) <= sight*sight and (d.domain=="air" or terrain.line_clear(source,p)) and relief_fog_clear(observer,source,p):
 							field[tile]=true
 				if visibility_cache.size()>=512:
 					visibility_cache.clear()
@@ -821,9 +823,10 @@ func can_fire(u: Dictionary, other: Dictionary) -> bool:
 			if weapon_reaches(weapon,member.pos,other,mini(SOLDIER_CHECKS,budget-soldier_checks)):return true
 			if soldier_checks>=budget:return false
 		return false
-	return weapon_reaches(u.kind,u.pos,other)
+	return weapon_reaches(u.kind,u.pos,other,SOLDIER_CHECKS,unit_altitude(u))
 
-func weapon_reaches(weapon:String,source:Vector2,other:Dictionary,checks:int=SOLDIER_CHECKS) -> bool:
+func weapon_reaches(weapon:String,source:Vector2,other:Dictionary,checks:int=SOLDIER_CHECKS,source_altitude:float=INF) -> bool:
+	if terrain.has_elevation():return relief_weapon_reaches(weapon,source,other,checks,source_altitude)
 	if not effective_weapon(weapon,other.kind):return false
 	var d:Dictionary=definitions[weapon]
 	var td:Dictionary=definitions[other.kind]
@@ -836,6 +839,24 @@ func weapon_reaches(weapon:String,source:Vector2,other:Dictionary,checks:int=SOL
 	if source.distance_squared_to(other.pos)+height*height>reach*reach:return false
 	return d.domain=="air" or td.domain=="air" or terrain.line_clear(source,other.pos)
 
+# Relief uses each actual endpoint for slant range and ridge occlusion. There
+# is no damage bonus for height; the advantage is physical observation/fire.
+func relief_weapon_reaches(weapon:String,source:Vector2,other:Dictionary,checks:int,source_altitude:float) -> bool:
+	if not effective_weapon(weapon,other.kind):return false
+	var d:Dictionary=definitions[weapon]
+	var td:Dictionary=definitions[other.kind]
+	var source_h:=source_altitude
+	if not is_finite(source_h):
+		source_h=flight_altitude(d,source) if d.domain=="air" else terrain.height_at(source)+float(d.altitude)
+	var reach:=weapon_range(weapon,td)
+	var ground_line:bool=d.domain!="air" and td.domain!="air"
+	if not other.get("members",[]).is_empty():
+		return not aim_soldier(source,other,reach*reach,ground_line,INF,checks,source_h).is_empty()
+	var target_h:=unit_altitude(other)
+	if source.distance_squared_to(other.pos)+pow(source_h-target_h,2)>reach*reach:return false
+	if not terrain.elevation_clear(source,other.pos,source_h+(0.0 if d.domain=="air" else 1.6),target_h+(0.0 if td.domain=="air" else 1.6),true):return false
+	return not ground_line or terrain.line_clear(source,other.pos)
+
 # Per-soldier targeting. Fire at a section goes at one of its soldiers: the
 # nearest able one (not down or KIA) within `reach_sq` (squared ground
 # distance) and nearer than `limit` that the source has a clear line of fire
@@ -845,8 +866,10 @@ const SOLDIER_CHECKS:=3   # line checks per shooter and target section
 const SECTION_CHECKS:=8   # per squad can_fire call (all its soldiers)
 const SHOOTER_CHECKS:=6   # per soldier and tick across target sections
 var soldier_checks:=0
-func aim_soldier(source:Vector2,other:Dictionary,reach_sq:float,needs_line:bool,limit:float=INF,checks:int=SOLDIER_CHECKS)->Dictionary:
+func aim_soldier(source:Vector2,other:Dictionary,reach_sq:float,needs_line:bool,limit:float=INF,checks:int=SOLDIER_CHECKS,source_altitude:float=INF)->Dictionary:
 	var bound:float=minf(reach_sq,limit)
+	var elevated:=terrain.has_elevation()
+	var source_h:=source_altitude if is_finite(source_altitude) else terrain.height_at(source)
 	var tried:=0
 	for attempt in checks:
 		var best:Dictionary={}
@@ -856,11 +879,13 @@ func aim_soldier(source:Vector2,other:Dictionary,reach_sq:float,needs_line:bool,
 		for member in other.members:
 			if member.hp>0 and not (tried&bit):
 				var distance:float=source.distance_squared_to(member.pos)
+				if elevated:distance+=pow(source_h-terrain.height_at(member.pos),2)
 				if distance<best_distance and distance<=bound:best=member;best_distance=distance;best_bit=bit
 			bit<<=1
-		if best.is_empty() or not needs_line:return best
+		if best.is_empty() or (not needs_line and not elevated):return best
 		soldier_checks+=1
-		if terrain.line_clear(source,best.pos):return best
+		var relief_ok:bool=not elevated or terrain.elevation_clear(source,best.pos,source_h+(1.6 if needs_line else 0.0),terrain.height_at(best.pos)+1.6,true)
+		if relief_ok and (not needs_line or terrain.line_clear(source,best.pos)):return best
 		tried|=best_bit
 	return {}
 
@@ -873,7 +898,7 @@ func shot_victim(u:Dictionary,target:Dictionary,fallback:bool=true) -> Dictionar
 	var td:Dictionary=definitions[target.kind]
 	var height:float=unit_altitude(u)-unit_altitude(target)
 	var reach:float=weapon_range(u.kind,td)
-	var victim:=aim_soldier(u.pos,target,reach*reach-height*height,d.domain!="air" and td.domain!="air")
+	var victim:=aim_soldier(u.pos,target,reach*reach if terrain.has_elevation() else reach*reach-height*height,d.domain!="air" and td.domain!="air",INF,SOLDIER_CHECKS,unit_altitude(u))
 	return victim if not victim.is_empty() or not fallback else Infantry.exposed_member(target,u.pos)
 
 # Counter-UAV model. Slant range applies against air targets (altitude counts),
@@ -907,7 +932,29 @@ func flight_altitude(d:Dictionary,pos:Vector2)->float:
 
 # Per-unit altitude: FPV drones descend during their terminal dive.
 func unit_altitude(u:Dictionary) -> float:
-	return float(u.get("altitude",definitions[u.kind].altitude))
+	var d:Dictionary=definitions[u.kind]
+	var altitude:float=float(u.get("altitude",d.altitude))
+	if not terrain.has_elevation():return altitude
+	if d.domain=="land":return altitude+terrain.height_at(u.pos)
+	if d.domain=="air" and not u.has("altitude"):return flight_altitude(d,u.pos)
+	return altitude
+
+func eye_height(u:Dictionary,pos:Vector2=Vector2.INF) -> float:
+	var point:Vector2=u.pos if not pos.is_finite() else pos
+	if definitions[u.kind].domain=="air":return unit_altitude(u)
+	return terrain.height_at(point)+1.6
+
+# Ground-ground line_clear already samples relief; air shortcuts still need
+# the same physical hill occlusion at actual flight altitude.
+func relief_sight_clear(observer:Dictionary,target:Dictionary,source:Vector2=Vector2.INF) -> bool:
+	if not terrain.has_elevation():return true
+	if definitions[observer.kind].domain!="air" and definitions[target.kind].domain!="air":return true
+	var point:Vector2=observer.pos if not source.is_finite() else source
+	return terrain.elevation_clear(point,target.pos,eye_height(observer,point),eye_height(target),true)
+
+func relief_fog_clear(observer:Dictionary,source:Vector2,point:Vector2) -> bool:
+	if not terrain.has_elevation() or definitions[observer.kind].domain!="air":return true
+	return terrain.elevation_clear(source,point,eye_height(observer,source),terrain.height_at(point)+1.6,true)
 
 # The weapon a unit brings against this kind (squads: Javelin or rifles).
 func attack_weapon(u:Dictionary,target_kind:String) -> String:
@@ -915,9 +962,9 @@ func attack_weapon(u:Dictionary,target_kind:String) -> String:
 	return "atgm" if u.kind=="atgm" and missiles_left(u)>0 and effective_weapon("atgm",target_kind) else "rifle"
 
 # Ground distance at which the weapon reaches this target, net of its altitude.
-func horizontal_reach(weapon:String,other:Dictionary) -> float:
+func horizontal_reach(weapon:String,other:Dictionary,source_altitude:float=INF) -> float:
 	var reach:float=weapon_range(weapon,definitions[other.kind])
-	var height:float=float(definitions[weapon].altitude)-unit_altitude(other)
+	var height:float=(source_altitude if terrain.has_elevation() and is_finite(source_altitude) else float(definitions[weapon].altitude))-unit_altitude(other)
 	return sqrt(maxf(1.0,reach*reach-height*height))
 
 # Automatic target choice: nearest first, but an inbound strike drone is engaged
@@ -940,7 +987,7 @@ func contact_known(u:Dictionary,other:Dictionary) -> bool:
 	var sight:float=d.sight*weather.sight_scale
 	if terrain.cover(other.pos) and definitions[other.kind].domain=="land":sight*=0.7
 	if definitions[other.kind].domain=="land" and time-float(other.get("last_shot",-100.0))>=3.0:sight*=terrain.concealment(other.pos)
-	return u.pos.distance_to(other.pos)<=sight and (d.domain=="air" or definitions[other.kind].domain=="air" or terrain.line_clear(u.pos,other.pos))
+	return u.pos.distance_to(other.pos)<=sight and (d.domain=="air" or definitions[other.kind].domain=="air" or terrain.line_clear(u.pos,other.pos)) and relief_sight_clear(u,other)
 
 func effective_unit(u:Dictionary,target_kind:String) -> bool:
 	if u.get("members",[]).is_empty():return effective_weapon(u.kind,target_kind)
@@ -952,7 +999,8 @@ func effective_weapon(weapon:String, target_kind:String) -> bool:
 	return float(effectiveness[weapon][target_kind])>0
 
 func shot_distance(u:Dictionary,other:Dictionary,victim:Dictionary={}) -> float:
-	var height:float=unit_altitude(u)-unit_altitude(other)
+	var target_altitude:float=terrain.height_at(victim.pos) if terrain.has_elevation() and not victim.is_empty() else unit_altitude(other)
+	var height:float=unit_altitude(u)-target_altitude
 	return sqrt(u.pos.distance_squared_to(victim.pos if not victim.is_empty() else other.pos)+height*height)
 
 # `victim`: the soldier aimed at when the target is a section (aim_soldier).
@@ -1039,7 +1087,7 @@ func resolve_shot(u:Dictionary,target:Dictionary,scale:float,victim:Dictionary={
 	var shot_kind:String="rifle" if AIR_REACH.has(u.kind) and definitions[target.kind].domain=="air" else (u.kind if u.kind in ["at_gun","bunker"] else definitions[u.kind].get("combat_alias",u.kind))
 	# A guided missile showed its flight at launch (launch_missile); hand back the impact.
 	if u.get("guided",false):u["impact"]={"to":endpoint,"hit":hit}
-	else:events.append({"type":"shot","from":u.pos,"to":endpoint,"kind":shot_kind,"target_kind":target.kind,"hit":hit,"from_y":u.get("fire_height",maxf(0.95,definitions[u.kind].altitude)),"to_y":maxf(0.8,unit_altitude(target)),"visible":u.visible or target.visible})
+	else:events.append({"type":"shot","from":u.pos,"to":endpoint,"kind":shot_kind,"target_kind":target.kind,"hit":hit,"from_y":u.get("fire_height",maxf(0.95,unit_altitude(u)+(0.95 if terrain.has_elevation() and definitions[u.kind].domain!="air" else 0.0))),"to_y":maxf(0.8,unit_altitude(target)+(0.8 if terrain.has_elevation() and definitions[target.kind].domain!="air" else 0.0)),"visible":u.visible or target.visible})
 	if target.hp<=0:
 		# A crew bail-out leaves an intact hull: presentation shows no blast.
 		events.append({"type":"destroyed","kind":target.kind,"pos":target.pos,"visible":target.visible,"abandoned":target.get("abandoned",false)})
@@ -1096,7 +1144,7 @@ func launch_missile(u:Dictionary,proxy:Dictionary,target:Dictionary,scale:float,
 	var flight:float=missile_flight(d,distance)
 	var visible:bool=u.visible or target.visible
 	var missile:={"shooter":u.id,"team":u.team,"target":target.id,"victim":victim,"proxy":proxy,"scale":scale,
-		"from":proxy.pos,"launched":time,"flight":flight,"impact_at":time+flight,"aim":aim,"aim_y":maxf(0.8,unit_altitude(target)),
+		"from":proxy.pos,"launched":time,"flight":flight,"impact_at":time+flight,"aim":aim,"aim_y":maxf(0.8,unit_altitude(target)+(0.8 if terrain.has_elevation() and definitions[target.kind].domain!="air" else 0.0)),
 		"mode":proxy.get("attack","direct"),"target_kind":target.kind,"visible":visible,"lost":"","done":false,"hit":false,"end":aim}
 	missiles.append(missile)
 	events.append({"type":"shot","from":proxy.pos,"to":aim,"kind":proxy.kind,"target_kind":target.kind,"hit":true,"from_y":proxy.fire_height,"to_y":missile.aim_y,"visible":visible,"flight":flight,"guided":true,"attack":missile.mode})
@@ -1672,18 +1720,19 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 				var soldier:=aim_soldier(member.pos,other,reach_sq,true,INF if ordered else nearest,budget)
 				if soldier.is_empty():continue
 				target=other;victim=soldier
-				nearest=-1.0 if ordered else member.pos.distance_squared_to(soldier.pos)
+				nearest=-1.0 if ordered else member.pos.distance_squared_to(soldier.pos)+(pow(terrain.height_at(member.pos)-terrain.height_at(soldier.pos),2) if terrain.has_elevation() else 0.0)
 				continue
 			var distance:float=member.pos.distance_squared_to(other.pos)
 			var reach:float=float(d.range)*range_scale
+			if terrain.has_elevation():distance+=pow(terrain.height_at(member.pos)-unit_altitude(other),2)
 			if air:
-				distance+=pow(unit_altitude(other),2)
+				if not terrain.has_elevation():distance+=pow(unit_altitude(other),2)
 				reach=weapon_range(weapon,od)
 			var priority:float=distance*(0.2 if od.get("strike",false) else 1.0)
 			# Keep tracking the same aircraft instead of re-aiming at every swap.
 			if air and other.id==member.target:priority*=0.5
 			if not u.orders.is_empty() and u.orders[0].mode=="attack" and other.id==u.orders[0].target:priority=-1.0
-			if distance<reach*reach and priority<nearest and (air or terrain.line_clear(member.pos,other.pos)):
+			if distance<reach*reach and priority<nearest and (air or terrain.line_clear(member.pos,other.pos)) and relief_sight_clear(u,other,member.pos):
 				target=other;victim={};nearest=priority
 		var target_id:int=target.get("id",-1)
 		if member.target!=target_id:member.aim=0.0
@@ -1748,7 +1797,7 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		var proxy:Dictionary=u.duplicate()
 		proxy.kind=weapon
 		proxy.pos=member.pos
-		proxy["fire_height"]=0.75 if member.posture=="CROUCHED" else (0.4 if member.posture=="PRONE" else 0.95)
+		proxy["fire_height"]=terrain.height_at(member.pos)+(0.75 if member.posture=="CROUCHED" else (0.4 if member.posture=="PRONE" else 0.95))
 		proxy.suppression=maxf(u.suppression,member.suppression)
 		if hurt:proxy["accuracy"]=Infantry.LIGHT_ACCURACY
 		var scale:float=(1.0 if weapon=="atgm" else 0.25)*(0.4 if u.kind=="engineer" else 1.0)
@@ -1776,7 +1825,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 		if not alive(target):
 			finish_order(u)
 			return
-		if contact_known(u,target) and terrain.traversable(target.pos, d.domain,float(d.radius)):
+		if contact_known(u,target) and terrain.traversable(target.pos,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind)):
 			# Chase a target that moved; a standing one keeps the current route
 			# (re-planning it would discard detours round bodies and wrecks).
 			if order.pos.distance_to(target.pos)<=1.0 and not u.path.is_empty():u.repath = 1.0
@@ -1872,7 +1921,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 				for ring in [2.0,4.0,6.0]:
 					for index in 16:
 						var arrival:Vector2=order.pos+Vector2.from_angle(index*TAU/16)*ring
-						if not terrain.traversable(arrival,d.domain,float(d.radius)) or not terrain.avoids_bodies(arrival,arrival,avoid):continue
+						if not terrain.traversable(arrival,d.domain,float(d.radius),[],terrain.mobility_profile(u.kind)) or not terrain.avoids_bodies(arrival,arrival,avoid):continue
 						detour=terrain.path(u.pos,arrival,d.domain,float(d.radius),avoid,terrain.mobility_profile(u.kind))
 						if not detour.is_empty():break
 					if not detour.is_empty():break
@@ -1914,7 +1963,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			if not passed:
 				u["look_ahead_at"]=time+0.2
 				look=false
-			if not terrain.segment_clear(u.pos,u.path[1],d.domain,room) or not terrain.avoids_bodies(u.pos,u.path[1],bodies):break
+			if not terrain.segment_clear(u.pos,u.path[1],d.domain,room,[],terrain.mobility_profile(u.kind)) or not terrain.avoids_bodies(u.pos,u.path[1],bodies):break
 			u.path.pop_front()
 		if u.path.size()==1 and u.pos.distance_to(u.path[0])<0.75 and (u.path[0]-u.pos).dot(axis)<=0.0:
 			u.path.clear()
@@ -2098,7 +2147,7 @@ func update_objectives(dt: float) -> void:
 			events.append({"type":"warning","text":obj.name+(" secured • +100 supply" if field_ops.is_empty() else " secured"),"notice":"info"})
 		elif obj.progress <= 0:
 			obj.owner = 1
-	if not objectives.is_empty() and objectives.all(func(obj):return obj.owner==0 and not obj.get("enemy_present",false)):
+	if not objectives.is_empty() and objectives.all(func(obj):return obj.owner==0 and not obj.get("enemy_present",false)) and FieldOps.OperationRules.hold_ready(self):
 		score_hold += dt
 		if score_hold >= float(scenario.hold):
 			var reserve_resolved:bool=counterattack_sent and time>counterattack_at+20
@@ -2148,7 +2197,7 @@ func crowd_radius(kind:String) -> float:
 
 func location_clear(pos: Vector2, kind: String, ignore_id: int = -1) -> bool:
 	var d: Dictionary=definitions[kind]
-	if not terrain.traversable(pos,d.domain,float(d.radius)): return false
+	if not terrain.traversable(pos,d.domain,float(d.radius),[],terrain.mobility_profile(kind)): return false
 	var layer: String=kind if d.domain=="air" else d.domain
 	for other in units:
 		if not alive(other) or other.id==ignore_id or collision_layer(other)!=layer: continue
@@ -2159,7 +2208,7 @@ func location_clear(pos: Vector2, kind: String, ignore_id: int = -1) -> bool:
 func spawn_position(origin: Vector2, kind: String) -> Vector2:
 	if location_clear(origin,kind): return origin
 	var d:Dictionary=definitions[kind]
-	var valid_origin:bool=terrain.traversable(origin,d.domain,float(d.radius))
+	var valid_origin:bool=terrain.traversable(origin,d.domain,float(d.radius),[],terrain.mobility_profile(kind))
 	for ring in range(1,25):
 		for i in 24:
 			var pos:=origin+Vector2.from_angle(i*TAU/24.0)*ring
@@ -2198,17 +2247,17 @@ func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary], op
 		if beside.x>=0:origin=beside
 		nearby=VehicleDamage.wrecks_near(self,origin,radius,18.0)
 	var wrecked:=not nearby.is_empty()
-	var known:Dictionary=open.get_or_add("terrain:%s:%s:%s" % [domain,radius,wrecked],{})
+	var known:Dictionary=open.get_or_add("terrain:%s:%s:%s:%s" % [domain,radius,wrecked,terrain.mobility_profile(u.kind)],{})
 	var taken:Dictionary=open.get_or_add("slots:%s:%s" % [layer,crowd],{})
 	var profile:String=terrain.mobility_profile(u.kind)
 	# Probing from open ground, reachable() runs the straight-line check first.
-	var probe:=terrain.path_probe and terrain.traversable(u.pos,domain,radius)
+	var probe:=terrain.path_probe and terrain.traversable(u.pos,domain,radius,[],profile)
 	var section:bool=not held.is_empty() and not u.members.is_empty() and not slot_clear(origin,layer,crowd,held)
 	if not held.is_empty():slots=slots+held
 	var ahead:float=(origin-u.pos).angle() if section and u.pos.distance_squared_to(origin)>0.0001 else 0.0
 	var stay:=INF
 	for ring in 18:
-		if ring==1 and section and slot_clear(u.pos,layer,crowd,slots) and terrain.traversable(u.pos,domain,radius):stay=u.pos.distance_to(origin)-SECTION_STAY
+		if ring==1 and section and slot_clear(u.pos,layer,crowd,slots) and terrain.traversable(u.pos,domain,radius,[],profile):stay=u.pos.distance_to(origin)-SECTION_STAY
 		if stay<=ring:return u.pos
 		for i in (1 if ring==0 else 16):
 			var p:=origin+Vector2.from_angle(ahead+int(SECTION_RING[i])*TAU/16.0 if section else i*TAU/16.0)*ring
@@ -2218,12 +2267,12 @@ func formation_slot(origin: Vector2, u: Dictionary, slots: Array[Dictionary], op
 				continue
 			var free=known.get(p)
 			if free==null:
-				free=terrain.traversable(p,domain,radius) and not (wrecked and not VehicleDamage.wreck_at(self,p,radius,nearby).is_empty())
+				free=terrain.traversable(p,domain,radius,[],profile) and not (wrecked and not VehicleDamage.wreck_at(self,p,radius,nearby).is_empty())
 				known[p]=free
 			if not free: continue
 			if probe:
 				if terrain.reachable(u.pos,p,domain,radius,profile): return p
-			elif terrain.segment_clear(u.pos,p,domain,radius) or not terrain.path(u.pos,p,domain,radius,[],profile).is_empty(): return p
+			elif terrain.segment_clear(u.pos,p,domain,radius,[],profile) or not terrain.path(u.pos,p,domain,radius,[],profile).is_empty(): return p
 	return Vector2(-1,-1)
 
 # Sections never stand stacked for long. Arrival spots keep orders apart, but
@@ -2327,7 +2376,7 @@ func movement_clear(u: Dictionary, to: Vector2, neighbors: Array, pressed_wrecks
 			if to.distance_squared_to(member.pos)>=u.pos.distance_squared_to(member.pos):continue
 			var near:Vector2=u.pos+step*clampf((member.pos-u.pos).dot(step)/length_squared,0,1)
 			if near.distance_to(member.pos)<clearance:return false
-	if not terrain.segment_clear(u.pos,to,d.domain,float(d.radius),pressed_wrecks): return false
+	if not terrain.segment_clear(u.pos,to,d.domain,float(d.radius),pressed_wrecks,terrain.mobility_profile(u.kind)): return false
 	for other in neighbors:
 		if not alive(other) or other.id==u.id or collision_layer(other)!=collision_layer(u): continue
 		# Two infantry sections never block each other as whole circles; their

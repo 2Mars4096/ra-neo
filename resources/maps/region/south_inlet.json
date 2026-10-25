@@ -1,7 +1,7 @@
 {
   "id": "south_inlet",
   "name": "SOUTH INLET",
-  "brief": "Secure the fishing quay, inlet head and northern landing. The land road follows the coast around the bay; naval forces support shore fighting without crossing land.",
+  "brief": "Secure the fishing quay and inlet head, then station a ship in the marked sea lane. Land and naval forces must keep the inlet open together.",
   "size": [
     448,
     320
@@ -264,13 +264,28 @@
       ]
     }
   ],
-  "enemy_works": [],
+  "enemy_works": [
+    {
+      "kind": "at_gun",
+      "position": [
+        270,
+        189
+      ]
+    },
+    {
+      "kind": "at_gun",
+      "position": [
+        285,
+        130
+      ]
+    }
+  ],
   "reserve_force": [
     {
-      "kind": "tank",
+      "kind": "boat",
       "position": [
-        420,
-        108
+        170,
+        60
       ]
     },
     {
@@ -294,6 +309,40 @@
   "field_sea_insertion": [
     195,
     275
+  ],
+  "operation": {
+    "kind": "coastal_control",
+    "title": "OPEN THE INLET",
+    "brief": "Secure all shore sectors and keep a ship in the marked sea lane for the 60-second hold. Quay and inlet-head control open the coastal supply route (+4/s).",
+    "facilities": [
+      {
+        "objective": 0,
+        "income": 2,
+        "requires_naval_control": true
+      },
+      {
+        "objective": 1,
+        "income": 2,
+        "requires_naval_control": true
+      }
+    ],
+    "naval_zone": {
+      "name": "INLET SEA LANE",
+      "position": [
+        285,
+        160
+      ],
+      "radius": 18,
+      "requires_objectives": [
+        0,
+        1
+      ]
+    },
+    "reserve_delay": 30
+  },
+  "field_enemy_sea_insertion": [
+    170,
+    60
   ],
   "hidden": false,
   "nav_cell_size": 4,

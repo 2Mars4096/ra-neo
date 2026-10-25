@@ -122,6 +122,8 @@ class MapClearance:
 
     Native Godot tests remain authoritative. These checks prevent editor saves
     with obvious unsupported surfaces or disconnected capture/insertion sites.
+    Route checks cover footprint and water connectivity. Profile-specific slope
+    access is checked natively; an infantry lookout need not be reachable by armor.
     """
     def __init__(self, sc):
         self.sc = sc
@@ -198,6 +200,28 @@ class MapClearance:
 def validate_compiled(sc: dict) -> list[str]:
     errors=[]
     clearance=MapClearance(sc)
+    # Buildings are rigid parcels, so a plateau can support them but a steep
+    # ramp cannot be hidden beneath their floor. Match Elevation.height_at's
+    # max-combined smooth ramps while keeping this authoring check independent
+    # of runtime navigation and its deliberately different mobility profiles.
+    if sc.get("elevation"):
+        def ground_height(point):
+            result = 0.0
+            for patch in sc["elevation"]:
+                x, y, w, h = patch["rect"]
+                dx = max(x-point[0], 0, point[0]-x-w)
+                dy = max(y-point[1], 0, point[1]-y-h)
+                t = max(0.0, 1.0-math.hypot(dx,dy)/patch["ramp"])
+                result = max(result, t*t*(3-2*t)*patch["height"])
+            return result
+        for building in sc.get("architecture", []):
+            if building.get("design") == "rock" or not building.get("source_size"):
+                continue
+            w, h = building["source_size"]
+            points = harbor.obb(building["position"],w,h,building.get("rotation_degrees",0))
+            heights = [ground_height(p) for p in points]+[ground_height(building["position"])]
+            if max(heights)-min(heights) > .5:
+                errors.append(f"Building {building.get('design','')} at {building['position']} crosses an elevation ramp; move it onto a flat terrace.")
     units=json.loads((ROOT/"resources/units.json").read_text())
     units.update(json.loads((ROOT/"resources/field_units.json").read_text()))
     for side in ["player_force","enemy_force","reserve_force"]:
@@ -212,6 +236,14 @@ def validate_compiled(sc: dict) -> list[str]:
     for i,p in enumerate([sc["field_insertion"]]+goals):
         if not clearance.clear(p):
             errors.append(f"{'Player insertion' if i==0 else 'Objective/enemy insertion '+str(i)} at {p} lacks land clearance.")
+    for i, facility in enumerate(sc.get("operation", {}).get("facilities", [])):
+        if "forward_position" not in facility:
+            continue
+        p = facility["forward_position"]
+        if not clearance.clear(p):
+            errors.append(f"Facility {i+1} forward insertion at {p} lacks land clearance.")
+        else:
+            goals.append(p)
     if not errors:
         for index in clearance.connected(sc["field_insertion"],goals):
             errors.append(f"Objective/enemy insertion {index+1} has no conservative land route from player insertion.")
@@ -221,8 +253,13 @@ def validate_compiled(sc: dict) -> list[str]:
             errors.append("Sea reinforcements require an unobstructed sea insertion.")
         elif not errors:
             boats=[u["position"] for k in ["player_force","enemy_force"] for u in sc.get(k,[]) if u["kind"]=="boat"]
+            zone = sc.get("operation", {}).get("naval_zone")
+            if zone:
+                if not clearance.clear(zone["position"],float(units["boat"]["radius"])+.12,"sea"):
+                    errors.append("Naval control zone needs an unobstructed water position for a boat.")
+                boats.append(zone["position"])
             if clearance.connected(sea,boats,float(units["boat"]["radius"])+.12,"sea"):
-                errors.append("A boat is disconnected from the sea insertion.")
+                errors.append("A boat or naval control zone is disconnected from the sea insertion.")
     fields=json.loads((ROOT/"resources/field_units.json").read_text())
     for i,w in enumerate(sc.get("enemy_works",[])):
         spec=fields.get(w.get("kind"),{})

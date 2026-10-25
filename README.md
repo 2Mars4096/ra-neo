@@ -14,7 +14,7 @@ Alternatively, import `project.godot` in Godot and press F6 on `scenes/main.tscn
 
 Upgrading an older checkout: [Godot's per-project user-data folder](https://docs.godotengine.org/en/4.5/tutorials/io/data_paths.html#accessing-persistent-user-data-user) now uses `For Every Dawn`. Local preferences start fresh; previous settings and diagnostic reports remain in the old folder.
 
-The game opens in **Black Sea Harbor**. Press **Deploy**, or open **Region** to choose one of four battlefields on the Black Sea Coast atlas. One supply pool buys off-map reinforcements and engineer-built support. There are no factories, refineries, harvesters or power requirements in this mode. In Harbor, capture **Harbor Approach**, **Old Town** and **Freight Yard**, and hold all three objectives uncontested for **90 seconds**. You can prevent its enemy reserve from deploying by destroying all its command posts and ammo depots before it launches.
+A new campaign opens in **Black Sea Harbor**; an existing campaign returns to its last operation briefing. Press **Deploy**, or open **Region** to choose one of five independent battlefields on the Black Sea Coast atlas. One supply pool buys off-map reinforcements and engineer-built support. There are no factories, refineries, harvesters or power requirements in this mode. In Harbor, capture **Harbor Approach**, **Old Town** and **Freight Yard**, and hold all three objectives uncontested for **90 seconds**. You can prevent its enemy reserve from deploying by destroying all its command posts and ammo depots before it launches.
 
 Select the **engineer section**, choose **Cover**, **Observation**, **Repair** or **Aid**, then click a visible clear site. Supply is charged only for an accepted site. The engineer must reach its work position and remain available while construction progresses. New orders pause work; unfinished sites can be resumed by an available engineer or cancelled for the unused-cost refund. Completed support can be destroyed.
 
@@ -39,30 +39,43 @@ Press **T** while placing wire, obstacles, trenches or sandbags to turn them 90�
 
 On Black Sea Harbor each objective is a prepared enemy position: wire, trenches, an MG bunker, AT guns, hedgehogs and garrisoned defenders. Destroy **both enemy command posts and both ammo depots** to prevent further reserve and assault-wave spawns; forces already deployed remain in the battle. The current assault schedule starts at **90 seconds**, repeats every **95 seconds**, and allows up to **10 waves** while enemy logistics survives.
 
-Starting supply is **3,200**, incoming supply is **6/sec**, and extra engineer sections cost **120**. The supply and income are deliberately doubled for current testing; they are not final balance. Six earlier scenario configurations remain as hidden development and regression fixtures. The previous classic economy is deferred for future work.
+Harbor’s initial force has **3,200 supply** and **6/sec** base income; extra engineer sections cost **120**. Later campaign deployments use the surviving force and saved supply balance. Scenario budgets, infrastructure income and regional benefits remain provisional balance values. Six earlier scenario configurations remain as hidden development and regression fixtures. The previous classic economy is deferred for future work.
 
-## Regional map and editor
+## Regional operations and editor
 
-The regional atlas connects the existing Harbor operation with three new battlefields. Select a numbered area to read its terrain and approach briefing, then open that battlefield. Wheel zoom, drag to pan, and **Fit region** let you inspect the wider coast. Opening **Region** during play pauses the current battle; returning restores it. Switching to another battlefield asks before abandoning the current operation.
+The atlas offers five separate operations. They do not need adjacent boundaries or matching roads. Select an area, inspect its briefing, then deploy. **Region** pauses the current battle; returning resumes it. Choosing another battlefield during play asks you to **Withdraw and open briefing**: surviving mobile forces and unspent supply carry forward while that battle’s tactical state is discarded.
 
-| Battlefield | Authored size | Distinct routes and terrain |
-|---|---|---|
-| Black Sea Harbor | 1024 × 768 | Existing dense city, freight quays, bayhead detours and prepared enemy positions |
-| Bayhead Rail Valley | 448 × 320 | Connected railway and sidings, parked freight wagons, workshops, workers' housing and a river corridor |
-| Limestone Pass | 448 × 320 | Solid rock outcrops, a winding main road, longer flanking farm tracks, woods and small settlements |
-| South Inlet | 448 × 320 | A majority-water battlefield, narrow inlet, fishing quays, coastal land route and naval support |
+| Battlefield | Size | Tactical problem and local infrastructure | Final hold |
+|---|---|---|---:|
+| Black Sea Harbor | 1024 × 768 | Dense urban fighting and port approaches; destroying enemy command posts and ammo depots stops new dispatch | 90 s |
+| Bayhead Rail Valley | 448 × 320 | Station adds +2 supply/s; sorting yard adds +4/s and connected forward arrivals; eastern junction cuts enemy dispatch | 75 s |
+| Limestone Pass | 448 × 320 | Infantry climb the ridge lookout while vehicles use gentler routes; upper hamlet adds +2/s; hamlet and crossroads together cut dispatch | 45 s |
+| South Inlet | 448 × 320 | Shore control and a ship in the marked sea lane jointly open +4/s coastal supply and enable the final hold | 60 s |
+| Windbreak Fields | 576 × 384 | Open fields, windbreaks and three maneuver corridors; grain exchange adds +3/s and forward arrivals; east checkpoint cuts dispatch | 55 s |
 
-Each new battlefield uses the existing supply, engineer, capture, reserve and **60-second hold** rules. Inland operations offer land and air reinforcements; Harbor and South Inlet also support naval units. The geography is an original compressed adaptation of broad Sevastopol / Heraclean Peninsula relationships. Detailed streets and tactical dimensions are authored for play. The atlas loads one battle at a time; strategic persistence and seamless travel between maps are future work. Ground remains planar, rock masses block movement and sight, and trains are parked scenery.
+All land objectives must remain owned and uncontested during the final hold. The existing reserve-resolution condition also applies. Local facility benefits stop when their required positions become contested or are lost. A cut route stops future dispatch; enemy units already on the map remain active. Inland operations accept land and air forces. Harbor and South Inlet also accept ships.
 
-For visual authoring of the **three new battlefields**, double-click **`Map Editor.command`** on macOS, or run:
+**Limestone Pass now has walkable elevation.** Ground height affects sight, fire, travel speed and the slopes each mobility class can use. The lookout’s steep approach favors infantry; the upper hamlet has a broader terrace and graded vehicle access. Other maps keep their authored flat ground. Heights confer physical observation and route advantages, without an artificial damage multiplier.
+
+### What the campaign remembers
+
+Deployment checkpoints and completed outcomes are saved locally. Survivors replace the next map’s authored starting army. Soldier casualties, wounds and remaining bleed time, vehicle integrity and component damage, ammunition, fire and flooding carry across deployments. Units that cannot enter a battlefield—such as ships on an inland operation—wait in reserve for a compatible map. Paid reinforcements that have not arrived are refunded once when the operation ends.
+
+Victory secures a location and grants its benefit on later deployments: Harbor **+1 supply/s**, Rail Valley **+2/s**, South Inlet **+1/s**, Windbreak Fields **+1/s**, and Limestone Pass **+45 seconds before the first enemy reserve dispatch**. Each location contributes once; replaying it does not stack its reward. Withdrawal or defeat releases that location.
+
+**Retry operation** after defeat restores the deployment checkpoint. **New campaign** in the atlas requires confirmation before resetting saved forces, supply and ownership. The save covers operational progress; it does not restore a mid-battle world. Closing during a battle returns to its deployment checkpoint. Enemy positions, orders, constructed works, destruction and elapsed tactical time reset on redeployment, and parked reserves do not simulate while off-map.
+
+### Map editor
+
+The editor covers **Bayhead Rail Valley, Limestone Pass, South Inlet and Windbreak Fields**. Double-click **`Map Editor.command`** on macOS, or run:
 
 ```sh
 ./tools/edit_region.sh
 ```
 
-The editor requires Python 3 and a desktop browser, with no extra packages. Draw or reshape roads, railway lines, water, districts and ridges; place building landmarks and registered props; inspect collision footprints; undo/redo edits; and import/export blueprints. **Preview** validates and compiles without saving. **Save & build** writes the source and playable map only after validation, and rejects stale saves after another writer changes the source. Restart or redeploy the selected battlefield to load the saved build.
+Draw or reshape roads, railway lines, water, districts, solid ridges and walkable elevation. The elevation inspector sets plateau height and ramp width; buildings need level terraces. The editor also supports landmarks, registered props, physical footprints, undo/redo and blueprint import/export. Expand **Operation rules** in the battlefield inspector to edit logistics and mission prerequisites. **Preview** validates without saving; **Save & build** rejects invalid or stale edits before writing the source and playable map. Redeploy to load the result.
 
-See the [regional map and authoring guide](docs/regional-map.md) for controls, geography sources, validation contracts and native screenshots. Harbor continues to use its existing deterministic generator.
+See the [regional guide](docs/regional-map.md) for campaign rules, editor controls, geography sources and verification. Harbor retains its original generator. Rails and parked wagons remain static scenery; moving trains, bridges, tunnels and amphibious unloading are not implemented. Human balance, long-session play and hardware performance remain open acceptance work.
 
 ## Controls
 
@@ -99,9 +112,10 @@ Rifles cannot chip away at armored hulls. The small UAV is hard to hit but disab
 - Articulated infantry, independently tracking turrets, wheel/rotor motion, recoil, damage smoke, missile trails, and terrain-sensitive movement.
 - Original equipment geometry, an angled RTS camera, textured terrain, industrial scenery, muzzle flashes, impacts, sparks, explosions, delayed smoke, dust, wakes, animated water, and synthesized audio.
 - Conservative model envelopes, safe deployment/formation slots, swept unit clearance, scenery clearance, and separated aircraft altitude bands.
-- Regional atlas with four playable operations, stable legacy scenario indices, and a validated visual authoring workflow for the three new maps.
+- Five-operation regional atlas, persistent expedition and supply, unique secured-location benefits, battlefield-specific logistics, and a validated editor for four external maps.
+- Walkable plateau/ramp terrain with profile-dependent slopes, height-aware sight/fire and grounded rendering, first authored on Limestone Pass.
 
-This is a **tactical MVP**, not an AAA release. It contains ten scenario configurations on a shared map framework: **four regional battlefields are available in normal play; six legacy fixtures are hidden**. Movement/combat and opponent behavior remain simplified, and the art is procedural. Multiplayer, save/load, a campaign, full skeletal animation, and production assets are not implemented. Building garrisons are abstracted; detailed room-by-room interior gameplay, general tactical crawling and vaulting are not implemented. Human usability testing and broader hardware coverage remain open.
+This is a **tactical MVP**, not an AAA release. It contains eleven scenario configurations on a shared map framework: **five regional battlefields are available in normal play; six legacy fixtures are hidden**. Movement/combat and opponent behavior remain simplified, and the art is procedural. Multiplayer, tactical-world save/load, continuous regional travel, full skeletal animation and production assets are not implemented. The local operational campaign saves deployment checkpoints and outcomes. Building garrisons are abstracted; detailed room-by-room interior gameplay, general tactical crawling and vaulting are not implemented. Human usability testing and broader hardware coverage remain open.
 
 ## Verify
 

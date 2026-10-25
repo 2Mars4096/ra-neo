@@ -6,17 +6,17 @@
     "inspiration": "Original authored, compressed fictional adaptation of the Sevastopol / Heraclean Peninsula geography. Public historic maps inform bay, valley, rail and settlement relationships; all battlefield streets, dimensions, forces and objectives are invented. No survey or current infrastructure accuracy is claimed.",
     "sources": [
       {
-        "title": "Ancient City of Tauric Chersonese and its Chora \u2014 UNESCO",
+        "title": "Ancient City of Tauric Chersonese and its Chora — UNESCO",
         "url": "https://whc.unesco.org/en/list/1411/",
         "use": "Historic urban grid and agricultural/vineyard hinterland morphology; consulted 2026-10-23."
       },
       {
-        "title": "Sebastopol and Western Crimea, 1919 \u2014 University of South Florida Maps ETC",
+        "title": "Sebastopol and Western Crimea, 1919 — University of South Florida Maps ETC",
         "url": "https://etc.usf.edu/maps/pages/2500/2582/2582.htm",
         "use": "Broad coast, relief, railway-valley and settlement relationships only; consulted 2026-10-23. No map imagery copied."
       },
       {
-        "title": "Plan de la Cherson\u00e8se \u2014 Library of Congress",
+        "title": "Plan de la Chersonèse — Library of Congress",
         "url": "https://www.loc.gov/item/2002695526/",
         "use": "Historic peninsula / bay relationship reference; no historical fortifications or troop positions reproduced."
       }
@@ -31,7 +31,7 @@
   "scenario": {
     "id": "limestone_pass",
     "name": "LIMESTONE PASS",
-    "brief": "Secure the western bend, pass crossroads and upper hamlet. Scout beyond the rock walls; longer farm tracks offer flanking approaches around the main road.",
+    "brief": "Send infantry up the ridge lookout while armor follows the graded road. Capture the crossroads and upper hamlet to cut enemy reinforcement access.",
     "size": [
       448,
       320
@@ -55,8 +55,8 @@
     ],
     "objectives": [
       [
-        128,
-        218
+        246,
+        108
       ],
       [
         250,
@@ -68,7 +68,7 @@
       ]
     ],
     "sectors": [
-      "WESTERN BEND",
+      "RIDGE LOOKOUT",
       "PASS CROSSROADS",
       "UPPER HAMLET"
     ],
@@ -157,7 +157,7 @@
         ]
       },
       {
-        "kind": "helo",
+        "kind": "rifle",
         "position": [
           57,
           270
@@ -168,15 +168,15 @@
       {
         "kind": "rifle",
         "position": [
-          137,
-          207
+          240,
+          100
         ]
       },
       {
         "kind": "atgm",
         "position": [
-          146,
-          218
+          252,
+          116
         ]
       },
       {
@@ -222,10 +222,18 @@
         ]
       }
     ],
-    "enemy_works": [],
+    "enemy_works": [
+      {
+        "kind": "fighting_trench",
+        "position": [
+          245,
+          98
+        ]
+      }
+    ],
     "reserve_force": [
       {
-        "kind": "tank",
+        "kind": "rifle",
         "position": [
           414,
           64
@@ -248,7 +256,45 @@
     ],
     "field_supply": 3200,
     "field_income": 6,
-    "hold": 60
+    "hold": 45,
+    "operation": {
+      "kind": "mountain_pass",
+      "title": "CONTROL THE PASS",
+      "brief": "Infantry can climb the lookout; vehicles need the graded road. Holding the crossroads and upper hamlet cuts enemy dispatch. Hold all sectors for 45 seconds.",
+      "facilities": [
+        {
+          "objective": 2,
+          "income": 2
+        }
+      ],
+      "deny_reserve_objectives": [
+        1,
+        2
+      ],
+      "reserve_delay": 24
+    },
+    "elevation": [
+      {
+        "rect": [
+          232,
+          88,
+          28,
+          36
+        ],
+        "height": 8,
+        "ramp": 18
+      },
+      {
+        "rect": [
+          340,
+          36,
+          96,
+          124
+        ],
+        "height": 6,
+        "ramp": 32
+      }
+    ]
   },
   "streets": [
     {
@@ -350,6 +396,30 @@
       "width": 8,
       "class": "track",
       "purpose": "long farm track around the southern limestone ridge"
+    },
+    {
+      "name": "Ridge foot track",
+      "points": [
+        [
+          168,
+          160
+        ],
+        [
+          238,
+          160
+        ],
+        [
+          246,
+          140
+        ],
+        [
+          246,
+          108
+        ]
+      ],
+      "width": 4,
+      "class": "track",
+      "purpose": "infantry climb from the western farm approach to the ridge lookout"
     }
   ],
   "city_districts": [

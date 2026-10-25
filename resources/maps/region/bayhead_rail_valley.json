@@ -1,7 +1,7 @@
 {
   "id": "bayhead_rail_valley",
   "name": "BAYHEAD RAIL VALLEY",
-  "brief": "Secure the station approach, sorting yard and eastern junction. Use service roads around parked wagons and scout the exposed railway crossings.",
+  "brief": "Seize the rail facilities to expand resupply. Capture the eastern junction before the armored reserve arrives, or prepare to stop it at the crossings.",
   "size": [
     448,
     320
@@ -237,7 +237,15 @@
       ]
     }
   ],
-  "enemy_works": [],
+  "enemy_works": [
+    {
+      "kind": "bunker",
+      "position": [
+        290,
+        196
+      ]
+    }
+  ],
   "reserve_force": [
     {
       "kind": "tank",
@@ -254,7 +262,7 @@
       ]
     },
     {
-      "kind": "atgm",
+      "kind": "tank",
       "position": [
         414,
         74
@@ -263,7 +271,30 @@
   ],
   "field_supply": 3200,
   "field_income": 6,
-  "hold": 60,
+  "hold": 75,
+  "operation": {
+    "kind": "rail_logistics",
+    "title": "SECURE THE RAIL CORRIDOR",
+    "brief": "Station +2 supply/s; sorting yard +4/s and connected forward reinforcement access. The eastern junction cuts enemy dispatch. Hold all sectors for 75 seconds.",
+    "facilities": [
+      {
+        "objective": 0,
+        "income": 2
+      },
+      {
+        "objective": 1,
+        "income": 4,
+        "forward_position": [
+          275,
+          206
+        ]
+      }
+    ],
+    "deny_reserve_objectives": [
+      2
+    ],
+    "reserve_delay": 36
+  },
   "hidden": false,
   "nav_cell_size": 4,
   "fog_cell_size": 4,

@@ -95,10 +95,42 @@ func _init() -> void:
 # Tiles outside the map are never allocated once the map size is known.
 var tile_limit:=Vector2i(-1,-1)
 static var plane:PlaneMesh
+var terrain:BattleTerrain=null
+var relief_tiles:Dictionary={}
+
+func set_terrain(value:BattleTerrain) -> void:
+	terrain=value if value.has_elevation() else null
+	relief_tiles.clear()
+
+# Build once during battlefield setup, never in the first explosion frame.
+# Flat maps retain one shared quad and pay no extra geometry cost.
+func _prepare_relief() -> void:
+	if terrain==null:return
+	var step:=clampf(float(terrain.config.get("elevation_mesh_step",2.0)),1.0,4.0)
+	var cell:Vector2=terrain.world_size/Vector2(Vector2i((terrain.world_size/step).ceil()))
+	for y in tile_limit.y:
+		for x in tile_limit.x:
+			var key:=Vector2i(x,y)
+			var surface:=SurfaceTool.new();surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+			var origin:=Vector2(key)*TILE_SIZE
+			# Share the exact land grid even when an authored mesh step does not
+			# divide the 64 m decal tile. The shader clips the small UV overhang.
+			var low:=Vector2i((origin/cell).floor())
+			var high:=Vector2i(((origin+Vector2.ONE*TILE_SIZE)/cell).ceil())
+			for j in range(low.y,high.y):
+				for i in range(low.x,high.x):
+					var p:=Vector2(i,j)*cell-origin
+					for offset in [Vector2.ZERO,cell,Vector2(0,cell.y),Vector2.ZERO,Vector2(cell.x,0),cell]:
+						var point:Vector2=p+offset
+						surface.set_normal(Vector3.UP);surface.set_uv(point/TILE_SIZE)
+						surface.add_vertex(Vector3(point.x-TILE_SIZE/2,terrain.height_at(origin+point),point.y-TILE_SIZE/2))
+			surface.index();relief_tiles[key]=surface.commit()
+
 
 func set_bounds(box:AABB, world_size:Vector2) -> void:
 	chunk_instance.custom_aabb=box
 	tile_limit=Vector2i(ceili(world_size.x/TILE_SIZE),ceili(world_size.y/TILE_SIZE))
+	_prepare_relief()
 	# Generate the common brushes during mission setup (once per process) rather than at the first explosion of
 	# each kind mid-fight.
 	for style in STYLES:
@@ -160,6 +192,7 @@ func _tile(key:Vector2i) -> Dictionary:
 	tile.used=serial
 	tile.dirty=false
 	tile.uploaded=-INF
+	tile.node.mesh=relief_tiles.get(key,plane)
 	tile.node.position=Vector3((key.x+0.5)*TILE_SIZE,HEIGHT,(key.y+0.5)*TILE_SIZE)
 	tile.node.visible=true
 	tiles[key]=tile

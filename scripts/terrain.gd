@@ -1,6 +1,12 @@
 class_name BattleTerrain
 extends RefCounted
 
+const Elevation = preload("res://scripts/elevation.gd")
+var elevation = Elevation.new()
+# Path helpers share the current profile without changing existing call sites.
+# Public path calls restore it before returning; live motion passes a profile.
+var _elevation_profile := "infantry"
+
 const SIZE := Vector2(96, 72)
 const DOCKS:Array[Rect2]=[Rect2(79.5,39.75,9,2.5),Rect2(79.5,47.75,9,2.5)]
 const CELL := 2.0
@@ -96,13 +102,12 @@ func _init(preset:int=0, config_override:Dictionary={}) -> void:
 	fog_cell_size=maxf(0.25,float(config.get("fog_cell_size",2.0)))
 	fog_grid_size=Vector2i((world_size/fog_cell_size).ceil())
 	nav_size=Vector2i((world_size/nav_cell_size).ceil())
+	elevation=Elevation.new(config.get("elevation",[]))
 	field_mode=config.get("mode","")=="field_ops"
 	map_props=config.get("map_props",[]).duplicate(true)
 	architecture=config.get("architecture",[])
 	for r in config.get("prop_blocks",[]):prop_blocks.append(Rect2(r[0],r[1],r[2],r[3]))
 	_index_crushables()
-	# Built at load (~20 ms on the harbor), not on an aircraft's first tick.
-	if not architecture.is_empty() or not map_props.is_empty():_build_air_ceiling()
 	for r in config.get("water_blocks",[]):water_blocks.append(Rect2(r[0],r[1],r[2],r[3]))
 	for r in config.get("static_cover",[]):static_cover.append(Rect2(r[0],r[1],r[2],r[3]))
 	for polygon in config.get("water_polygons",[]):
@@ -130,6 +135,9 @@ func _init(preset:int=0, config_override:Dictionary={}) -> void:
 		for side in [1.0,forest.size.x-1.0]:
 			for z in range(1,int(forest.size.y),4):
 				trees.append(forest.position+Vector2(side,float(z)))
+	# Build after vegetation: an ordinary crown on a raised plateau can exceed
+	# cruise height just as a building can. Flat maps keep their previous skyline.
+	if not architecture.is_empty() or not map_props.is_empty() or has_elevation():_build_air_ceiling()
 	rebuild_static_index(false)
 	_rebuild_water_mask()
 	for grid in [land, sea]:
@@ -145,6 +153,28 @@ func _init(preset:int=0, config_override:Dictionary={}) -> void:
 			land.set_point_solid(id, is_water(p) or blocked(p))
 			sea.set_point_solid(id, not is_water(p))
 			land.set_point_weight_scale(id, 1.0/ground_speed(p))
+
+func has_elevation() -> bool:
+	return not elevation.patches.is_empty()
+
+func height_at(p:Vector2) -> float:
+	return elevation.height_at(p)
+
+func slope_at(p:Vector2) -> float:
+	return elevation.slope_at(p)
+
+func slope_traversable(p:Vector2,radius:float,profile:String="infantry") -> bool:
+	return elevation.traversable(p,radius,profile)
+
+# Endpoint heights are relative to local ground unless absolute=true.
+func elevation_clear(a:Vector2,b:Vector2,source_height:float=1.6,target_height:float=1.6,absolute:bool=false) -> bool:
+	if not has_elevation():return true
+	var start:=source_height if absolute else source_height+height_at(a)
+	var finish:=target_height if absolute else target_height+height_at(b)
+	return elevation.line_clear(a,b,start,finish)
+
+func ground_intersection(origin:Vector3,direction:Vector3,far_limit:float=4000.0) -> Vector3:
+	return elevation.ground_intersection(origin,direction,far_limit)
 
 func center(id: Vector2i) -> Vector2:
 	return (Vector2(id)+Vector2.ONE*0.5)*fog_cell_size
@@ -205,7 +235,7 @@ func ground_speed(p:Vector2,profile:String="default") -> float:
 	var zone:=1.0
 	for item in _field_zones_at(p):
 		if item.rect.has_point(p):zone=minf(zone,float(item.speed.get(profile,1.0)))
-	return zone*_base_ground_speed(p,profile)
+	return zone*_base_ground_speed(p,profile)*elevation.speed_at(p,profile)
 
 func _base_ground_speed(p:Vector2,profile:String) -> float:
 	return _surface_speed(_surface_class(p),profile)
@@ -262,7 +292,7 @@ func profile_barrier(p:Vector2,reach:float,profile:String) -> bool:
 func _land_cell_solid(point:Vector2,radius:float,profile:String) -> bool:
 	var saved:=crush_pass
 	crush_pass=profile=="tracked"
-	var solid:=not traversable(point,"land",radius)
+	var solid:=not traversable(point,"land",radius,[],profile)
 	crush_pass=saved
 	if solid:return true
 	return profile_barrier(point,radius+nav_cell_size*0.5,profile)
@@ -278,7 +308,7 @@ func _refresh_land_cell(grid:AStarGrid2D,id:Vector2i,radius:float,profile:String
 	var anchors:Dictionary=grid.get_meta("anchors",{})
 	anchors.erase(id)
 	var solid:=_land_cell_solid(point,radius,profile)
-	if solid and nav_cell_size>=2.0 and profile in VEHICLE_PROFILES and not profile_barrier(point,radius+nav_cell_size*0.5,profile):
+	if solid and nav_cell_size>=2.0 and profile in VEHICLE_PROFILES and not profile_barrier(point,radius+nav_cell_size*0.5,profile) and slope_traversable(point,radius,profile):
 		var spacing:=nav_cell_size/3.0
 		var reach:=spacing*1.415
 		var saved:=crush_pass
@@ -286,12 +316,12 @@ func _refresh_land_cell(grid:AStarGrid2D,id:Vector2i,radius:float,profile:String
 		# Clearance changes by at most the offset, so a centre that fails at
 		# radius-reach rules out every sub-point (one cheap test for wall cells).
 		# Prefer a sub-point with room to spare so routes keep off the walls.
-		if radius<=reach+0.01 or traversable(point,"land",radius-reach):
+		if radius<=reach+0.01 or traversable(point,"land",radius-reach,[],profile):
 			var fit:=Vector2.INF
 			for offset in ANCHOR_OFFSETS:
 				var candidate:Vector2=point+offset*spacing
-				if not traversable(candidate,"land",radius):continue
-				if traversable(candidate,"land",radius+ANCHOR_ROOM):fit=candidate;break
+				if not traversable(candidate,"land",radius,[],profile):continue
+				if traversable(candidate,"land",radius+ANCHOR_ROOM,[],profile):fit=candidate;break
 				if not fit.is_finite():fit=candidate
 			if fit.is_finite():anchors[id]=fit;solid=false
 		crush_pass=saved
@@ -382,6 +412,9 @@ func surface_name(p:Vector2) -> String:
 	if is_water(p):return "WATER"
 	for zone in rubble_zones:
 		if zone.rect.has_point(p):return "RUBBLE · COVER · VEHICLES SLOWED"
+	if has_elevation() and slope_at(p)>Elevation.LIMITS.infantry:return "CLIFF · IMPASSABLE"
+	if has_elevation() and slope_at(p)>Elevation.LIMITS.tracked:return "STEEP SLOPE · INFANTRY ONLY"
+	if has_elevation() and slope_at(p)>0.08:return "SLOPE · MOVEMENT SLOWED"
 	if on_road(p):return "FIRM ROAD · ALL WEATHER"
 	if mud.has_point(p):return "WET MUD · VERY SLOW" if wetness>0.3 else "SOFT GROUND · SLOW"
 	if rubble.has_point(p):return "RUINS · COVER"
@@ -399,7 +432,7 @@ func inside(p: Vector2) -> bool:
 func default_radius(domain: String) -> float:
 	return 3.3 if domain=="sea" else (1.55 if domain=="air" else 1.8)
 
-func traversable(p: Vector2, domain: String, radius: float = -1, pressed_wrecks:Array = []) -> bool:
+func traversable(p: Vector2, domain: String, radius: float = -1, pressed_wrecks:Array = [], profile:String="") -> bool:
 	if radius<0: radius=default_radius(domain)
 	if p.x<radius or p.y<radius or p.x>world_size.x-radius or p.y>world_size.y-radius:
 		return false
@@ -416,6 +449,7 @@ func traversable(p: Vector2, domain: String, radius: float = -1, pressed_wrecks:
 			for dock in DOCKS:
 				if circle_rect(p,radius,dock): return false
 		return true
+	if has_elevation() and not slope_traversable(p,radius,profile if profile!="" else _elevation_profile):return false
 	for rect in _static_candidates("solid",p,radius+OBSTACLE_MARGIN):
 		if circle_rect(p,radius+OBSTACLE_MARGIN,rect) and not (crush_pass and crushables.has(rect)):return false
 	if water_polygons.is_empty():
@@ -528,7 +562,9 @@ func _weight_layer_upto(profile:String,end:int)->PackedFloat32Array:
 	for surface in SURFACES.size():inverse.append(1.0/_surface_speed(surface,profile))
 	var rows:=nav_size.y
 	for x in range(start,end):
-		for i in range(x*rows,x*rows+rows):weights[i]=inverse[navigation_surface[i]]
+		for i in range(x*rows,x*rows+rows):
+			weights[i]=inverse[navigation_surface[i]]
+			if has_elevation():weights[i]/=elevation.speed_at(nav_center(Vector2i(x,i%rows)),profile)
 	for zone in field_zones:
 		var rect:Rect2=zone.rect
 		for x in range(maxi(start,floori(rect.position.x/nav_cell_size)),mini(end,ceili(rect.end.x/nav_cell_size)+1)):
@@ -631,7 +667,7 @@ func _nav_grid(domain:String,radius:float,profile:String,current:bool)->AStarGri
 	navigation[key]=grid
 	return grid
 
-func segment_clear(a: Vector2, b: Vector2, domain: String, radius: float, pressed_wrecks:Array = []) -> bool:
+func segment_clear(a: Vector2, b: Vector2, domain: String, radius: float, pressed_wrecks:Array = [], profile:String="") -> bool:
 	# Exact continuous coastline guard, including thin headlands between samples.
 	if domain!="air" and not water_polygons.is_empty():
 		if not _coast_clear(a,radius,domain=="sea") or not _coast_clear(b,radius,domain=="sea"):return false
@@ -643,7 +679,7 @@ func segment_clear(a: Vector2, b: Vector2, domain: String, radius: float, presse
 	var spacing:=maxf(0.35,radius*0.9)
 	var steps:=maxi(1,ceili(a.distance_to(b)/spacing))
 	for i in range(1,steps+1):
-		if not traversable(a.lerp(b,float(i)/steps),domain,radius,pressed_wrecks): return false
+		if not traversable(a.lerp(b,float(i)/steps),domain,radius,pressed_wrecks,profile): return false
 	return true
 
 func nearest_cell(p: Vector2, grid: AStarGrid2D, domain: String, radius: float) -> Vector2i:
@@ -718,10 +754,11 @@ func path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid:
 	if memo and path_memo.has(key):return path_memo[key].duplicate()
 	# Tracked vehicles plan straight through crushable street furniture.
 	crush_pass=domain=="land" and profile=="tracked"
+	var previous_profile:=_elevation_profile;_elevation_profile=profile
 	var started:=Time.get_ticks_usec()
 	var planned:=_path(from,to,domain,radius,avoid,profile)
 	path_usec+=Time.get_ticks_usec()-started;path_calls+=1
-	crush_pass=false
+	crush_pass=false;_elevation_profile=previous_profile
 	if memo:path_memo[key]=planned.duplicate()
 	return planned
 
@@ -747,8 +784,9 @@ var path_usec:=0
 func reachable(from:Vector2,to:Vector2,domain:String,radius:float=-1,profile:String="default")->bool:
 	if radius<0: radius=default_radius(domain)
 	crush_pass=domain=="land" and profile=="tracked"
+	var previous_profile:=_elevation_profile;_elevation_profile=profile
 	var found:=_reachable(from,to,domain,radius,profile)
-	crush_pass=false
+	crush_pass=false;_elevation_profile=previous_profile
 	return found
 
 func _reachable(from:Vector2,to:Vector2,domain:String,radius:float,profile:String)->bool:
@@ -817,20 +855,22 @@ func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid
 # edges published in a later step are checked against the terrain of that step.
 func path_job(from:Vector2,to:Vector2,domain:String,radius:float=-1,avoid:Array=[],profile:String="default")->Dictionary:
 	crush_pass=domain=="land" and profile=="tracked"
+	var previous_profile:=_elevation_profile;_elevation_profile=profile
 	var started:=Time.get_ticks_usec()
 	var job:=_path_begin(from,to,domain,radius,avoid,profile)
 	path_usec+=Time.get_ticks_usec()-started;path_calls+=1
-	crush_pass=false
+	crush_pass=false;_elevation_profile=previous_profile
 	return job
 
 func path_job_step(job:Dictionary,work:int)->bool:
 	if job.done:return true
 	crush_pass=job.domain=="land" and job.profile=="tracked"
+	var previous_profile:=_elevation_profile;_elevation_profile=job.profile
 	var started:=Time.get_ticks_usec()
 	job.edges.clear() # terrain may have changed since the last step
 	_path_smooth(job,work)
 	path_usec+=Time.get_ticks_usec()-started
-	crush_pass=false
+	crush_pass=false;_elevation_profile=previous_profile
 	return job.done
 
 func _path_begin(from: Vector2, to: Vector2, domain: String, radius: float, avoid:Array, profile:String) -> Dictionary:
@@ -1070,6 +1110,7 @@ func segment_travel_cost(a:Vector2,b:Vector2,domain:String="land",profile:String
 	return cost
 
 func line_clear(a: Vector2, b: Vector2) -> bool:
+	if has_elevation() and not elevation_clear(a,b):return false
 	var steps := maxi(1, ceili(a.distance_to(b) / 0.8))
 	if steps<2:return true
 	# Samples lie in the segment's box: rects missing it never hold one, so
@@ -1407,14 +1448,14 @@ var _air_built:=false
 
 func air_ceiling(p:Vector2)->float:
 	if not _air_built:_build_air_ceiling()
-	if _air_ceiling.is_empty():return 0.0
+	if _air_ceiling.is_empty():return height_at(p)
 	var g:Vector2=p/AIR_CELL-Vector2(0.5,0.5)
 	var x0:=clampi(floori(g.x),0,_air_size.x-1);var y0:=clampi(floori(g.y),0,_air_size.y-1)
 	var x1:=mini(x0+1,_air_size.x-1);var y1:=mini(y0+1,_air_size.y-1)
 	var fx:=clampf(g.x-x0,0.0,1.0);var fy:=clampf(g.y-y0,0.0,1.0)
 	var top:=lerpf(_air_ceiling[y0*_air_size.x+x0],_air_ceiling[y0*_air_size.x+x1],fx)
 	var bottom:=lerpf(_air_ceiling[y1*_air_size.x+x0],_air_ceiling[y1*_air_size.x+x1],fx)
-	return lerpf(top,bottom,fy)
+	return maxf(height_at(p),lerpf(top,bottom,fy))
 
 # [footprint, top] for every authored structure at least AIR_MIN_TOP tall.
 func air_obstacles()->Array:
@@ -1424,6 +1465,7 @@ func air_obstacles()->Array:
 		var design:String=str(spec.get("design",""))
 		var floors:int=int(spec.get("floors",1))
 		var top:float=City.height_cap(design,floors) if City.handles(design) else (4.0 if design=="rock" else floors*3.2+1.5)
+		if spec.has("position"):top+=height_at(Vector2(float(spec.position[0]),float(spec.position[1])))
 		if top<AIR_MIN_TOP or not spec.has("source_size"):continue
 		var size:=Vector2(float(spec.source_size[0]),float(spec.source_size[1]))
 		var yaw:=deg_to_rad(float(spec.get("rotation_degrees",0.0)))
@@ -1438,15 +1480,21 @@ func air_obstacles()->Array:
 			var spec:Dictionary=specs.get(str(prop.get("id",prop.get("asset_id",""))),{})
 			if spec.is_empty():continue
 			var top:float=float(spec.get("height",0.0))+float(prop.get("elevation",0.0))
-			if top<AIR_MIN_TOP:continue
 			var point=prop.get("position",prop.get("pos",[0,0]))
 			var pos:Vector2=point if point is Vector2 else Vector2(point[0],point[1])
+			top+=height_at(pos)
+			if top<AIR_MIN_TOP:continue
 			var yaw:float=float(prop.get("yaw",deg_to_rad(float(prop.get("rotation_degrees",0.0)))))
 			var f:Array=spec.footprint
 			var bounds:=Rect2(pos+Vector2(float(f[0]),float(f[1])).rotated(-yaw),Vector2.ZERO)
 			for corner in [Vector2(f[0],f[1]),Vector2(float(f[0])+float(f[2]),f[1]),Vector2(float(f[0])+float(f[2]),float(f[1])+float(f[3])),Vector2(f[0],float(f[1])+float(f[3]))]:
 				bounds=bounds.expand(pos+corner.rotated(-yaw))
 			result.append([bounds,top])
+	if has_elevation():
+		for point in trees:
+			if point==FELLED_TREE:continue
+			var top:=height_at(point)+4.0
+			if top>=AIR_MIN_TOP:result.append([Rect2(point-Vector2.ONE,Vector2.ONE*2.0),top])
 	return result
 
 func _build_air_ceiling()->void:

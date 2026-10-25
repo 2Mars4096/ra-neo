@@ -3,6 +3,7 @@ extends Control
 # battlefield; this view never creates a second simulation or changes its rules.
 signal closed
 signal battlefield_requested(scenario_index:int)
+signal reset_requested
 
 const Catalog := preload("res://scripts/region_catalog.gd")
 const INK := Color("131c1d")
@@ -16,6 +17,9 @@ var selected_id:=""
 var active_id:=""
 var live_battle:=false
 var confirming:=false
+var resetting:=false
+var campaign
+var campaign_summary:Label
 var canvas:MapCanvas
 var title:Label
 var details_title:Label
@@ -160,13 +164,14 @@ class MapCanvas extends Control:
 			var r:=Rect2(world_to_screen(bounds.position),bounds.size*scale_factor())
 			var chosen:bool=str(item.id)==controller.selected_id
 			var hovered:bool=str(item.id)==hover_id
-			var color:Color=ACCENT if chosen else (TEXT if hovered else Color("a4c1ad"))
+			var controlled:bool=controller.campaign!=null and controller.campaign.secured(str(item.id))
+			var color:Color=ACCENT if chosen else (TEXT if hovered else (Color("72dac8") if controlled else Color("a4c1ad")))
 			draw_rect(r,Color(color,0.16 if chosen else 0.06))
 			draw_rect(r,color,false,2 if chosen else 1)
 			var centre:=r.get_center()
 			draw_circle(centre,15,INK)
 			draw_arc(centre,15,0,TAU,32,color,2,true)
-			draw_string(map_font,centre+Vector2(-8,5),"%02d" % number,HORIZONTAL_ALIGNMENT_LEFT,-1,13,color)
+			draw_string(map_font,centre+Vector2(-8,5),"✓" if controlled else "%02d" % number,HORIZONTAL_ALIGNMENT_LEFT,-1,13,color)
 			if chosen:
 				var label:=str(item.get("name",item.id))
 				var width:=map_font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,13).x+16
@@ -244,6 +249,9 @@ func _ready() -> void:
 	close.custom_minimum_size=Vector2(230,42)
 	close.size_flags_vertical=Control.SIZE_SHRINK_CENTER
 	header.add_child(close)
+	var reset:=make_button("New campaign",request_reset)
+	reset.size_flags_vertical=Control.SIZE_SHRINK_CENTER
+	header.add_child(reset)
 	var body:=HBoxContainer.new()
 	body.size_flags_vertical=Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation",20)
@@ -280,6 +288,8 @@ func _ready() -> void:
 	right.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation",9)
 	scroll.add_child(right)
+	campaign_summary=make_label(right,"",12,MUTED)
+	campaign_summary.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
 	make_label(right,"BATTLEFIELDS",12,ACCENT)
 	var locations:=VBoxContainer.new()
 	locations.name="Locations"
@@ -336,11 +346,14 @@ func make_button(value:String,callback:Callable) -> Button:
 	button.pressed.connect(callback)
 	return button
 
-func show_region(scenario_id:String,in_progress:bool=false) -> void:
+func show_region(scenario_id:String,in_progress:bool=false,campaign_state=null) -> void:
 	region=Catalog.data()
+	campaign=campaign_state
+	campaign_summary.text=campaign.summary() if campaign!=null else ""
 	active_id=Catalog.for_scenario(region,scenario_id)
 	live_battle=in_progress
 	confirming=false
+	resetting=false
 	title.text=str(region.get("name","REGIONAL MAP")).to_upper()
 	attribution.text=str(region.get("attribution","Fictional region inspired by real coastal geography. Battlefield distances are compressed for play."))
 	var locations:VBoxContainer=find_child("Locations",true,false)
@@ -351,7 +364,8 @@ func show_region(scenario_id:String,in_progress:bool=false) -> void:
 	for item in region.get("battlefields",[]):
 		index+=1
 		var id:=str(item.id)
-		var button:=make_button("%02d  %s" % [index,str(item.get("name",id))],func():select_battlefield(id))
+		var prefix:String="✓" if campaign!=null and campaign.secured(id) else "%02d" % index
+		var button:=make_button("%s  %s" % [prefix,str(item.get("name",id))],func():select_battlefield(id))
 		button.alignment=HORIZONTAL_ALIGNMENT_LEFT
 		button.toggle_mode=true
 		button.text_overrun_behavior=TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -368,7 +382,9 @@ func select_battlefield(id:String) -> void:
 	var item:=Catalog.battlefield(region,id)
 	selected_id=id
 	confirming=false
+	resetting=false
 	cancel_switch.hide()
+	cancel_switch.text="Keep current battle"
 	details_title.text=str(item.get("name","No battlefield selected"))
 	terrain_label.text=str(item.get("terrain","Regional operation")).to_upper()
 	summary.text=str(item.get("summary",region.get("description","")))
@@ -379,6 +395,9 @@ func select_battlefield(id:String) -> void:
 	launch.disabled=Catalog.scenario_index(region,id)<0
 	launch.text="Back to current battlefield" if id==active_id else "Open battlefield briefing  →"
 	status.text="CURRENT BATTLEFIELD" if id==active_id else "A fresh operation starts at its deployment briefing."
+	if campaign!=null:
+		var consequence:String=campaign.benefit(id)
+		if consequence!="":status.text=("SECURED · " if campaign.secured(id) else "SECURE · ")+consequence
 	if launch.disabled:status.text="This battlefield is currently unavailable."
 	canvas.queue_redraw()
 
@@ -387,6 +406,9 @@ func cancel_confirmation() -> void:
 	launch.grab_focus()
 
 func request_battlefield() -> void:
+	if resetting:
+		reset_requested.emit()
+		return
 	var index:=Catalog.scenario_index(region,selected_id)
 	if index<0:return
 	if selected_id==active_id:
@@ -394,12 +416,20 @@ func request_battlefield() -> void:
 		return
 	if live_battle and not confirming:
 		confirming=true
-		status.text="Switch battlefield? Your current battle progress will be lost."
-		launch.text="Leave battle and open briefing"
+		status.text="Withdraw? Survivors and unspent supply carry forward. This operation's tactical progress is lost."
+		launch.text="Withdraw and open briefing"
 		cancel_switch.show()
 		cancel_switch.grab_focus()
 		return
 	battlefield_requested.emit(index)
+
+func request_reset() -> void:
+	confirming=true;resetting=true
+	status.text="Start a new campaign? Saved forces, supply and secured areas will be reset."
+	launch.text="Start new campaign"
+	launch.disabled=false
+	cancel_switch.text="Keep current campaign"
+	cancel_switch.show();cancel_switch.grab_focus()
 
 func dismiss() -> void:
 	canvas.dragging=false

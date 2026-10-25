@@ -14,8 +14,8 @@ class RegionalAuthoringTests(unittest.TestCase):
         cls.blueprints = {p.stem: json.loads(p.read_text()) for p in BLUEPRINT_DIR.glob("*.json")}
         cls.configs = {p.stem: json.loads(p.read_text()) for p in OUTPUT_DIR.glob("*.json")}
 
-    def test_all_three_maps_reproduce_and_are_connected(self):
-        self.assertEqual(set(self.blueprints), {"bayhead_rail_valley", "limestone_pass", "south_inlet"})
+    def test_all_four_maps_reproduce_and_are_connected(self):
+        self.assertEqual(set(self.blueprints), {"bayhead_rail_valley", "limestone_pass", "south_inlet", "windbreak_fields"})
         for ident, data in self.blueprints.items():
             with self.subTest(map=ident):
                 self.assertEqual(validate_blueprint(data), [])
@@ -35,7 +35,59 @@ class RegionalAuthoringTests(unittest.TestCase):
             if "map_path" in item:
                 path=ROOT/item["map_path"].removeprefix("res://")
                 self.assertEqual(json.loads(path.read_text())["id"],item["id"])
-        self.assertEqual(len(ids),4)
+        self.assertEqual(len(ids),5)
+
+    def test_maneuver_map_has_distinct_routes_and_functional_logistics(self):
+        source = self.blueprints["windbreak_fields"]
+        scenario = source["scenario"]
+        self.assertEqual(scenario["size"], [576, 384])
+        self.assertGreaterEqual(len(source["streets"]), 5)
+        self.assertTrue(any(st["class"] == "arterial" for st in source["streets"]))
+        self.assertTrue(any(st["class"] == "track" for st in source["streets"]))
+        self.assertGreater(len(scenario["woods"]), 3)
+        self.assertEqual(scenario["operation"]["deny_reserve_objectives"], [2])
+        self.assertGreater(scenario["operation"]["facilities"][0]["income"], 0)
+
+    def test_elevation_rejects_invalid_values_and_preserves_valid_source(self):
+        source = copy.deepcopy(self.blueprints["windbreak_fields"])
+        source["scenario"]["elevation"] = [{"rect":[250,150,20,30],"height":8,"ramp":24}]
+        self.assertEqual(validate_blueprint(source), [])
+        for key, value in [("height", float("inf")), ("height", -1), ("ramp", 0), ("rect", [570,150,20,30])]:
+            changed = copy.deepcopy(source)
+            changed["scenario"]["elevation"][0][key] = value
+            with self.subTest(key=key, value=value):
+                self.assertTrue(any("Elevation" in e for e in validate_blueprint(changed)))
+        source["scenario"]["elevation"] *= 17
+        self.assertTrue(any("at most 16" in e for e in validate_blueprint(source)))
+
+    def test_operation_rejects_broken_indices_and_nonfinite_economy(self):
+        source = copy.deepcopy(self.blueprints["windbreak_fields"])
+        for value in [8, -1, True, 1.5]:
+            changed = copy.deepcopy(source)
+            changed["scenario"]["operation"]["facilities"][0]["objective"] = value
+            self.assertTrue(any("objective index" in e for e in validate_blueprint(changed)))
+        source["scenario"]["operation"]["facilities"][0]["income"] = float("nan")
+        source["scenario"]["operation"]["reserve_delay"] = -1
+        issues = validate_blueprint(source)
+        self.assertTrue(any("income" in e for e in issues))
+        self.assertTrue(any("reserve_delay" in e for e in issues))
+
+    def test_forward_insertion_must_have_physical_land_clearance(self):
+        source = copy.deepcopy(self.configs["windbreak_fields"])
+        source["operation"]["facilities"][0]["forward_position"] = source["blocks"][0][:2]
+        self.assertTrue(any("Facility 1 forward insertion" in e for e in validate_compiled(source)))
+
+    def test_rigid_building_cannot_straddle_an_elevation_ramp(self):
+        source = copy.deepcopy(self.configs["windbreak_fields"])
+        building = next(b for b in source["architecture"] if b.get("design") == "barn_long")
+        x, y = building["position"]
+        source["elevation"] = [{"rect":[x-1,y-1,2,2],"height":8,"ramp":4}]
+        self.assertTrue(any("crosses an elevation ramp" in e for e in validate_compiled(source)))
+
+    def test_coastal_logistics_require_a_defined_naval_zone(self):
+        source = copy.deepcopy(self.blueprints["windbreak_fields"])
+        source["scenario"]["operation"]["facilities"][0]["requires_naval_control"] = True
+        self.assertTrue(any("require a naval control zone" in e for e in validate_blueprint(source)))
 
     def test_road_cannot_cross_water_without_a_bridge(self):
         data=copy.deepcopy(self.blueprints["bayhead_rail_valley"])

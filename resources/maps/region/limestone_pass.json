@@ -1,7 +1,7 @@
 {
   "id": "limestone_pass",
   "name": "LIMESTONE PASS",
-  "brief": "Secure the western bend, pass crossroads and upper hamlet. Scout beyond the rock walls; longer farm tracks offer flanking approaches around the main road.",
+  "brief": "Send infantry up the ridge lookout while armor follows the graded road. Capture the crossroads and upper hamlet to cut enemy reinforcement access.",
   "size": [
     448,
     320
@@ -25,8 +25,8 @@
   ],
   "objectives": [
     [
-      128,
-      218
+      246,
+      108
     ],
     [
       250,
@@ -38,7 +38,7 @@
     ]
   ],
   "sectors": [
-    "WESTERN BEND",
+    "RIDGE LOOKOUT",
     "PASS CROSSROADS",
     "UPPER HAMLET"
   ],
@@ -127,7 +127,7 @@
       ]
     },
     {
-      "kind": "helo",
+      "kind": "rifle",
       "position": [
         57,
         270
@@ -138,15 +138,15 @@
     {
       "kind": "rifle",
       "position": [
-        137,
-        207
+        240,
+        100
       ]
     },
     {
       "kind": "atgm",
       "position": [
-        146,
-        218
+        252,
+        116
       ]
     },
     {
@@ -192,10 +192,18 @@
       ]
     }
   ],
-  "enemy_works": [],
+  "enemy_works": [
+    {
+      "kind": "fighting_trench",
+      "position": [
+        245,
+        98
+      ]
+    }
+  ],
   "reserve_force": [
     {
-      "kind": "tank",
+      "kind": "rifle",
       "position": [
         414,
         64
@@ -218,7 +226,45 @@
   ],
   "field_supply": 3200,
   "field_income": 6,
-  "hold": 60,
+  "hold": 45,
+  "operation": {
+    "kind": "mountain_pass",
+    "title": "CONTROL THE PASS",
+    "brief": "Infantry can climb the lookout; vehicles need the graded road. Holding the crossroads and upper hamlet cuts enemy dispatch. Hold all sectors for 45 seconds.",
+    "facilities": [
+      {
+        "objective": 2,
+        "income": 2
+      }
+    ],
+    "deny_reserve_objectives": [
+      1,
+      2
+    ],
+    "reserve_delay": 24
+  },
+  "elevation": [
+    {
+      "rect": [
+        232,
+        88,
+        28,
+        36
+      ],
+      "height": 8,
+      "ramp": 18
+    },
+    {
+      "rect": [
+        340,
+        36,
+        96,
+        124
+      ],
+      "height": 6,
+      "ramp": 32
+    }
+  ],
   "hidden": false,
   "nav_cell_size": 4,
   "fog_cell_size": 4,
@@ -2923,27 +2969,27 @@
       1.05
     ],
     [
-      152.54,
-      240.7412,
+      143.54,
+      239.4139,
       3.32,
-      2.57
+      3.57
     ],
     [
-      152.95,
-      239.6762,
+      143.95,
+      238.3489,
       2.5,
       1.05
     ],
     [
-      157.14,
-      232.1663,
-      10.32,
-      5.07
+      155.0913,
+      230.7518,
+      8.32,
+      5.57
     ],
     [
-      161.05,
-      231.1013,
-      2.5,
+      158.0012,
+      229.6868,
+      2.5001,
       1.05
     ],
     [
@@ -2977,34 +3023,16 @@
       12.0
     ],
     [
-      66.54,
-      282.933,
-      8.3201,
-      7.07
+      63.54,
+      280.7086,
+      9.3201,
+      5.0701
     ],
     [
-      69.45,
-      281.868,
+      66.95,
+      279.6437,
       2.5,
       1.0501
-    ],
-    [
-      67.39,
-      302.7032,
-      25.22,
-      8.1121
-    ],
-    [
-      67.5,
-      301.7632,
-      25.0,
-      1.0001
-    ],
-    [
-      67.5,
-      310.7552,
-      25.0,
-      1.0
     ],
     [
       62,
@@ -3406,21 +3434,21 @@
       "collision_geometry": "ground_body"
     },
     {
-      "design": "dacha_hut",
+      "design": "outbuilding",
       "position": [
-        154.2,
-        241.6012
+        145.2,
+        240.7739
       ],
       "rotation_degrees": 0.0,
       "source_size": [
         4.0,
-        4.0
+        5.0
       ],
       "floors": 1,
-      "variant": 0,
-      "palette": 2,
-      "damage": 1,
-      "seed": 919500650,
+      "variant": 2,
+      "palette": 0,
+      "damage": 0,
+      "seed": 1427176935,
       "district": "pass_services",
       "morphology": "village",
       "collision": [
@@ -3432,19 +3460,19 @@
     {
       "design": "stone_house",
       "position": [
-        162.3,
-        234.2763
+        159.2513,
+        233.1118
       ],
       "rotation_degrees": 0.0,
       "source_size": [
-        11.0,
-        6.5
+        9.0,
+        7.0
       ],
       "floors": 2,
       "variant": 1,
-      "palette": 0,
+      "palette": 2,
       "damage": 0,
-      "seed": 1554902042,
+      "seed": 11619486,
       "district": "pass_services",
       "morphology": "village",
       "street": "Pass road",
@@ -3533,19 +3561,19 @@
     {
       "design": "stone_house",
       "position": [
-        70.7,
-        286.043
+        68.2,
+        282.8187
       ],
       "rotation_degrees": 0.0,
       "source_size": [
-        9.0,
-        8.5
+        10.0,
+        6.5
       ],
-      "floors": 2,
-      "variant": 1,
+      "floors": 1,
+      "variant": 2,
       "palette": 3,
       "damage": 0,
-      "seed": 1858911746,
+      "seed": 1521325880,
       "district": "lower_village",
       "morphology": "village",
       "street": "Pass road",
@@ -3553,30 +3581,6 @@
       "collision": [
         457,
         2
-      ],
-      "collision_geometry": "ground_body"
-    },
-    {
-      "design": "barn_long",
-      "position": [
-        80.0,
-        306.7592
-      ],
-      "rotation_degrees": 0.0,
-      "source_size": [
-        26.0,
-        10.592
-      ],
-      "floors": 1,
-      "variant": 3,
-      "palette": 1,
-      "damage": 0,
-      "seed": 1784507360,
-      "district": "lower_village",
-      "morphology": "village",
-      "collision": [
-        459,
-        3
       ],
       "collision_geometry": "ground_body"
     },
@@ -3594,7 +3598,7 @@
       ],
       "district": "open",
       "collision": [
-        462,
+        459,
         1
       ]
     },
@@ -3612,7 +3616,7 @@
       ],
       "district": "open",
       "collision": [
-        463,
+        460,
         1
       ]
     },
@@ -3630,7 +3634,7 @@
       ],
       "district": "open",
       "collision": [
-        464,
+        461,
         1
       ]
     },
@@ -3648,7 +3652,7 @@
       ],
       "district": "open",
       "collision": [
-        465,
+        462,
         1
       ]
     },
@@ -3666,7 +3670,7 @@
       ],
       "district": "open",
       "collision": [
-        466,
+        463,
         1
       ]
     },
@@ -3684,7 +3688,7 @@
       ],
       "district": "open",
       "collision": [
-        467,
+        464,
         1
       ]
     },
@@ -3702,7 +3706,7 @@
       ],
       "district": "open",
       "collision": [
-        468,
+        465,
         1
       ]
     },
@@ -3720,7 +3724,7 @@
       ],
       "district": "open",
       "collision": [
-        469,
+        466,
         1
       ]
     }
@@ -3931,12 +3935,12 @@
     {
       "id": "fence.picket",
       "position": [
-        85.58672,
+        71.23218,
         278.25
       ],
       "rotation_degrees": -0.0,
       "bounds": [
-        82.5867,
+        68.2321,
         278.17,
         6.0001,
         0.16
@@ -3953,12 +3957,12 @@
     {
       "id": "fence.picket",
       "position": [
-        68.44336,
+        65.76609,
         278.25
       ],
       "rotation_degrees": 0.0,
       "bounds": [
-        65.4433,
+        62.766,
         278.17,
         6.0001,
         0.16
@@ -3975,12 +3979,12 @@
     {
       "id": "fence.picket",
       "position": [
-        74.44336,
+        78.48775,
         278.25
       ],
       "rotation_degrees": 0.0,
       "bounds": [
-        71.4433,
+        75.4877,
         278.17,
         6.0001,
         0.16
@@ -3997,20 +4001,152 @@
     {
       "id": "fence.picket",
       "position": [
-        80.44336,
-        278.25
+        83.69331,
+        281.35546
+      ],
+      "rotation_degrees": -90.0,
+      "bounds": [
+        83.6133,
+        278.3554,
+        0.1601,
+        6.0001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "plot boundary wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "lower_village"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        83.69331,
+        287.35546
+      ],
+      "rotation_degrees": -90.0,
+      "bounds": [
+        83.6133,
+        284.3554,
+        0.1601,
+        6.0001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "plot boundary wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "lower_village"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        83.69331,
+        293.35546
+      ],
+      "rotation_degrees": -90.0,
+      "bounds": [
+        83.6133,
+        290.3554,
+        0.1601,
+        6.0001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "plot boundary wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "lower_village"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        83.69331,
+        299.35546
+      ],
+      "rotation_degrees": -90.0,
+      "bounds": [
+        83.6133,
+        296.3554,
+        0.1601,
+        6.0001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "plot boundary wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "lower_village"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        83.69331,
+        305.35546
+      ],
+      "rotation_degrees": -90.0,
+      "bounds": [
+        83.6133,
+        302.3554,
+        0.1601,
+        6.0001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "plot boundary wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "lower_village"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        83.69331,
+        311.35546
+      ],
+      "rotation_degrees": -90.0,
+      "bounds": [
+        83.6133,
+        308.3554,
+        0.1601,
+        6.0001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "plot boundary wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "lower_village"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        67.02165,
+        314.41092
       ],
       "rotation_degrees": 0.0,
       "bounds": [
-        77.4433,
-        278.17,
+        64.0216,
+        314.3309,
         6.0001,
-        0.16
+        0.1601
       ],
       "domain": "land",
       "cover": false,
       "collision": "solid",
-      "context": "front yard wall",
+      "context": "rear plot wall",
       "placement_tags": [
         "garden"
       ],
@@ -4019,146 +4155,14 @@
     {
       "id": "fence.picket",
       "position": [
-        91.14336,
-        278.25
+        73.02165,
+        314.41092
       ],
       "rotation_degrees": 0.0,
       "bounds": [
-        88.1433,
-        278.17,
+        70.0216,
+        314.3309,
         6.0001,
-        0.16
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "front yard wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "lower_village"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        94.65,
-        283.93158
-      ],
-      "rotation_degrees": -90.0,
-      "bounds": [
-        94.57,
-        280.9315,
-        0.16,
-        6.0001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "plot boundary wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "lower_village"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        94.65,
-        289.93158
-      ],
-      "rotation_degrees": -90.0,
-      "bounds": [
-        94.57,
-        286.9315,
-        0.16,
-        6.0001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "plot boundary wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "lower_village"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        94.65,
-        295.93158
-      ],
-      "rotation_degrees": -90.0,
-      "bounds": [
-        94.57,
-        292.9315,
-        0.16,
-        6.0001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "plot boundary wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "lower_village"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        94.65,
-        301.93158
-      ],
-      "rotation_degrees": -90.0,
-      "bounds": [
-        94.57,
-        298.9315,
-        0.16,
-        6.0001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "plot boundary wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "lower_village"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        94.65,
-        307.93158
-      ],
-      "rotation_degrees": -90.0,
-      "bounds": [
-        94.57,
-        304.9315,
-        0.16,
-        6.0001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "plot boundary wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "lower_village"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        71.0,
-        313.56317
-      ],
-      "rotation_degrees": 0.0,
-      "bounds": [
-        68.0,
-        313.4831,
-        6.0,
         0.1601
       ],
       "domain": "land",
@@ -4173,14 +4177,14 @@
     {
       "id": "fence.picket",
       "position": [
-        77.0,
-        313.56317
+        79.02165,
+        314.41092
       ],
       "rotation_degrees": 0.0,
       "bounds": [
-        74.0,
-        313.4831,
-        6.0,
+        76.0216,
+        314.3309,
+        6.0001,
         0.1601
       ],
       "domain": "land",
@@ -4193,58 +4197,83 @@
       "district": "lower_village"
     },
     {
-      "id": "fence.picket",
+      "id": "tree.acacia",
       "position": [
-        83.0,
-        313.56317
+        75.12218,
+        307.65531
       ],
-      "rotation_degrees": 0.0,
+      "rotation_degrees": 90.0,
       "bounds": [
-        80.0,
-        313.4831,
-        6.0,
-        0.1601
+        74.7221,
+        307.2553,
+        0.8001,
+        0.8001
       ],
       "domain": "land",
       "cover": false,
       "collision": "solid",
-      "context": "rear plot wall",
+      "context": "garden fruit tree",
       "placement_tags": [
-        "garden"
+        "yard",
+        "street"
+      ],
+      "district": "lower_village"
+    },
+    {
+      "id": "orchard.trained_row",
+      "position": [
+        77.56271,
+        298.14778
+      ],
+      "rotation_degrees": -0.0,
+      "bounds": [
+        74.2127,
+        297.5477,
+        6.7001,
+        1.2001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "garden fruit tree",
+      "placement_tags": [
+        "orchard",
+        "kitchen_garden"
+      ],
+      "district": "lower_village"
+    },
+    {
+      "id": "tree.acacia",
+      "position": [
+        78.40843,
+        310.32712
+      ],
+      "rotation_degrees": 90.0,
+      "bounds": [
+        78.0084,
+        309.9271,
+        0.8001,
+        0.8001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "garden fruit tree",
+      "placement_tags": [
+        "yard",
+        "street"
       ],
       "district": "lower_village"
     },
     {
       "id": "fence.picket",
       "position": [
-        89.0,
-        313.56317
-      ],
-      "rotation_degrees": 0.0,
-      "bounds": [
-        86.0,
-        313.4831,
-        6.0,
-        0.1601
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "rear plot wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "lower_village"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        156.66597,
+        150.41929,
         226.25
       ],
       "rotation_degrees": -0.0,
       "bounds": [
-        153.6659,
+        147.4192,
         226.17,
         6.0001,
         0.16
@@ -4261,12 +4290,12 @@
     {
       "id": "fence.picket",
       "position": [
-        163.68299,
+        145.35964,
         226.25
       ],
       "rotation_degrees": 0.0,
       "bounds": [
-        160.6829,
+        142.3596,
         226.17,
         6.0001,
         0.16
@@ -4283,80 +4312,102 @@
     {
       "id": "fence.picket",
       "position": [
-        168.65,
-        229.35062
-      ],
-      "rotation_degrees": -90.0,
-      "bounds": [
-        168.57,
-        226.3506,
-        0.1601,
-        6.0001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "plot boundary wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "pass_services"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        168.65,
-        235.35062
-      ],
-      "rotation_degrees": -90.0,
-      "bounds": [
-        168.57,
-        232.3506,
-        0.1601,
-        6.0001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "plot boundary wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "pass_services"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        168.65,
-        241.35062
-      ],
-      "rotation_degrees": -90.0,
-      "bounds": [
-        168.57,
-        238.3506,
-        0.1601,
-        6.0001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "plot boundary wall",
-      "placement_tags": [
-        "garden"
-      ],
-      "district": "pass_services"
-    },
-    {
-      "id": "fence.picket",
-      "position": [
-        157.0,
-        244.40125
+        155.53529,
+        226.25
       ],
       "rotation_degrees": 0.0,
       "bounds": [
-        154.0,
-        244.3212,
-        6.0,
+        152.5352,
+        226.17,
+        6.0001,
+        0.16
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "front yard wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "pass_services"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        161.53529,
+        226.25
+      ],
+      "rotation_degrees": 0.0,
+      "bounds": [
+        158.5352,
+        226.17,
+        6.0001,
+        0.16
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "front yard wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "pass_services"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        164.60129,
+        232.18697
+      ],
+      "rotation_degrees": -90.0,
+      "bounds": [
+        164.5212,
+        229.1869,
+        0.1601,
+        6.0001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "plot boundary wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "pass_services"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        164.60129,
+        238.18697
+      ],
+      "rotation_degrees": -90.0,
+      "bounds": [
+        164.5212,
+        235.1869,
+        0.1601,
+        6.0001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "plot boundary wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "pass_services"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        147.47564,
+        244.07395
+      ],
+      "rotation_degrees": 0.0,
+      "bounds": [
+        144.4756,
+        243.9939,
+        6.0001,
         0.1601
       ],
       "domain": "land",
@@ -4371,14 +4422,14 @@
     {
       "id": "fence.picket",
       "position": [
-        163.0,
-        244.40125
+        153.47564,
+        244.07395
       ],
       "rotation_degrees": 0.0,
       "bounds": [
-        160.0,
-        244.3212,
-        6.0,
+        150.4756,
+        243.9939,
+        6.0001,
         0.1601
       ],
       "domain": "land",
@@ -4387,6 +4438,51 @@
       "context": "rear plot wall",
       "placement_tags": [
         "garden"
+      ],
+      "district": "pass_services"
+    },
+    {
+      "id": "fence.picket",
+      "position": [
+        159.47564,
+        244.07395
+      ],
+      "rotation_degrees": 0.0,
+      "bounds": [
+        156.4756,
+        243.9939,
+        6.0001,
+        0.1601
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "rear plot wall",
+      "placement_tags": [
+        "garden"
+      ],
+      "district": "pass_services"
+    },
+    {
+      "id": "tractor.cab_utility",
+      "position": [
+        149.23929,
+        233.92828
+      ],
+      "rotation_degrees": 90.0,
+      "bounds": [
+        147.6892,
+        232.8782,
+        3.2001,
+        2.1001
+      ],
+      "domain": "land",
+      "cover": false,
+      "collision": "solid",
+      "context": "farmyard machinery",
+      "placement_tags": [
+        "farmyard",
+        "equipment_shed"
       ],
       "district": "pass_services"
     },
@@ -4546,28 +4642,6 @@
         "garden"
       ],
       "district": "lower_village"
-    },
-    {
-      "id": "trolley_pole.span",
-      "position": [
-        143.0,
-        225.9
-      ],
-      "rotation_degrees": 0,
-      "bounds": [
-        142.75,
-        225.65,
-        0.5,
-        0.5
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "trolleybus overhead span pole",
-      "placement_tags": [
-        "arterial"
-      ],
-      "district": "open"
     },
     {
       "id": "trolley_pole.span",
@@ -4802,52 +4876,6 @@
     {
       "id": "tree.crimean_pine",
       "position": [
-        251.66427,
-        102.43134
-      ],
-      "rotation_degrees": 0.0,
-      "bounds": [
-        251.1642,
-        101.9313,
-        1.0001,
-        1.0001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "pine scrub on headland",
-      "placement_tags": [
-        "headland",
-        "park"
-      ],
-      "district": "open"
-    },
-    {
-      "id": "broken_tree.snapped_snag",
-      "position": [
-        239.41527,
-        116.76623
-      ],
-      "rotation_degrees": 90.0,
-      "bounds": [
-        238.6152,
-        115.7662,
-        1.6001,
-        1.9001
-      ],
-      "domain": "land",
-      "cover": false,
-      "collision": "solid",
-      "context": "pine scrub on headland",
-      "placement_tags": [
-        "woodland_edge",
-        "abandoned_orchard"
-      ],
-      "district": "open"
-    },
-    {
-      "id": "tree.crimean_pine",
-      "position": [
         235.00406,
         129.85447
       ],
@@ -4925,130 +4953,154 @@
       0.1601
     ],
     [
-      82.5867,
+      68.2321,
       278.17,
       6.0001,
       0.16
     ],
     [
-      65.4433,
+      62.766,
       278.17,
       6.0001,
       0.16
     ],
     [
-      71.4433,
+      75.4877,
       278.17,
       6.0001,
       0.16
     ],
     [
-      77.4433,
-      278.17,
+      83.6133,
+      278.3554,
+      0.1601,
+      6.0001
+    ],
+    [
+      83.6133,
+      284.3554,
+      0.1601,
+      6.0001
+    ],
+    [
+      83.6133,
+      290.3554,
+      0.1601,
+      6.0001
+    ],
+    [
+      83.6133,
+      296.3554,
+      0.1601,
+      6.0001
+    ],
+    [
+      83.6133,
+      302.3554,
+      0.1601,
+      6.0001
+    ],
+    [
+      83.6133,
+      308.3554,
+      0.1601,
+      6.0001
+    ],
+    [
+      64.0216,
+      314.3309,
       6.0001,
-      0.16
-    ],
-    [
-      88.1433,
-      278.17,
-      6.0001,
-      0.16
-    ],
-    [
-      94.57,
-      280.9315,
-      0.16,
-      6.0001
-    ],
-    [
-      94.57,
-      286.9315,
-      0.16,
-      6.0001
-    ],
-    [
-      94.57,
-      292.9315,
-      0.16,
-      6.0001
-    ],
-    [
-      94.57,
-      298.9315,
-      0.16,
-      6.0001
-    ],
-    [
-      94.57,
-      304.9315,
-      0.16,
-      6.0001
-    ],
-    [
-      68.0,
-      313.4831,
-      6.0,
       0.1601
     ],
     [
-      74.0,
-      313.4831,
-      6.0,
+      70.0216,
+      314.3309,
+      6.0001,
       0.1601
     ],
     [
-      80.0,
-      313.4831,
-      6.0,
+      76.0216,
+      314.3309,
+      6.0001,
       0.1601
     ],
     [
-      86.0,
-      313.4831,
-      6.0,
-      0.1601
+      74.7221,
+      307.2553,
+      0.8001,
+      0.8001
     ],
     [
-      153.6659,
+      74.2127,
+      297.5477,
+      6.7001,
+      1.2001
+    ],
+    [
+      78.0084,
+      309.9271,
+      0.8001,
+      0.8001
+    ],
+    [
+      147.4192,
       226.17,
       6.0001,
       0.16
     ],
     [
-      160.6829,
+      142.3596,
       226.17,
       6.0001,
       0.16
     ],
     [
-      168.57,
-      226.3506,
+      152.5352,
+      226.17,
+      6.0001,
+      0.16
+    ],
+    [
+      158.5352,
+      226.17,
+      6.0001,
+      0.16
+    ],
+    [
+      164.5212,
+      229.1869,
       0.1601,
       6.0001
     ],
     [
-      168.57,
-      232.3506,
+      164.5212,
+      235.1869,
       0.1601,
       6.0001
     ],
     [
-      168.57,
-      238.3506,
-      0.1601,
-      6.0001
-    ],
-    [
-      154.0,
-      244.3212,
-      6.0,
+      144.4756,
+      243.9939,
+      6.0001,
       0.1601
     ],
     [
-      160.0,
-      244.3212,
-      6.0,
+      150.4756,
+      243.9939,
+      6.0001,
       0.1601
+    ],
+    [
+      156.4756,
+      243.9939,
+      6.0001,
+      0.1601
+    ],
+    [
+      147.6892,
+      232.8782,
+      3.2001,
+      2.1001
     ],
     [
       367.918,
@@ -5093,12 +5145,6 @@
       4.6838
     ],
     [
-      142.75,
-      225.65,
-      0.5,
-      0.5
-    ],
-    [
       172.75,
       225.65,
       0.5,
@@ -5133,18 +5179,6 @@
       105.4503,
       1.0001,
       1.0001
-    ],
-    [
-      251.1642,
-      101.9313,
-      1.0001,
-      1.0001
-    ],
-    [
-      238.6152,
-      115.7662,
-      1.6001,
-      1.9001
     ],
     [
       234.504,
@@ -5260,6 +5294,22 @@
       "Southern flanking track:4": [
         334.0,
         166.0
+      ],
+      "Ridge foot track:0": [
+        168.0,
+        160.0
+      ],
+      "Ridge foot track:1": [
+        238.0,
+        160.0
+      ],
+      "Ridge foot track:2": [
+        246.0,
+        140.0
+      ],
+      "Ridge foot track:3": [
+        246.0,
+        108.0
       ]
     },
     "edges": [
@@ -5358,6 +5408,24 @@
         "Southern flanking track:4",
         8.0,
         "long farm track around the southern limestone ridge"
+      ],
+      [
+        "Ridge foot track:0",
+        "Ridge foot track:1",
+        4.0,
+        "infantry climb from the western farm approach to the ridge lookout"
+      ],
+      [
+        "Ridge foot track:1",
+        "Ridge foot track:2",
+        4.0,
+        "infantry climb from the western farm approach to the ridge lookout"
+      ],
+      [
+        "Ridge foot track:2",
+        "Ridge foot track:3",
+        4.0,
+        "infantry climb from the western farm approach to the ridge lookout"
       ]
     ]
   },
@@ -5489,11 +5557,9 @@
     451,
     453,
     455,
-    458,
-    460,
-    461
+    458
   ],
-  "building_count": 21,
+  "building_count": 20,
   "courtyards": [],
   "city_districts": [
     {
@@ -5751,8 +5817,8 @@
     "body_collision_rects_max": 192,
     "damage_hotspots": [
       [
-        128,
-        218
+        246,
+        108
       ],
       [
         250,
@@ -5767,9 +5833,9 @@
   },
   "railways": [],
   "authoring_stats": {
-    "buildings": 21,
-    "props": 51,
-    "road_segments": 16,
+    "buildings": 20,
+    "props": 52,
+    "road_segments": 19,
     "rock_parcels": 8,
     "rail_segments": 0
   }

@@ -37,21 +37,23 @@ These are provisional acceptance targets. Actual results and measurement limitat
 
 ## Pending choices
 
-The implemented baseline uses Godot 4.5.1, GL Compatibility, desktop mouse-and-keyboard controls, and an elevated 3D camera for local single-player. The measured machine is an Apple M4 Pro. Supported release hardware/platforms, final art pipeline, battle scale, multiplayer, campaign scope, and production budget remain open. These implementation choices are provisional and can be revisited after human playtesting.
+The implemented baseline uses Godot 4.5.1, GL Compatibility, desktop mouse-and-keyboard controls, and an elevated 3D camera for local single-player. The measured machine is an Apple M4 Pro. Supported release hardware/platforms, final art pipeline, battle scale, multiplayer, deeper campaign scope and production budget remain open. A local checkpoint/outcome campaign is implemented; broader strategic simulation is undecided. These implementation choices are provisional and can be revisited after human playtesting.
 
 ## Current improvement track
 
-The first tactical increment adds retreat/recovery, suppression consequences, and local enemy response. Next implement the proposed village/ridge/port match and supply/forward-base choices, followed by animation and a representative art area. The 10–15 minute battle remains a design goal; current automated victories are much shorter.
-
-The animation/landscape pass now adds individual infantry actors, procedural state-driven articulation, weapon travel effects, and three selectable fictional scenario variants. This is not the larger strategic village/ridge/port match: supply routes, forward-base choices, contextual cover autonomy, persistent wrecks, and production animation remain open.
+The current increment deepens distinct battlefield decisions, carries expedition losses and supply between operations, proves elevation on the pass, and adds one open-maneuver battlefield. The 10–15 minute battle remains a design goal; controlled tests do not establish human pacing, balance or replay value. Production animation and representative hardware performance remain open.
 
 ## Current delivery focus
 
-### Regional expansion — 2026-10-23
+### Regional operations — 2026-10-25
 
-The user now requests a larger regional map containing distinct battlefields, grounded in believable city, transport and infrastructure layout, with editor improvements first where useful. [Plan 16](plans/16-regional-map.md) implements this increment on `codex/regional-map`: the Black Sea Coast atlas, the existing Harbor operation, and three new rail-valley, limestone-pass and coastal-inlet maps. The region establishes their geographic relationship and loads one tactical operation at a time. Persistent campaign state and continuous cross-map simulation remain future work.
+The user explicitly accepts independent battlefields without adjacent boundaries. [Plan 17](plans/17-regional-operations.md) continues the map branch on `codex/regional-operations`: five selectable operations, functional local supply/dispatch objectives, joint shore-and-sea control, an operational campaign, walkable pass terrain and Windbreak Fields. The earlier [Plan 16](plans/16-regional-map.md) supplies the atlas and shared authoring foundation.
 
-The visual blueprint editor and deterministic compiler share the existing building profiles, asset footprints, road and coastline rules with runtime. New content must pass domain, placement, connection and native route checks without relaxing clearance rules. The geographic reference is the broad Sevastopol / Heraclean Peninsula pattern; detailed streets and tactical extents are original compressed layouts. Ground remains planar, rocks form solid obstacles, and rolling stock is stationary. Human balance/art review and the unresolved performance target remain separate acceptance gates. See the [regional guide](regional-map.md) and [validation](validation.md).
+Campaign saves contain deployment checkpoints and outcomes, including survivors, wounds, damage, parked incompatible units, supply and unique secured-location benefits. They do not resume a mid-battle world or simulate travel between maps. A defeat retry restores its deployment checkpoint; resetting the campaign requires atlas confirmation. This keeps the strategic layer small enough to support the tactical game.
+
+The visual editor and deterministic compiler share runtime building profiles, asset footprints, coastlines and terrain data. Elevation authoring includes plateau/ramp controls and a level-building check. Native tests remain authoritative for profile-specific slope access. Expand further when a map introduces a useful decision and passes route, mission and visual checks; boundary continuity is not an acceptance requirement.
+
+Geography remains an original compressed interpretation of broad Sevastopol / Heraclean Peninsula relationships. Ground relief is currently authored on Limestone Pass; rail traffic is stationary, and bridges, tunnels and amphibious unloading remain future mechanisms. Human playtesting, long-session economy, visual acceptance and the unresolved frame-time target are separate gates. See the [regional guide](regional-map.md) and [validation](validation.md).
 
 ### Earlier delivery increments
 
@@ -61,11 +63,11 @@ The user expanded delivery to a [classic skirmish](plans/8-classic-skirmish.md):
 
 ## User-confirmed scale direction
 
-The later battlefield should cover a small town and support thousands of individually tracked troops. [Town-scale performance](plans/9-town-scale-performance.md) begins with targeting queries and an explicit scaling ladder. The current fixed 96 × 72 map and approximately 100-entity rendered stress case do not establish that capacity. Preserve individual behavior while pursuing spatial queries, chunked navigation and cheaper distant presentation.
+The later battlefield should cover a small town and support thousands of individually tracked troops. [Town-scale performance](plans/9-town-scale-performance.md) begins with targeting queries and an explicit scaling ladder. The current Harbor extent of 1024 × 768 and the historical approximately 100-entity rendered stress case do not establish that capacity. Preserve individual behavior while pursuing spatial queries, chunked navigation and cheaper distant presentation.
 
-## Current authoring priority — 2026-10-14
+## Earlier authoring priority — 2026-10-14
 
-The user prioritizes a comprehensive categorized asset library and shared placement rules before further map expansion. Complete native asset/cross-review first, then build editor/generator workflows from the same contracts. The future whole-town target is square-kilometre scale; establish world-unit/physical-scale conventions, district morphology and navigation/render budgets before claiming that scale. The current sixth map is144×108; a proposed512×384 successor is deferred, not implemented. Buildings should follow distinct historic core, residential, freight and rural patterns, not one-object-per-grid-cell spacing.
+The user prioritizes a comprehensive categorized asset library and shared placement rules before further map expansion. Complete native asset/cross-review first, then build editor/generator workflows from the same contracts. The future whole-town target is square-kilometre scale; establish world-unit/physical-scale conventions, district morphology and navigation/render budgets before claiming that scale. At that stage the sixth map was 144×108 and a 512×384 successor was deferred; later Harbor and regional-map work superseded that extent. Buildings should follow distinct historic core, residential, freight and rural patterns, not one-object-per-grid-cell spacing.
 
 ## Current battlefield economy — 2026-10-14
 

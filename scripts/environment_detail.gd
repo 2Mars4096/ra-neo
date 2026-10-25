@@ -194,7 +194,7 @@ static func _build_harbor(art,parent:Node3D,terrain,architecture:Array)->void:
 	for road in terrain.roads.segments:
 		var a:Vector2=road.a;var b:Vector2=road.b
 		var length:float=a.distance_to(b)
-		var count:=maxi(1,ceili(length/64.0))
+		var count:=maxi(1,ceili(length/(2.0 if terrain.has_elevation() else 64.0)))
 		var direction:Vector2=(b-a).normalized()
 		for section in count:
 			var start:Vector2=a.lerp(b,float(section)/count)
@@ -224,6 +224,7 @@ static func _build_harbor(art,parent:Node3D,terrain,architecture:Array)->void:
 				while stripe<last:
 					art.box(piece,Vector3(0,0.025,stripe-span/2),Vector3(0.10,0.006,2.0),Color("a6a18a"))
 					stripe+=8.0
+			if terrain.has_elevation():_subdivide_ground_boxes(piece)
 			art.bake_model(piece)
 	# Junction caps continue the carriageway (and pavement) through bends and crossings.
 	for key in terrain.roads.nodes:
@@ -238,6 +239,15 @@ static func _build_harbor(art,parent:Node3D,terrain,architecture:Array)->void:
 		cap.material_override=art.road_material()
 	_build_harbor_zones(art,group,terrain,_harbor_config(terrain))
 	_merge_flat_detail(group)
+
+# Relief roads also need width subdivisions: otherwise a wide flat box spans
+# a curved shoulder between its four corners after draping.
+static func _subdivide_ground_boxes(node:Node3D) -> void:
+	if node is MeshInstance3D and node.mesh is BoxMesh:
+		node.mesh.subdivide_width=maxi(0,ceili(node.mesh.size.x/2.0)-1)
+		node.mesh.subdivide_depth=maxi(0,ceili(node.mesh.size.z/2.0)-1)
+	for child in node.get_children():
+		if child is Node3D:_subdivide_ground_boxes(child)
 
 # Ground detail is flush paint, kerbs and slabs no more than 3 cm high: hundreds
 # of separate pieces cost one draw each, plus a shadow-pass draw for a shadow

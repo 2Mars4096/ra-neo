@@ -6,7 +6,7 @@
     1200,
     840
   ],
-  "description": "One coastal region: a working harbor, a railway valley, limestone passes and a sheltered southern inlet. Select a battlefield to inspect its approaches and deploy.",
+  "description": "Five independent operations across a working harbor, rail valley, limestone heights, sheltered inlet and open agricultural hinterland. Their outcomes change regional supply and the forces available for later deployments.",
   "water_polygons": [
     [
       [
@@ -450,6 +450,27 @@
           280
         ]
       ]
+    },
+    {
+      "name": "Agricultural hinterland road",
+      "points": [
+        [
+          790,
+          230
+        ],
+        [
+          870,
+          170
+        ],
+        [
+          1000,
+          190
+        ],
+        [
+          1120,
+          210
+        ]
+      ]
     }
   ],
   "railways": [
@@ -572,6 +593,13 @@
         420,
         170
       ]
+    },
+    {
+      "name": "Windbreak farms",
+      "at": [
+        1030,
+        155
+      ]
     }
   ],
   "battlefields": [
@@ -607,16 +635,17 @@
         210,
         150
       ],
-      "summary": "A river-bank industrial corridor links the harbor to the interior. Track beds remain crossable; parked freight wagons break sight lines and channel movement.",
+      "summary": "Secure the station for local supply and the sorting yard for forward reinforcement access. Holding the eastern junction cuts new enemy reserves; parked wagons and industrial buildings divide the approaches.",
       "features": [
-        "Connected railway and sidings",
-        "Freight sheds and service yards",
-        "River-bank approaches"
+        "Working supply objectives",
+        "Forward yard reinforcements",
+        "Eastern reserve-route interdiction"
       ],
       "terrain": "Rail and industry",
       "connections": [
         "black_sea_harbor",
-        "limestone_pass"
+        "limestone_pass",
+        "windbreak_fields"
       ],
       "map_path": "res://resources/maps/region/bayhead_rail_valley.json"
     },
@@ -630,16 +659,17 @@
         220,
         157
       ],
-      "summary": "A winding road threads limestone ridges. The longer farm tracks provide alternate approaches; rock outcrops use the same movement and sight blocking as the harbor.",
+      "summary": "Climb the lookout with infantry while armor follows the graded road. The upper hamlet sits on a broad terrace; holding it and the pass crossroads cuts enemy dispatch.",
       "features": [
-        "Rock-bound passes",
-        "Winding road and flanking tracks",
-        "Small hillside settlements"
+        "Walkable heights and terrain sight lines",
+        "Infantry slope and graded armor approaches",
+        "Pass-route interdiction"
       ],
       "terrain": "Ridges and woodland",
       "connections": [
         "bayhead_rail_valley",
-        "south_inlet"
+        "south_inlet",
+        "windbreak_fields"
       ],
       "map_path": "res://resources/maps/region/limestone_pass.json"
     },
@@ -653,11 +683,11 @@
         180,
         150
       ],
-      "summary": "Open water dominates the coast. Land forces follow the shore around a narrow inlet while boats maneuver through its mouth and support the quays.",
+      "summary": "Land forces open the coastal facilities while a ship secures the marked sea lane. Coastal supply and the final hold require both shore control and an uncontested naval presence.",
       "features": [
-        "Sea-dominant battlefield",
-        "Narrow inlet and coastal road",
-        "Quays, fishing town and headland"
+        "Shore-and-sea control",
+        "Coastal supply needs both forces",
+        "Naval patrol zone"
       ],
       "terrain": "Coast and sea",
       "connections": [
@@ -665,6 +695,29 @@
         "limestone_pass"
       ],
       "map_path": "res://resources/maps/region/south_inlet.json"
+    },
+    {
+      "id": "windbreak_fields",
+      "scenario_id": "windbreak_fields",
+      "name": "WINDBREAK FIELDS",
+      "bounds": [
+        890,
+        125,
+        240,
+        160
+      ],
+      "summary": "Open crop fields and scattered farm compounds leave armor exposed between windbreaks. Choose the direct freight road, the northern lane or the longer southern approach; seize the exchange for forward supply and cut the eastern reserve road.",
+      "features": [
+        "Open ground and interrupted windbreaks",
+        "Three maneuver corridors",
+        "Forward supply and reserve-route denial"
+      ],
+      "terrain": "Agricultural maneuver",
+      "connections": [
+        "bayhead_rail_valley",
+        "limestone_pass"
+      ],
+      "map_path": "res://resources/maps/region/windbreak_fields.json"
     }
   ],
   "attribution": "Original authored, compressed fictional adaptation of the Sevastopol / Heraclean Peninsula geography. Public historic maps inform bay, valley, rail and settlement relationships; all battlefield streets, dimensions, forces and objectives are invented. No survey or current infrastructure accuracy is claimed.",

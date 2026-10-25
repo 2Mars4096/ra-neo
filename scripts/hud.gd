@@ -285,7 +285,7 @@ func draw_world(sim) -> void:
 	for u in sim.units:
 		if not sim.alive(u) or not u.visible:
 			continue
-		var p: Vector2 = battle.screen_pos(battle.display_anchor(u), battle.label_height(u))
+		var p: Vector2 = battle.screen_pos(battle.display_anchor(u), battle.label_height(u),true)
 		if not battlefield_rect().has_point(p) or p.y<65:
 			continue
 		var selected: bool = battle.selected.has(u.id)
@@ -357,7 +357,7 @@ func draw_world(sim) -> void:
 		var power:Vector2=sim.Classic.power(sim,0)
 		text_at("POWER %d / %d" % [power.y,power.x],Vector2(w-798,27),12,ORANGE if power.y>power.x else MUTED)
 	else:
-		if not sim.field_ops.is_empty():text_at("INCOME +%s/s" % String.num(float(sim.field_ops.income_rate)),Vector2(w-768,27),12,MUTED,true)
+		if not sim.field_ops.is_empty():text_at("INCOME +%s/s" % String.num(float(sim.field_ops.income_rate)+sim.FieldOps.OperationRules.income_bonus(sim)),Vector2(w-768,27),12,MUTED,true)
 		var badges:=objective_badges(sim)
 		for i in badges.size():
 			var obj:Dictionary=sim.objectives[i]
@@ -854,6 +854,11 @@ func draw_minimap(sim) -> void:
 	for obj in sim.objectives:
 		var p: Vector2=minimap.position+obj.pos/sim.terrain.world_size*minimap.size
 		cv.draw_rect(Rect2(p-Vector2(3,3),Vector2(6,6)),TEAL if obj.owner==0 else ORANGE,false,1)
+	var zone:Dictionary=sim.scenario.get("operation",{}).get("naval_zone",{})
+	if not zone.is_empty():
+		var centre:Vector2=minimap.position+Vector2(float(zone.position[0]),float(zone.position[1]))/sim.terrain.world_size*minimap.size
+		cv.draw_arc(centre,float(zone.radius)*minimap.size.x/sim.terrain.world_size.x,0,TAU,32,TEAL if sim.FieldOps.OperationRules.naval_ready(sim) else ORANGE,1.5,true)
+		text_at("SEA",centre+Vector2(5,-6),9,MUTED)
 	var footprint:=minimap_view_outline(sim)
 	if footprint.size()>=3:
 		footprint.append(footprint[0])
@@ -916,10 +921,18 @@ func draw_guide() -> void:
 	var extra:=FIELD_ORDERS.size()*28 if field else 0
 	var r:=Rect2(w/2-350,h/2-252-extra/2,700,504+extra)
 	panel(r,INK)
-	text_at("OPERATION  /  01",r.position+Vector2(34,38),12,TEAL,true)
+	var operation_label:String="REGIONAL OPERATION" if battle.campaign.active else "OPERATION  /  01"
+	if battle.campaign.active and battle.campaign.data.started:operation_label+="  ·  %d IN RESERVE" % battle.campaign.parked.size()
+	text_at(operation_label,r.position+Vector2(34,38),12,TEAL,true)
 	text_at(battle.sim.scenario.name,r.position+Vector2(34,79),34,WHITE,true)
+	var campaign_error:String=battle.campaign_status_error()
+	if campaign_error!="":text_at(fit_text(campaign_error,632,12),r.position+Vector2(34,103),12,RED)
 	# Long authored briefs wrap below the selector row inside the 632 px column, at most three lines.
-	brief_lines=wrap_text(battle.sim.scenario.brief,632,13)
+	var briefing:String=str(battle.sim.scenario.brief)
+	if field:
+		var mission_brief:String=battle.sim.FieldOps.OperationRules.brief(battle.sim.scenario)
+		if mission_brief!="":briefing=mission_brief
+	brief_lines=wrap_text(briefing,632,13)
 	if brief_lines.size()>3:
 		brief_lines[2]=fit_text(" ".join(brief_lines.slice(2))+" ",632,13)
 		brief_lines.resize(3)
@@ -973,14 +986,15 @@ func draw_guide() -> void:
 
 func draw_result() -> void:
 	cv.draw_rect(Rect2(Vector2.ZERO,size),Color(0.035,0.043,0.035,0.82))
-	var r:=Rect2(size.x/2-270,size.y/2-150,540,300)
+	var r:=Rect2(size.x/2-270,size.y/2-164,540,328)
 	panel(r,INK)
 	var sim=battle.sim
 	text_at("MISSION COMPLETE" if sim.result=="VICTORY" else "FORCE LOST",r.position+Vector2(30,42),12,TEAL if sim.result=="VICTORY" else RED,true)
 	text_at(sim.result,r.position+Vector2(30,94),38,WHITE,true)
 	text_at(("Enemy base destroyed." if not sim.classic.is_empty() else "Sectors secured. Objective complete.") if sim.result=="VICTORY" else "Use cover, scout ahead, and reinforce before advancing.",r.position+Vector2(30,130),14,MUTED)
 	text_at("%02d:%02d   /   %d enemies destroyed   /   %d sections lost" % [int(sim.time)/60,int(sim.time)%60,sim.kills,sim.losses],r.position+Vector2(30,174),14,WHITE)
+	if battle.campaign.active:text_at(fit_text(battle.campaign_message,480,12),r.position+Vector2(30,201),12,TEAL)
 	hits.clear()
 	modal=true
-	button("region","REGIONAL MAP",Rect2(r.position+Vector2(30,215),Vector2(230,46)))
-	button("restart","REDEPLOY",Rect2(r.position+Vector2(272,215),Vector2(238,46)))
+	button("region","REGIONAL MAP",Rect2(r.position+Vector2(30,241),Vector2(230,46)))
+	button("restart","RETRY OPERATION" if sim.result=="DEFEAT" else "REDEPLOY",Rect2(r.position+Vector2(272,241),Vector2(238,46)))

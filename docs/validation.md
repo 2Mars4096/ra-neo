@@ -1,5 +1,52 @@
 # Validation evidence
 
+## Regional operations, persistence and elevation — 2026-10-25
+
+Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, from regional-map commit `342a919` on `codex/regional-operations`. The integration gate passed **14/14 suites**, followed by **9/9 focused suites**; the latter repeats HUD layout and adds campaign scene flow, combat, field geometry, effects, animation, battlefield interface, HUD states and input actions. Final elevation checks were rerun after native rendering corrections. No historical full-suite or hardware-performance rerun is implied.
+
+| Focused verification | Result |
+|---|---:|
+| Four external maps: physical routes, domains, forces, objectives and sea control | 2,301 checks, 0 failures |
+| Facility income, connected forward arrivals, dispatch denial, naval hold and engineer foundations | 50 checks, 0 failures |
+| Elevation: navigation/live movement, actual visibility/fire, aircraft, picking and grounded geometry/effects | 58 checks, 0 failures |
+| Campaign disk persistence, survivors, wounds, components/hazards, reserves, refunds and failed writes | 66 checks, 0 failures |
+| Actual deployment/withdrawal/reload/results/retry/reset and fresh-session resume | 47 checks, 0 failures |
+| Atlas modal behavior, five-map layout, input isolation and switching | 89 checks, 0 failures |
+| Existing HUD layout | 1,413 checks, 0 failures |
+| Existing combat, field geometry, effects and animation | 1,079 / 280 / 224 / 580 checks, 0 failures |
+| Existing battlefield interface, HUD states and input actions | 9,698 / 29 / 61 checks, 0 failures |
+| Python authoring and editor service | 17 + 9 tests pass |
+| Real-browser editor workflows | 7 pass, 0 page errors |
+| Regional and Harbor deterministic compilers | Both `--check` commands pass |
+
+The map suite intentionally distinguishes the pass lookout's infantry-only approach from the graded armor routes. It covers real native paths and spawn footprints, and controlled objective states establish loss of logistics benefits, dispatch denial and the simultaneous shore/sea hold. These checks are **not complete AI battles or human balance tests**.
+
+Campaign tests use isolated save files. They exercise actual scene signals and reloads, continued casualty and vehicle damage, sea units parked inland, fire/flood progression, exactly-once purchase refunds, non-stacking ownership effects, startup resume, defeat retry, corrupt primary/backup handling and failed-write rollback. `--script` review/test scenes do not read or write a player's ordinary campaign; the integration test explicitly enables persistence with its own path. Saves restore a deployment checkpoint rather than a running tactical world.
+
+Browser validation covers the fifth map, elevation drawing, height/ramp edits, duplicate/delete, undo/redo, referenced-objective protection and successful Preview. The editor screenshot in temporary artifacts shows an unsaved elevation sample on Windbreak Fields; the shipped agricultural map remains flat. Python validation additionally rejects nonlevel building foundations, invalid mission indices and coastal benefits without their required naval zone.
+
+Native review used **GL Compatibility / llvmpipe software rendering at 1440 × 900**. Actual captures were inspected, exposing and correcting downward mesh winding, ramp/road clipping and false subdivision shading. The staged battlefield views explicitly reveal fog; the briefing and atlas are ordinary UI views. This establishes composition and rendering evidence, **not frame-rate acceptance**.
+
+- [Five-operation atlas](images/regional-operations-atlas.png)
+- [Complete mission briefing](images/regional-operations-briefing.png)
+- [Limestone lookout elevation](images/regional-limestone-elevation.png)
+- [Windbreak Fields](images/regional-windbreak-fields.png)
+- [South Inlet sea-control zone](images/regional-sea-control.png)
+
+Reproduce the targeted checks with:
+
+```sh
+python3 tools/check.py --group regional
+python3 tools/check.py test_field_geometry test_combat.gd test_effects.gd test_animation.gd test_input_actions test_hud_states test_battlefield_interface test_regional_campaign_ui test_hud_layout
+python3 -m unittest discover -s tools -p 'test_regional_*.py'
+python3 tools/build_region_maps.py --check
+python3 tools/build_harbor_map.py --check
+./tools/play.sh --audio-driver Dummy --script tests/regional_operations_review.gd
+./tools/play.sh --audio-driver Dummy --script tests/elevation_native_review.gd
+```
+
+The regional group now includes the campaign UI suite, so a fresh complete run selects 15 suites. Set `GODOT_BIN` to the pinned executable. The two capture scripts require a graphical display. Human pacing/balance, long-session economy, broad hardware performance, detailed suspension/foot IK and full tactical save/load remain open.
+
 ## Regional atlas and authoring — 2026-10-23
 
 Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, from the renamed game's `e97e82f` baseline plus the regional implementation. This is a focused integration pass; it does not claim a rerun of every historical suite below.
@@ -41,7 +88,7 @@ python3 tools/build_harbor_map.py --check
 
 Set `GODOT_BIN` to the 4.5.1 executable if it is not on the path. `tests/regional_native_review.gd` and `tests/regional_ui_review.gd` capture the real game with a graphical display; the authoring tool needs Python 3 and a desktop browser. The regional suites are also included in the default discovery and release selection.
 
-No frame-rate, full-combat balance or supported-hardware acceptance is claimed for this increment. Ground remains planar with the existing solid rock obstacles; railcars are static. The atlas is geographic context and operation selection, with one tactical simulation loaded at a time. The [regional guide](regional-map.md) records the compressed geography and source attribution; prior performance findings below remain historical and unresolved where marked.
+No frame-rate, full-combat balance or supported-hardware acceptance was claimed for the October 23 increment. At that point ground remained planar and the atlas only selected operations; the October 25 entry above records the later elevation and campaign work. Railcars remain static. The [regional guide](regional-map.md) records the compressed geography and source attribution; prior performance findings below remain historical and unresolved where marked.
 
 ## Integrated team revamp — 2026-10-14
 

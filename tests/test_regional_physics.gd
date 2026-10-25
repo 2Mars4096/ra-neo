@@ -5,7 +5,7 @@ const Sim=preload("res://scripts/simulation.gd")
 const Terrain=preload("res://scripts/terrain.gd")
 const Detail=preload("res://scripts/environment_detail.gd")
 const Art=preload("res://scripts/visuals.gd")
-const IDS:=["bayhead_rail_valley","limestone_pass","south_inlet"]
+const IDS:=["bayhead_rail_valley","limestone_pass","south_inlet","windbreak_fields"]
 var checks:=0
 var failures:=0
 
@@ -50,6 +50,10 @@ func mission_completion(sim,id:String)->void:
 	check(sim.objectives.all(func(objective):return objective.owner==1),id+" incomplete capture cannot award ownership")
 	sim.update_objectives(0.1)
 	check(sim.objectives.all(func(objective):return objective.owner==0 and not objective.enemy_present),id+" legal infantry secures all sectors")
+	var naval_zone:Dictionary=sim.scenario.get("operation",{}).get("naval_zone",{})
+	if not naval_zone.is_empty():
+		var ship:Dictionary=sim.spawn("boat",0,point(naval_zone.position))
+		check(not ship.is_empty() and sim.FieldOps.OperationRules.hold_ready(sim),id+" actual friendly ship controls the required sea lane")
 	# Ownership and elapsed hold cannot bypass the dispatched reserve's grace.
 	sim.score_hold=float(sim.scenario.hold)
 	sim.time=sim.counterattack_at+19.9
@@ -65,7 +69,7 @@ func mission_completion(sim,id:String)->void:
 func run()->void:
 	var legacy:Array=JSON.parse_string(FileAccess.get_file_as_string(Catalog.LEGACY_PATH))
 	var descriptors:=Catalog.entries()
-	check(legacy.size()==7 and descriptors.size()==legacy.size()+IDS.size(),"seven legacy plus three regional battlefields")
+	check(legacy.size()==7 and descriptors.size()==legacy.size()+IDS.size(),"seven legacy plus four regional battlefields")
 	for index in legacy.size():
 		check(Catalog.index_for_id(str(legacy[index].id))==index,"legacy index preserved: "+str(legacy[index].id))
 		check(not descriptors[index].has("blocks") and not descriptors[index].has("map_props"),"catalog summaries omit heavy geometry")
@@ -111,8 +115,12 @@ func run()->void:
 				var profile:String=terrain.mobility_profile(kind)
 				check(terrain.traversable(insertion,"land",radius),id+" land insertion fits "+kind)
 				for objective in sim.objectives:
+					if id=="limestone_pass" and objective.name=="RIDGE LOOKOUT" and kind=="tank":
+						var armor_route:Array=terrain.path(insertion,objective.pos+Vector2(0,5),"land",radius,[],profile)
+						check(armor_route.is_empty(),"steep lookout is an infantry route, not an armor shortcut")
+						continue
 					var destination:Vector2=terrain.reachable_destination(insertion,objective.pos+Vector2(0,8),"land",radius,profile)
-					check(destination.x>=0 and destination.distance_to(objective.pos)<20,id+" reachable objective approach for "+kind)
+					check(destination.x>=0 and destination.distance_to(objective.pos)<20,id+" reachable "+str(objective.name)+" approach for "+kind+" from "+str(insertion)+" (found "+str(destination)+")")
 					if destination.x>=0:route_check(terrain,insertion,destination,"land",radius,profile,id+" "+kind+" objective route")
 		var domains:Array=sim.scenario.get("available_domains",["land","air","sea"])
 		var choices:Array=sim.FieldOps.purchase_choices(sim)

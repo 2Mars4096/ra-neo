@@ -6,17 +6,17 @@
     "inspiration": "Original authored, compressed fictional adaptation of the Sevastopol / Heraclean Peninsula geography. Public historic maps inform bay, valley, rail and settlement relationships; all battlefield streets, dimensions, forces and objectives are invented. No survey or current infrastructure accuracy is claimed.",
     "sources": [
       {
-        "title": "Ancient City of Tauric Chersonese and its Chora \u2014 UNESCO",
+        "title": "Ancient City of Tauric Chersonese and its Chora — UNESCO",
         "url": "https://whc.unesco.org/en/list/1411/",
         "use": "Historic urban grid and agricultural/vineyard hinterland morphology; consulted 2026-10-23."
       },
       {
-        "title": "Sebastopol and Western Crimea, 1919 \u2014 University of South Florida Maps ETC",
+        "title": "Sebastopol and Western Crimea, 1919 — University of South Florida Maps ETC",
         "url": "https://etc.usf.edu/maps/pages/2500/2582/2582.htm",
         "use": "Broad coast, relief, railway-valley and settlement relationships only; consulted 2026-10-23. No map imagery copied."
       },
       {
-        "title": "Plan de la Cherson\u00e8se \u2014 Library of Congress",
+        "title": "Plan de la Chersonèse — Library of Congress",
         "url": "https://www.loc.gov/item/2002695526/",
         "use": "Historic peninsula / bay relationship reference; no historical fortifications or troop positions reproduced."
       }
@@ -31,7 +31,7 @@
   "scenario": {
     "id": "bayhead_rail_valley",
     "name": "BAYHEAD RAIL VALLEY",
-    "brief": "Secure the station approach, sorting yard and eastern junction. Use service roads around parked wagons and scout the exposed railway crossings.",
+    "brief": "Seize the rail facilities to expand resupply. Capture the eastern junction before the armored reserve arrives, or prepare to stop it at the crossings.",
     "size": [
       448,
       320
@@ -267,7 +267,15 @@
         ]
       }
     ],
-    "enemy_works": [],
+    "enemy_works": [
+      {
+        "kind": "bunker",
+        "position": [
+          290,
+          196
+        ]
+      }
+    ],
     "reserve_force": [
       {
         "kind": "tank",
@@ -284,7 +292,7 @@
         ]
       },
       {
-        "kind": "atgm",
+        "kind": "tank",
         "position": [
           414,
           74
@@ -293,7 +301,30 @@
     ],
     "field_supply": 3200,
     "field_income": 6,
-    "hold": 60
+    "hold": 75,
+    "operation": {
+      "kind": "rail_logistics",
+      "title": "SECURE THE RAIL CORRIDOR",
+      "brief": "Station +2 supply/s; sorting yard +4/s and connected forward reinforcement access. The eastern junction cuts enemy dispatch. Hold all sectors for 75 seconds.",
+      "facilities": [
+        {
+          "objective": 0,
+          "income": 2
+        },
+        {
+          "objective": 1,
+          "income": 4,
+          "forward_position": [
+            275,
+            206
+          ]
+        }
+      ],
+      "deny_reserve_objectives": [
+        2
+      ],
+      "reserve_delay": 36
+    }
   },
   "streets": [
     {

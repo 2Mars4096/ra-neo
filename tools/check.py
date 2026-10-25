@@ -52,6 +52,7 @@ RELEASE_SUITES = {
     "test_wreck_section_recovery.gd",
     "test_riverside_navigation.gd", "test_scenario_dimensions.gd",
     "test_presentation_cache.gd", "test_regional_physics.gd", "test_regional_ui.gd",
+    "test_elevation.gd", "test_operation_rules.gd", "test_regional_campaign.gd", "test_regional_campaign_ui.gd",
 }
 GROUPS["release"] = [(script, marker) for group, entries in GROUPS.items()
                      if group not in ("performance", "playthrough")
@@ -61,6 +62,7 @@ REGIONAL_SUITES = {
     "test_road_network.gd", "test_field_ops.gd", "test_field_victory.gd",
     "test_harbor_gameplay.gd", "test_harbor_visuals.gd", "test_large_terrain.gd",
     "test_hud_layout.gd", "test_presentation_cache.gd",
+    "test_elevation.gd", "test_operation_rules.gd", "test_regional_campaign.gd", "test_regional_campaign_ui.gd",
 }
 GROUPS["regional"] = [(script, marker) for group, entries in GROUPS.items()
                       if group in ("core", "combat", "regression")

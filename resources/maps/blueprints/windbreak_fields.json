@@ -1,0 +1,1039 @@
+{
+  "schema_version": 3,
+  "compiler": "tools/build_region_maps.py",
+  "proposal": {
+    "status": "authored fictional regional battlefield; gameplay and art acceptance remain provisional",
+    "inspiration": "Original authored, compressed fictional adaptation of the Sevastopol / Heraclean Peninsula geography. Public historic maps inform bay, valley, rail and settlement relationships; all battlefield streets, dimensions, forces and objectives are invented. No survey or current infrastructure accuracy is claimed.",
+    "sources": [
+      {
+        "title": "Ancient City of Tauric Chersonese and its Chora — UNESCO",
+        "url": "https://whc.unesco.org/en/list/1411/",
+        "use": "Historic urban grid and agricultural/vineyard hinterland morphology; consulted 2026-10-23."
+      },
+      {
+        "title": "Sebastopol and Western Crimea, 1919 — University of South Florida Maps ETC",
+        "url": "https://etc.usf.edu/maps/pages/2500/2582/2582.htm",
+        "use": "Broad coast, relief, railway-valley and settlement relationships only; consulted 2026-10-23. No map imagery copied."
+      },
+      {
+        "title": "Plan de la Chersonèse — Library of Congress",
+        "url": "https://www.loc.gov/item/2002695526/",
+        "use": "Historic peninsula / bay relationship reference; no historical fortifications or troop positions reproduced."
+      }
+    ],
+    "assumptions": [
+      "Battlefields are independent operations; adjacency and matching boundaries are not required.",
+      "Agricultural parcels and lane geometry are original gameplay designs, not a reconstruction or current survey.",
+      "Buildings, hedges, trees and parked agricultural equipment use the existing shared asset and collision rules.",
+      "Windbreaks offer sight obstruction and route choices; they are not destructible crop or farming simulation."
+    ]
+  },
+  "scenario": {
+    "id": "windbreak_fields",
+    "name": "WINDBREAK FIELDS",
+    "brief": "Scout the open fields before committing armor. Secure North Farm and the Grain Exchange, then cut the eastern road. The exchange opens forward resupply; the checkpoint denies enemy reserves.",
+    "size": [
+      576,
+      384
+    ],
+    "mode": "field_ops",
+    "map_renderer": "harbor",
+    "style": "showcase",
+    "port": false,
+    "shore_x": 576,
+    "available_domains": [
+      "land",
+      "air"
+    ],
+    "field_insertion": [
+      36,
+      300
+    ],
+    "field_enemy_insertion": [
+      540,
+      64
+    ],
+    "objectives": [
+      [
+        190,
+        110
+      ],
+      [
+        318,
+        272
+      ],
+      [
+        492,
+        154
+      ]
+    ],
+    "sectors": [
+      "NORTH FARM",
+      "GRAIN EXCHANGE",
+      "EAST CHECKPOINT"
+    ],
+    "woods": [
+      [
+        76,
+        142,
+        10,
+        72
+      ],
+      [
+        230,
+        136,
+        10,
+        66
+      ],
+      [
+        410,
+        214,
+        10,
+        54
+      ],
+      [
+        350,
+        42,
+        10,
+        38
+      ],
+      [
+        202,
+        44,
+        10,
+        30
+      ]
+    ],
+    "water_polygons": [],
+    "rubble": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "mud": [
+      254,
+      332,
+      100,
+      30
+    ],
+    "districts": [],
+    "player_force": [
+      {
+        "kind": "engineer",
+        "position": [
+          36,
+          300
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          26,
+          286
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          48,
+          286
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          52,
+          316
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          28,
+          316
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          43,
+          325
+        ]
+      },
+      {
+        "kind": "aa",
+        "position": [
+          60,
+          300
+        ]
+      },
+      {
+        "kind": "drone",
+        "position": [
+          34,
+          278
+        ]
+      }
+    ],
+    "enemy_force": [
+      {
+        "kind": "rifle",
+        "position": [
+          180,
+          124
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          205,
+          124
+        ]
+      },
+      {
+        "kind": "drone",
+        "position": [
+          206,
+          92
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          305,
+          284
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          336,
+          258
+        ]
+      },
+      {
+        "kind": "atgm",
+        "position": [
+          343,
+          284
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          477,
+          166
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          510,
+          167
+        ]
+      },
+      {
+        "kind": "aa",
+        "position": [
+          522,
+          145
+        ]
+      }
+    ],
+    "enemy_works": [
+      {
+        "kind": "tank_obstacles",
+        "position": [
+          466,
+          178
+        ]
+      },
+      {
+        "kind": "fighting_trench",
+        "position": [
+          472,
+          140
+        ]
+      },
+      {
+        "kind": "at_gun",
+        "position": [
+          508,
+          138
+        ]
+      }
+    ],
+    "reserve_force": [
+      {
+        "kind": "tank",
+        "position": [
+          540,
+          64
+        ]
+      },
+      {
+        "kind": "tank",
+        "position": [
+          540,
+          64
+        ]
+      },
+      {
+        "kind": "rifle",
+        "position": [
+          540,
+          64
+        ]
+      },
+      {
+        "kind": "aa",
+        "position": [
+          540,
+          64
+        ]
+      }
+    ],
+    "field_supply": 2800,
+    "field_income": 3.5,
+    "hold": 55,
+    "enemy_waves": {
+      "first": 115,
+      "interval": 105,
+      "max_wave": 5
+    },
+    "operation": {
+      "kind": "maneuver",
+      "title": "CUT THE EASTERN ROAD",
+      "brief": "North Farm covers the northern approach. The Grain Exchange adds 3 supply/s and a forward reinforcement arrival. Hold East Checkpoint to stop new enemy reserves; already deployed troops remain. Secure all three positions for 55 seconds.",
+      "facilities": [
+        {
+          "objective": 1,
+          "income": 3.0,
+          "forward_position": [
+            338,
+            302
+          ]
+        }
+      ],
+      "deny_reserve_objectives": [
+        2
+      ]
+    }
+  },
+  "streets": [
+    {
+      "name": "Grain haul road",
+      "points": [
+        [
+          36,
+          300
+        ],
+        [
+          130,
+          300
+        ],
+        [
+          190,
+          240
+        ],
+        [
+          318,
+          240
+        ],
+        [
+          405,
+          195
+        ],
+        [
+          492,
+          154
+        ],
+        [
+          540,
+          64
+        ]
+      ],
+      "width": 16,
+      "class": "arterial",
+      "purpose": "main agricultural freight route from western staging through the grain exchange to the eastern highway"
+    },
+    {
+      "name": "Northern farm lane",
+      "points": [
+        [
+          130,
+          300
+        ],
+        [
+          100,
+          224
+        ],
+        [
+          100,
+          110
+        ],
+        [
+          190,
+          110
+        ],
+        [
+          335,
+          110
+        ],
+        [
+          492,
+          154
+        ]
+      ],
+      "width": 10,
+      "class": "lane",
+      "purpose": "longer northern approach past scattered farmsteads and field windbreaks"
+    },
+    {
+      "name": "Southern field track",
+      "points": [
+        [
+          190,
+          240
+        ],
+        [
+          218,
+          328
+        ],
+        [
+          392,
+          328
+        ],
+        [
+          484,
+          290
+        ],
+        [
+          492,
+          154
+        ]
+      ],
+      "width": 8,
+      "class": "track",
+      "purpose": "wide flanking approach around the exchange and east checkpoint"
+    },
+    {
+      "name": "Exchange loading access",
+      "points": [
+        [
+          318,
+          240
+        ],
+        [
+          318,
+          300
+        ]
+      ],
+      "width": 12,
+      "class": "yard",
+      "purpose": "grain collection yard access and reinforcement staging"
+    },
+    {
+      "name": "North farm service lane",
+      "points": [
+        [
+          190,
+          110
+        ],
+        [
+          190,
+          72
+        ]
+      ],
+      "width": 8,
+      "class": "track",
+      "purpose": "access to farm equipment sheds"
+    },
+    {
+      "name": "Eastern hamlet lane",
+      "points": [
+        [
+          492,
+          154
+        ],
+        [
+          550,
+          154
+        ]
+      ],
+      "width": 8,
+      "class": "street",
+      "purpose": "access to checkpoint hamlet"
+    }
+  ],
+  "city_districts": [
+    {
+      "id": "west_farm",
+      "name": "Western staging farm",
+      "polygon": [
+        [
+          14,
+          270
+        ],
+        [
+          126,
+          270
+        ],
+        [
+          126,
+          364
+        ],
+        [
+          14,
+          364
+        ]
+      ],
+      "morphology": "village"
+    },
+    {
+      "id": "north_farm",
+      "name": "North farmstead",
+      "polygon": [
+        [
+          144,
+          45
+        ],
+        [
+          244,
+          45
+        ],
+        [
+          244,
+          144
+        ],
+        [
+          144,
+          144
+        ]
+      ],
+      "morphology": "village"
+    },
+    {
+      "id": "grain_exchange",
+      "name": "Grain exchange cooperative",
+      "polygon": [
+        [
+          268,
+          208
+        ],
+        [
+          368,
+          208
+        ],
+        [
+          368,
+          316
+        ],
+        [
+          268,
+          316
+        ]
+      ],
+      "morphology": "village"
+    },
+    {
+      "id": "east_hamlet",
+      "name": "Eastern checkpoint hamlet",
+      "polygon": [
+        [
+          460,
+          104
+        ],
+        [
+          560,
+          104
+        ],
+        [
+          560,
+          204
+        ],
+        [
+          460,
+          204
+        ]
+      ],
+      "morphology": "private"
+    }
+  ],
+  "rock_parcels": [],
+  "open_spaces": [
+    {
+      "name": "Western barley field",
+      "kind": "field",
+      "polygon": [
+        [
+          120,
+          145
+        ],
+        [
+          220,
+          145
+        ],
+        [
+          220,
+          225
+        ],
+        [
+          120,
+          225
+        ]
+      ]
+    },
+    {
+      "name": "Northern crop block",
+      "kind": "field",
+      "polygon": [
+        [
+          250,
+          48
+        ],
+        [
+          330,
+          48
+        ],
+        [
+          330,
+          88
+        ],
+        [
+          250,
+          88
+        ]
+      ]
+    },
+    {
+      "name": "Central wheat field",
+      "kind": "field",
+      "polygon": [
+        [
+          254,
+          136
+        ],
+        [
+          374,
+          136
+        ],
+        [
+          374,
+          208
+        ],
+        [
+          254,
+          208
+        ]
+      ]
+    },
+    {
+      "name": "Southern field",
+      "kind": "field",
+      "polygon": [
+        [
+          250,
+          334
+        ],
+        [
+          350,
+          334
+        ],
+        [
+          350,
+          369
+        ],
+        [
+          250,
+          369
+        ]
+      ]
+    },
+    {
+      "name": "East pasture",
+      "kind": "field",
+      "polygon": [
+        [
+          430,
+          218
+        ],
+        [
+          472,
+          218
+        ],
+        [
+          472,
+          280
+        ],
+        [
+          430,
+          280
+        ]
+      ]
+    },
+    {
+      "name": "Northern orchard margin",
+      "kind": "field",
+      "polygon": [
+        [
+          372,
+          45
+        ],
+        [
+          542,
+          45
+        ],
+        [
+          542,
+          91
+        ],
+        [
+          372,
+          91
+        ]
+      ]
+    },
+    {
+      "name": "Forward exchange apron",
+      "kind": "yard",
+      "polygon": [
+        [
+          325,
+          290
+        ],
+        [
+          355,
+          290
+        ],
+        [
+          355,
+          312
+        ],
+        [
+          325,
+          312
+        ]
+      ]
+    }
+  ],
+  "landmarks": [
+    {
+      "design": "barn_long",
+      "position": [
+        62,
+        346
+      ],
+      "source_size": [
+        28,
+        11
+      ],
+      "district": "west_farm",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "stone_house",
+      "position": [
+        68,
+        278
+      ],
+      "source_size": [
+        10,
+        8
+      ],
+      "district": "west_farm",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "barn_long",
+      "position": [
+        165,
+        60
+      ],
+      "source_size": [
+        24,
+        10
+      ],
+      "district": "north_farm",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "stone_house",
+      "position": [
+        216,
+        86
+      ],
+      "source_size": [
+        10,
+        8
+      ],
+      "district": "north_farm",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "coop_shed",
+      "position": [
+        290,
+        215
+      ],
+      "source_size": [
+        32,
+        14
+      ],
+      "district": "grain_exchange",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "gatehouse",
+      "position": [
+        352,
+        262
+      ],
+      "source_size": [
+        6,
+        4
+      ],
+      "district": "grain_exchange",
+      "rotation_degrees": 0,
+      "floors": 1
+    },
+    {
+      "design": "stone_house",
+      "position": [
+        540,
+        186
+      ],
+      "source_size": [
+        10,
+        8
+      ],
+      "district": "east_hamlet",
+      "rotation_degrees": 0,
+      "floors": 1
+    }
+  ],
+  "decor": [
+    {
+      "id": "tractor.cab_utility",
+      "position": [
+        277,
+        260
+      ],
+      "rotation_degrees": 0,
+      "context": "parked tractor beside cooperative loading yard",
+      "domain": "land"
+    },
+    {
+      "id": "farm_trailer.grain_tipper",
+      "position": [
+        283,
+        260
+      ],
+      "rotation_degrees": 0,
+      "context": "grain trailer parked clear of through road",
+      "domain": "land"
+    },
+    {
+      "id": "water_tower.farm",
+      "position": [
+        225,
+        60
+      ],
+      "rotation_degrees": 0,
+      "context": "North Farm water supply",
+      "domain": "land"
+    },
+    {
+      "id": "haystack.round",
+      "position": [
+        150,
+        142
+      ],
+      "rotation_degrees": 0,
+      "context": "harvest storage at north field edge",
+      "domain": "land"
+    },
+    {
+      "id": "haystack.round",
+      "position": [
+        158,
+        142
+      ],
+      "rotation_degrees": 0,
+      "context": "harvest storage at north field edge",
+      "domain": "land"
+    },
+    {
+      "id": "tractor.open_utility",
+      "position": [
+        55,
+        330
+      ],
+      "rotation_degrees": 0,
+      "context": "western farm equipment parking",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        260,
+        124
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        270,
+        124
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        280,
+        124
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        290,
+        124
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        310,
+        124
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        320,
+        124
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        330,
+        124
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        342,
+        180
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        352,
+        180
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        362,
+        180
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        372,
+        180
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        402,
+        300
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        412,
+        300
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        422,
+        300
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    },
+    {
+      "id": "hedgerow.laid_bank",
+      "position": [
+        432,
+        300
+      ],
+      "rotation_degrees": 0,
+      "context": "field boundary with farm access gaps",
+      "domain": "land"
+    }
+  ],
+  "railways": [],
+  "layout_validation": {
+    "physical_rules": "shared Harbor footprints, water domains, mobility and line of sight",
+    "native_validation": "tests/test_regional_physics.gd"
+  },
+  "generate_enemy_defences": false
+}

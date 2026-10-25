@@ -6,17 +6,17 @@
     "inspiration": "Original authored, compressed fictional adaptation of the Sevastopol / Heraclean Peninsula geography. Public historic maps inform bay, valley, rail and settlement relationships; all battlefield streets, dimensions, forces and objectives are invented. No survey or current infrastructure accuracy is claimed.",
     "sources": [
       {
-        "title": "Ancient City of Tauric Chersonese and its Chora \u2014 UNESCO",
+        "title": "Ancient City of Tauric Chersonese and its Chora — UNESCO",
         "url": "https://whc.unesco.org/en/list/1411/",
         "use": "Historic urban grid and agricultural/vineyard hinterland morphology; consulted 2026-10-23."
       },
       {
-        "title": "Sebastopol and Western Crimea, 1919 \u2014 University of South Florida Maps ETC",
+        "title": "Sebastopol and Western Crimea, 1919 — University of South Florida Maps ETC",
         "url": "https://etc.usf.edu/maps/pages/2500/2582/2582.htm",
         "use": "Broad coast, relief, railway-valley and settlement relationships only; consulted 2026-10-23. No map imagery copied."
       },
       {
-        "title": "Plan de la Cherson\u00e8se \u2014 Library of Congress",
+        "title": "Plan de la Chersonèse — Library of Congress",
         "url": "https://www.loc.gov/item/2002695526/",
         "use": "Historic peninsula / bay relationship reference; no historical fortifications or troop positions reproduced."
       }
@@ -31,7 +31,7 @@
   "scenario": {
     "id": "south_inlet",
     "name": "SOUTH INLET",
-    "brief": "Secure the fishing quay, inlet head and northern landing. The land road follows the coast around the bay; naval forces support shore fighting without crossing land.",
+    "brief": "Secure the fishing quay and inlet head, then station a ship in the marked sea lane. Land and naval forces must keep the inlet open together.",
     "size": [
       448,
       320
@@ -294,13 +294,28 @@
         ]
       }
     ],
-    "enemy_works": [],
+    "enemy_works": [
+      {
+        "kind": "at_gun",
+        "position": [
+          270,
+          189
+        ]
+      },
+      {
+        "kind": "at_gun",
+        "position": [
+          285,
+          130
+        ]
+      }
+    ],
     "reserve_force": [
       {
-        "kind": "tank",
+        "kind": "boat",
         "position": [
-          420,
-          108
+          170,
+          60
         ]
       },
       {
@@ -324,6 +339,40 @@
     "field_sea_insertion": [
       195,
       275
+    ],
+    "operation": {
+      "kind": "coastal_control",
+      "title": "OPEN THE INLET",
+      "brief": "Secure all shore sectors and keep a ship in the marked sea lane for the 60-second hold. Quay and inlet-head control open the coastal supply route (+4/s).",
+      "facilities": [
+        {
+          "objective": 0,
+          "income": 2,
+          "requires_naval_control": true
+        },
+        {
+          "objective": 1,
+          "income": 2,
+          "requires_naval_control": true
+        }
+      ],
+      "naval_zone": {
+        "name": "INLET SEA LANE",
+        "position": [
+          285,
+          160
+        ],
+        "radius": 18,
+        "requires_objectives": [
+          0,
+          1
+        ]
+      },
+      "reserve_delay": 30
+    },
+    "field_enemy_sea_insertion": [
+      170,
+      60
     ]
   },
   "streets": [
