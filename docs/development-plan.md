@@ -45,6 +45,12 @@ The current increment deepens distinct battlefield decisions, carries expedition
 
 ## Current delivery focus
 
+### Tactical action planning — 2026-10-27
+
+The user requested a master plan and subplans for richer individual decisions across infantry, vehicles, air, naval and support units, explicitly including grenades, backup requests and trench digging. [Plan 18](plans/18-unit-tactical-autonomy.md) and its [action catalogue](tactical-action-catalogue.md) define that proposed work. This is planning-only authorization; no new action is implemented by the document set.
+
+Proposed sequence: stabilize readiness/targeting/action ownership; prove an infantry defense slice with throwables, support and preparation; give existing vehicle/air/sea units persistent roles; then expand urban, engineering and sustainment decisions. Keep shared physical/information rules, a compact command interface and measured responsiveness in every increment. New transport classes, generalized fuel, towing, minefields, full interiors and wider evacuation remain gated optional scope. The existing regional operations below remain the implemented baseline.
+
 ### Regional operations — 2026-10-25
 
 The user explicitly accepts independent battlefields without adjacent boundaries. [Plan 17](plans/17-regional-operations.md) continues the map branch on `codex/regional-operations`: five selectable operations, functional local supply/dispatch objectives, joint shore-and-sea control, an operational campaign, walkable pass terrain and Windbreak Fields. The earlier [Plan 16](plans/16-regional-map.md) supplies the atlas and shared authoring foundation.

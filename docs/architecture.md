@@ -1,5 +1,9 @@
 # Architecture
 
+## Planned tactical-action work — not implemented
+
+[Plan 18](plans/18-unit-tactical-autonomy.md) specifies proposed action lifecycle, capability/observation records, persistent local assignments, support requests, resource accounting and budgeted execution. Its twelve subplans and [action catalogue](tactical-action-catalogue.md) are documentation, not new runtime modules. The implemented systems below remain the source baseline. Future adapters must preserve explicit order semantics, shared collision/elevation/sensing rules, one live tactical battlefield, and the existing checkpoint/outcome persistence boundary.
+
 ## Implemented stack
 
 - Godot **4.5.1-stable**, GDScript, GL Compatibility renderer, 2× MSAA.

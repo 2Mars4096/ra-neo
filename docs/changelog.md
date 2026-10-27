@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-27 — Tactical-action master plan and subplans
+
+- Prepare [plan 18](plans/18-unit-tactical-autonomy.md), twelve linked subplans and a consolidated [action catalogue](tactical-action-catalogue.md) on `codex/unit-tactics-plans`, based on regional-operations `f5916e8`.
+- Cover infantry readiness/cooperation, grenades and urban actions, backup requests, digging/engineering, ground vehicles, air/drones, naval support, information/EW, sustainment, command feedback and performance. Each domain defines existing/partial/new starting points, delivery scope, prerequisites, concrete acceptance scenarios and placeholder presentation.
+- Define proposed shared contracts for action ownership, engagement permission, support leases, resource commitment, smoke/sensors and campaign settlement. Separate early existing-roster increments from optional transports, towing, minefields, detailed interiors and previously deferred stranded-wounded rescue.
+- Record source-review findings as unverified runtime follow-ups and correct the old tracking statement that implied A* already ran on a background thread.
+- Scope: documentation only. All implementation tasks remain unchecked; no gameplay, balance, assets or saves changed, and no new runtime benchmark is claimed. Validation is limited to cross-plan review, documentation consistency/link checks and the documentation-only diff.
+
 ## 2026-10-25 — Distinct operations, persistent forces and walkable relief
 
 - Continue on `codex/regional-operations`. Keep battlefields separately loaded and independently authored; regional consequences do not require adjacent boundaries.

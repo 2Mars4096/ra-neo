@@ -1,5 +1,23 @@
 # Todo
 
+## Planned tactical expansion — 2026-10-27
+
+Planning documents are prepared; implementation is not started. The user requested plans only. The [action catalogue](tactical-action-catalogue.md) distinguishes existing primitives, partial systems and new actions, with Core/Expansion/Optional delivery scope.
+
+- [ ] [18: Tactical actions and capable individual units](plans/18-unit-tactical-autonomy.md) — master milestones, shared contracts and acceptance gates.
+  - [ ] [18-1: Action framework and readiness](plans/18-1-action-framework-and-readiness.md).
+  - [ ] [18-2: Infantry fire and movement](plans/18-2-infantry-fire-and-movement.md).
+  - [ ] [18-3: Grenades and urban actions](plans/18-3-infantry-grenades-and-urban-actions.md).
+  - [ ] [18-4: Coordination and support requests](plans/18-4-coordination-and-support-requests.md).
+  - [ ] [18-5: Engineering and field fortifications](plans/18-5-engineering-and-field-fortifications.md).
+  - [ ] [18-6: Vehicles and ground support](plans/18-6-vehicles-and-ground-support.md).
+  - [ ] [18-7: Air and drone operations](plans/18-7-air-and-drone-operations.md).
+  - [ ] [18-8: Naval and shore operations](plans/18-8-naval-and-shore-operations.md).
+  - [ ] [18-9: Information and electronic warfare](plans/18-9-information-and-electronic-warfare.md).
+  - [ ] [18-10: Logistics, medical and recovery](plans/18-10-logistics-medical-and-recovery.md).
+  - [ ] [18-11: Command interface and feedback](plans/18-11-command-interface-and-feedback.md).
+  - [ ] [18-12: Performance and validation](plans/18-12-performance-and-validation.md).
+
 ## Completed foundation and implementation
 
 - [x] Create the scaffold-dev documentation and Codex-first repository instructions.
@@ -62,7 +80,8 @@
 
 ## Open player requests (2026-10-15)
 
-- [x] Hitch removal: spread nav-grid re-weighting (wetness change, 140-220 ms stalls) over frames; move pathfinding off the main thread.
+- [x] Hitch reduction: spread nav-grid re-weighting (wetness change, 140-220 ms stalls) over frames and incrementally process queued path smoothing.
+- [ ] Pathfinding execution: initial A* still runs synchronously; complete the shared work budget and measure remaining spikes before choosing isolated workers ([18-12](plans/18-12-performance-and-validation.md)). The earlier combined checkbox overstated background pathfinding.
 - [ ] Renderer: Metal/Mobile measured 2026-10-15: engine process p95 18.6 -> 10.9 ms, frame p95 unchanged (~26 ms, sim-bound); harbor looks identical but Canal Watch and effect colours wash out (linear vs sRGB colour pipeline). Stayed on GL Compatibility; recalibrate colours before switching.
 - [x] Explosion VFX: ~3x larger, layered flash/fireball/shockwave/debris/dust column, camera shake; native screenshot review loop.
 - [x] World damage: buildings (damaged -> breached -> collapsed rubble, garrison casualties), field works degrade under HE, boats (flooding/engine/fire), helicopters (forced landing/crash), drones fragile, HE destroys nearby props/trees.

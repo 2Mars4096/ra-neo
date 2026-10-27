@@ -1,5 +1,17 @@
 # Bugs and failed approaches
 
+## Tactical decision review follow-ups — 2026-10-27
+
+Source review at regional-operations `f5916e8` identified the following cases for focused reproduction in [18-1](plans/18-1-action-framework-and-readiness.md) and [18-12](plans/18-12-performance-and-validation.md). No new runtime reproduction or fix is claimed here.
+
+- `Simulation.infantry_combat`: reload initiation is after target/posture/movement gates; quiet empty magazines can remain unprepared. Infantry target changes can reset aim repeatedly.
+- Vehicle/emplacement acquisition retains a valid current target before ranking new candidates. An already engaged AA unit need not reconsider an arriving urgent airborne target.
+- `Infantry.capacity` counts the maximum HP of combat-effective survivors. Using it as the withdrawal denominator does not measure losses from original strength; one healthy survivor can still appear fully healthy to that check.
+- `TacticalDirector.contact_drill` may continue a contact hold before the separate high-suppression withdrawal condition is evaluated. Explicit priority rules need a regression case.
+- The individual target loop can spend its limited line checks on earlier candidates before evaluating a later explicit infantry target. Treat this as a static correctness risk until reproduced.
+- Path jobs slice smoothing, while initial A* and several local cover/flank/regroup searches remain synchronous. Existing budgets do not cover every direct call; no `Thread`/`WorkerThreadPool` dispatch was found in current scripts. The corresponding old todo wording is corrected.
+- Support/escort extensions must distinguish player replacement commands from internal child movement; current `record_order` cancels existing maneuvers on a nonqueued replacement.
+
 ## Known limitations
 
 - Release tooling is incomplete in the current source checkout (confirmed during the 2026-10-23 rename): `tools/export_release.py` references absent `export_presets.cfg`, `resources/build_info.json`, and `docs/playtest-readme.txt`. The staging/export path and build-version-dependent release tests require those inputs; changing the release filenames does not establish standalone-export readiness.
