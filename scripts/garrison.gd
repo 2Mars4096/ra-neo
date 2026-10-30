@@ -111,6 +111,7 @@ static func wall_point(sim,building_id:int,door:Vector2)->Vector2:
 
 static func begin_entry(sim,u:Dictionary,building_id:int)->void:
 	var door:Vector2=u.get("garrison_door",u.pos)
+	sim.actions.activate_order(u,{"mode":"garrison","target":building_id,"pos":door},sim.time,"executor")
 	u["garrison_transit"]="IN"
 	u["garrison_wall"]=wall_point(sim,building_id,door)
 	u.orders=[];u.path=[];u.intent={}
@@ -186,6 +187,10 @@ static func step_transit(sim,u:Dictionary,dt:float)->void:
 
 static func enter(sim,u:Dictionary,building_id:int)->void:
 	var building:Dictionary=index(sim).buildings[building_id]
+	var movement:Dictionary=sim.actions.active(u,"movement")
+	if not movement.is_empty():sim.actions.complete(u,movement,sim.time,"garrisoned")
+	sim.actions.cancel_unit(u,sim.time,"garrisoned")
+	sim.Actions.revoke_permission(u)
 	u["garrison"]=building_id
 	u.erase("garrison_target")
 	u.orders=[];u.path=[];u.intent={}
@@ -298,6 +303,8 @@ static func man_windows(sim,u:Dictionary)->void:
 # The building is gone (collapse): survivors are thrown clear where they stand,
 # with no doorway walk, and drop any pending entry.
 static func evict(sim,u:Dictionary)->void:
+	sim.actions.cancel_unit(u,sim.time,"garrison_lost")
+	sim.Actions.revoke_permission(u)
 	u["garrison"]=-1
 	for key in ["garrison_transit","garrison_target","garrison_exit","garrison_wall","window_threat","window_threat_pos"]:u.erase(key)
 	u.hold_command=false

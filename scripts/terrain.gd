@@ -55,6 +55,7 @@ var port:=true
 var shore_x:=82.0
 var wetness:=0.0
 var navigation: Dictionary = {}
+var geometry_version:=0
 var navigation_wetness_bucket:=-1
 var navigation_weights:Dictionary={}
 var navigation_weight_epoch:=0
@@ -360,6 +361,7 @@ func update_field_zones(zones:Array)->bool:
 	var keys:=zones.map(func(z):return [z.rect,z.speed,z.cover,z.get("conceal",1.0),z.get("front",Vector2.UP)])
 	var old:=field_zones.map(func(z):return [z.rect,z.speed,z.cover,z.get("conceal",1.0),z.get("front",Vector2.UP)])
 	if keys==old:return false
+	geometry_version+=1
 	for zone in zones+field_zones:
 		if not changed.has(zone.rect):changed.append(zone.rect)
 	field_zones.clear()
@@ -499,6 +501,7 @@ func update_field_geometry(blocks:Array,covers:Array,pushable:Array=[])->bool:
 	# A block whose pushability flips is refreshed like a new one.
 	for rect in next_blocks:
 		if next_pushable.has(rect)!=pushable_blocks.has(rect) and not changed.has(rect):changed.append(rect)
+	if not changed.is_empty() or cover_changed:geometry_version+=1
 	dynamic_blocks=next_blocks
 	field_cover=next_covers
 	pushable_blocks=next_pushable
@@ -1198,6 +1201,7 @@ func crush_props(center:Vector2,radius:float)->Array:
 	return records
 
 func _refresh_land_cells(rects:Array)->void:
+	if not rects.is_empty():geometry_version+=1
 	for key in navigation:
 		if str(key).get_slice(":",0)!="land":continue
 		var grid:AStarGrid2D=navigation[key]
@@ -1250,6 +1254,7 @@ func _erase_static_rect(rect:Rect2)->void:
 					bucket.erase(rect)
 
 func rebuild_static_index(invalidate_navigation:bool=true)->void:
+	if invalidate_navigation:geometry_version+=1
 	_static_index.clear()
 	_static_near_index.clear()
 	var walls:=_wall_blocks()

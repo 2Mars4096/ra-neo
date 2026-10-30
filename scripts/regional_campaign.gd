@@ -3,7 +3,7 @@ extends RefCounted
 # Deployment checkpoints, outcomes, survivors and supply persist. Positions,
 # orders, structures and elapsed battle time are local to the current battle.
 const PATH := "user://regional_campaign.json"
-const VERSION := 1
+const VERSION := 2
 const Catalog := preload("res://scripts/region_catalog.gd")
 const MOBILE := ["rifle","atgm","engineer","tank","aa","drone","helo","boat"]
 const DAMAGE_FLAGS := ["mobility_kill","firepower_kill","optics_kill"]
@@ -38,7 +38,8 @@ static func number(value:Variant,low:float,high:float) -> bool:
 	return typeof(value) in [TYPE_FLOAT,TYPE_INT] and is_finite(float(value)) and float(value)>=low and float(value)<=high
 
 static func valid(value:Variant,checkpoint:bool=false) -> bool:
-	if not value is Dictionary or value.get("version",-1)!=VERSION:return false
+	if not value is Dictionary or not number(value.get("version"),1,VERSION):return false
+	if float(value.version)!=floorf(float(value.version)):return false
 	if not value.get("started") is bool or not number(value.get("supply"),0,10000000):return false
 	if not value.get("roster") is Array or value.roster.size()>256:return false
 	if not value.get("secured") is Dictionary or not value.get("history") is Dictionary:return false
@@ -50,10 +51,10 @@ static func valid(value:Variant,checkpoint:bool=false) -> bool:
 		if not key is String or value.history[key] not in ["VICTORY","DEFEAT","WITHDRAWN"]:return false
 	for record in value.roster:
 		if not record is Dictionary or record.get("kind","") not in MOBILE:return false
-		if not number(record.get("hp"),0.00001,100000) or not record.get("members",[]) is Array:return false
-		# Missing infantry records would otherwise respawn the omitted soldiers
-		# healthy. A version-1 save always contains every member, including KIA.
-		if record.get("members",[]).size()!=int(MEMBER_COUNTS.get(record.kind,0)) or not record.get("damage",{}) is Dictionary:return false
+		if not number(record.get("hp"),0.00001,100000) or not record.get("members") is Array:return false
+		# Every generated save has an explicit array (empty for vehicles). Missing
+		# infantry would respawn soldiers; missing vehicle data breaks migration.
+		if record.members.size()!=int(MEMBER_COUNTS.get(record.kind,0)) or not record.get("damage",{}) is Dictionary:return false
 		for key in record.get("damage",{}):
 			var item:Variant=record.damage[key]
 			if key not in DAMAGE_KEYS:return false
@@ -63,14 +64,59 @@ static func valid(value:Variant,checkpoint:bool=false) -> bool:
 			if key in ["crew","crew_full","missiles"] and float(item)!=floorf(float(item)):return false
 		if record.get("damage",{}).has("crew_full") and float(record.damage.crew_full)<1:return false
 		if record.get("damage",{}).has("crew") and record.damage.has("crew_full") and float(record.damage.crew)>float(record.damage.crew_full):return false
-		for member in record.get("members",[]):
+		for member in record.members:
 			if not member is Dictionary or not number(member.get("hp"),0,100000):return false
-			if member.get("wound","") not in ["HEALTHY","LIGHT","SEVERE","KIA"]:return false
+			if member.get("wound","") not in ["HEALTHY","LIGHT","SEVERE","KIA","CREW"]:return false
 			if not number(member.get("bleed_left",0),0,10000):return false
 			if not member.get("stable",false) is bool:return false
+		if int(value.version)>=2 and not record.members.is_empty() and not valid_roster_details(record):return false
 	if not checkpoint and not value.get("retry",{}) is Dictionary:return false
 	if not checkpoint and not value.get("retry",{}).is_empty() and not valid(value.retry,true):return false
 	return true
+
+static func valid_roster_details(record:Dictionary) -> bool:
+	if not number(record.get("assigned_hp"),0.00001,100000):return false
+	if not number(record.get("assigned_members"),1,256) or float(record.assigned_members)!=floorf(float(record.assigned_members)):return false
+	if int(record.assigned_members)<record.members.size():return false
+	var identities:Dictionary={}
+	for member in record.members:
+		if not member.get("member_id") is String or member.member_id.is_empty() or member.member_id.length()>64 or identities.has(member.member_id):return false
+		identities[member.member_id]=member.wound
+		if member.get("readiness_weapon","") not in ["rifle","atgm"] or not member.get("magazines") is Dictionary:return false
+		if member.magazines.size()!=2:return false
+		for weapon in ["rifle","atgm"]:
+			var amount:Variant=member.magazines.get(weapon)
+			if not number(amount,0,6 if weapon=="rifle" else 1) or float(amount)!=floorf(float(amount)):return false
+	if not record.get("equipment") is Dictionary or record.equipment.size()>1:return false
+	for key in record.equipment:
+		if key!="launcher" or record.kind!="atgm":return false
+		var item:Variant=record.equipment[key]
+		if not item is Dictionary or item.get("id","")!=key or not item.get("holder") is String:return false
+		if not identities.has(item.holder) or identities[item.holder] in ["KIA","CREW"]:return false
+	return true
+
+# Version 1 never supported handovers or magazine persistence. Its full casualty
+# slots identify the original holder; a lost holder gets no replacement launcher.
+# Version 2 inventories (including an empty one) are always authoritative.
+static func upgrade_state(value:Dictionary,checkpoint:bool=false) -> Dictionary:
+	var upgraded:Dictionary=value.duplicate(true)
+	if int(upgraded.version)==1:
+		var definitions:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://resources/units.json"))
+		for record in upgraded.roster:
+			if record.members.is_empty():continue
+			record["assigned_hp"]=float(definitions[record.kind].hp)
+			record["assigned_members"]=int(definitions[record.kind].members)
+			record["equipment"]={}
+			for index in record.members.size():
+				var member:Dictionary=record.members[index]
+				member["member_id"]="member_%d"%index
+				var launcher:bool=record.kind=="atgm" and index==0 and member.wound not in ["KIA","CREW"]
+				member["readiness_weapon"]="atgm" if launcher else "rifle"
+				member["magazines"]={"rifle":6,"atgm":1 if launcher else 0}
+				if launcher:record.equipment["launcher"]={"id":"launcher","holder":member.member_id}
+		upgraded.version=VERSION
+	if not checkpoint and not upgraded.get("retry",{}).is_empty():upgraded.retry=upgrade_state(upgraded.retry,true)
+	return upgraded
 
 func read_file(path:String) -> Variant:
 	if not FileAccess.file_exists(path):return null
@@ -92,7 +138,7 @@ func load_state(path:String=PATH) -> Error:
 			last_error=ERR_FILE_CORRUPT
 			return last_error
 		recovered=true
-	data=parsed
+	data=upgrade_state(parsed)
 	last_error=OK
 	return OK
 
@@ -215,15 +261,26 @@ func restore_unit(sim,unit:Dictionary,record:Dictionary) -> void:
 	if fire_left>0:unit["fire_until"]=sim.time+fire_left
 	if unit.has("flood") or fire_left>0:sim.VehicleDamage._hazard(sim,unit)
 	var saved:Array=record.get("members",[])
+	if not saved.is_empty():
+		unit["assigned_hp"]=float(record.get("assigned_hp",unit.max_hp))
+		unit["assigned_members"]=int(record.get("assigned_members",saved.size()))
+		if record.has("equipment"):unit["equipment"]=record.equipment.duplicate(true)
+		else:unit.erase("equipment")
 	for index in mini(saved.size(),unit.members.size()):
 		var member:Dictionary=unit.members[index]
 		var source:Dictionary=saved[index]
 		member.hp=clampf(float(source.hp),0,float(member.max_hp))
 		member.wound=str(source.wound)
+		member["member_id"]=str(source.get("member_id","member_%d"%index))
+		if source.has("magazines"):
+			member["magazines"]=source.magazines.duplicate(true)
+			member["readiness_weapon"]=str(source.readiness_weapon)
+			member.rounds=int(member.magazines[member.readiness_weapon])
+		sim.Infantry.cancel_readiness(member)
 		member.stable=bool(source.get("stable",false))
 		member.bleed_at=sim.time+float(source.get("bleed_left",0.0)) if member.wound=="SEVERE" and not member.stable else INF
-		member["campaign_absent"]=member.wound=="KIA"
-		if member.wound in ["SEVERE","KIA"]:
+		member["campaign_absent"]=member.wound in ["KIA","CREW"]
+		if member.wound in ["SEVERE","KIA","CREW"]:
 			member.hp=0.0
 			member.state="KIA" if member.wound=="KIA" else "DOWN"
 	if not unit.members.is_empty():sim.Infantry.publish(unit)
@@ -233,6 +290,14 @@ func snapshot(sim) -> Array:
 	for unit in sim.living(0):
 		if unit.kind not in MOBILE or unit.get("abandoned",false) or unit.has("crash"):continue
 		var record:Dictionary={"kind":str(unit.kind),"hp":float(unit.hp),"members":[],"damage":{}}
+		sim.Infantry.ensure_roster(unit)
+		if not unit.members.is_empty():
+			record["assigned_hp"]=sim.Infantry.assigned_capacity(unit)
+			record["assigned_members"]=int(unit.assigned_members)
+			record["equipment"]={}
+			for item in unit.equipment:
+				var holder:Dictionary=sim.Infantry.member_by_id(unit,str(unit.equipment[item].holder))
+				if not holder.is_empty() and holder.get("wound","HEALTHY") not in ["KIA","CREW"]:record.equipment[item]=unit.equipment[item].duplicate(true)
 		for key in DAMAGE_KEYS:
 			if unit.has(key):record.damage[key]=unit[key]
 		if unit.has("fire_until"):
@@ -240,7 +305,9 @@ func snapshot(sim) -> Array:
 			if fire_left>0:record.damage["fire_left"]=fire_left
 		for member in unit.members:
 			var left:float=maxf(0,float(member.get("bleed_at",INF))-sim.time)
-			record.members.append({"hp":float(member.hp),"wound":str(member.get("wound","HEALTHY")),"stable":bool(member.get("stable",false)),"bleed_left":left if is_finite(left) else 0.0})
+			var magazines:={"rifle":clampi(sim.Infantry.magazine_rounds(member,"rifle"),0,6),"atgm":clampi(sim.Infantry.magazine_rounds(member,"atgm"),0,1)}
+			if not record.equipment.has("launcher") or record.equipment.launcher.holder!=member.member_id:magazines.atgm=0
+			record.members.append({"hp":float(member.hp),"wound":str(member.get("wound","HEALTHY")),"stable":bool(member.get("stable",false)),"bleed_left":left if is_finite(left) else 0.0,"member_id":str(member.member_id),"readiness_weapon":str(member.get("readiness_weapon","rifle")),"magazines":magazines})
 		roster.append(record)
 	return roster
 

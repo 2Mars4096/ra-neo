@@ -14,6 +14,149 @@ static func create(u:Dictionary,d:Dictionary) -> void:
 		var offset:=formation_offset(i,int(d.members))
 		u.members.append({"index":i,"offset":offset,"pos":u.pos+offset,"hp":float(d.hp)/int(d.members),"max_hp":float(d.hp)/int(d.members),"cooldown":i*0.19,"target":-1,"aim":0.0,"suppression":0.0,"last_hit":-100.0,"last_shot":-100.0,"facing":u.facing,"state":"HOLDING","travel":0.0,"phase":i*1.7,"cover_goal":Vector2.ZERO,"cover_until":0.0,"rounds":6 if not (u.kind=="atgm" and i==0) else 1,"reload_until":0.0,"speed":0.0,"posture":"STANDING","body_radius":0.8,"posture_until":0.0,"wound":HEALTHY,"bleed_at":INF,"aid":0.0,"stable":false,"treat":0.0,"medic":-1,"aiding":-1})
 	u["member_hp_snapshot"]=u.hp
+	ensure_roster(u)
+
+# Durable roster identity is independent of surviving health and array order.
+# Only missing legacy fields are initialized; an explicit empty inventory wins.
+static func ensure_roster(u:Dictionary) -> void:
+	var members:Array=u.get("members",[])
+	if members.is_empty():return
+	if not u.has("assigned_hp"):u["assigned_hp"]=float(u.get("max_hp",u.get("hp",0.0)))
+	if not u.has("assigned_members"):u["assigned_members"]=members.size()
+	for index in members.size():
+		var member:Dictionary=members[index]
+		if not member.has("member_id"):member["member_id"]="member_%d"%int(member.get("index",index))
+	if not u.has("equipment"):
+		u["equipment"]={}
+		if u.get("kind","")=="atgm":
+			for member in members:
+				if int(member.get("index",-1))==0 and float(member.hp)>0 and member.get("wound",HEALTHY) not in [KIA,"CREW"]:
+					u.equipment["launcher"]={"id":"launcher","holder":str(member.member_id)}
+	for member in members:
+		var primary:bool=u.equipment.get("launcher",{}).get("holder","")==member.member_id
+		if not member.has("readiness_weapon"):member["readiness_weapon"]="atgm" if primary else "rifle"
+		if not member.has("magazines"):
+			member["magazines"]={"rifle":6,"atgm":1 if primary else 0}
+			member.magazines[member.readiness_weapon]=maxi(0,int(member.get("rounds",member.magazines[member.readiness_weapon])))
+
+static func member_by_id(u:Dictionary,identity:String) -> Dictionary:
+	for member in u.get("members",[]):
+		if str(member.get("member_id",""))==identity:return member
+	return {}
+
+static func has_equipment(u:Dictionary,member:Dictionary,item:String) -> bool:
+	ensure_roster(u)
+	return not member.is_empty() and u.get("equipment",{}).get(item,{}).get("holder","")==str(member.get("member_id",""))
+
+static func assigned_capacity(u:Dictionary) -> float:
+	ensure_roster(u)
+	return float(u.get("assigned_hp",u.get("max_hp",0.0)))
+
+static func strength(u:Dictionary) -> Dictionary:
+	ensure_roster(u)
+	var effective:=0
+	var recoverable:=0
+	var hp:=0.0
+	for member in u.get("members",[]):
+		if float(member.hp)>0:effective+=1;hp+=float(member.hp)
+		if member.get("wound",HEALTHY) not in [KIA,"CREW"]:recoverable+=1
+	if u.get("members",[]).is_empty():
+		hp=maxf(0.0,float(u.get("hp",0.0)))
+		effective=1 if hp>0 else 0
+		recoverable=effective
+	var assigned:=assigned_capacity(u)
+	return {"assigned_hp":assigned,"assigned_members":int(u.get("assigned_members",1)),"effective_hp":hp,"effective_members":effective,"recoverable_members":recoverable,"fraction":hp/assigned if assigned>0 else 0.0}
+
+# rounds remains the active-weapon adapter used by existing firing code.
+static func magazine_rounds(member:Dictionary,weapon:String) -> int:
+	if member.get("readiness_weapon",weapon)==weapon:return maxi(0,int(member.get("rounds",0)))
+	return maxi(0,int(member.get("magazines",{}).get(weapon,0)))
+
+static func cancel_readiness(member:Dictionary) -> void:
+	member["reload_until"]=0.0
+	member["aim"]=0.0
+
+# Readiness is allowed in a quiet interval without a selected target. It never
+# grants rounds at the start, and switching weapons preserves spent magazines.
+static func update_readiness(u:Dictionary,member:Dictionary,now:float,weapon:String) -> bool:
+	ensure_roster(u)
+	if weapon not in ["rifle","atgm"]:cancel_readiness(member);return false
+	var previous:String=member.get("readiness_weapon",weapon)
+	member.magazines[previous]=maxi(0,int(member.get("rounds",0)))
+	if previous!=weapon:
+		cancel_readiness(member)
+		member.readiness_weapon=weapon
+		member.rounds=int(member.magazines.get(weapon,0))
+	var withdrawing:bool=u.get("maneuver",{}).get("phase","")=="WITHDRAW" or (not u.get("orders",[]).is_empty() and u.orders[0].mode=="retreat")
+	if float(member.hp)<=0 or member.get("wound",HEALTHY) in [SEVERE,KIA,"CREW"] or float(member.get("travel",0.0))>0.01 or int(member.get("aiding",-1))>=0 or member.get("cover_phase","") in ["SEEKING","SETTLING"] or withdrawing:
+		cancel_readiness(member);return false
+	if weapon=="atgm" and (not has_equipment(u,member,"launcher") or int(u.get("missiles",1))<=0):
+		cancel_readiness(member);return false
+	if float(member.get("reload_until",0.0))>0.0:
+		if now<float(member.reload_until):member.state="RELOADING";member.aim=0.0;return true
+		member.rounds=1 if weapon=="atgm" else 6
+		member.magazines[weapon]=member.rounds
+		member.reload_until=0.0
+		return false
+	if int(member.rounds)>0:return false
+	member.reload_until=now+(3.0 if weapon=="atgm" else 1.8)
+	member.state="RELOADING";member.aim=0.0
+	return true
+
+const HANDOVER_SECONDS:=2.0
+const HANDOVER_REACH:=2.0
+const HANDOVER_DEADLINE:=10.0
+
+static func handover_available(u:Dictionary,member:Dictionary,now:float) -> bool:
+	if member.is_empty() or float(member.get("hp",0.0))<=0:return false
+	if member.get("wound",HEALTHY) in [SEVERE,KIA,"CREW"] or int(member.get("aiding",-1))>=0:return false
+	if float(member.get("travel",0.0))>0.01 or float(member.get("reload_until",0.0))>now:return false
+	if member.get("cover_phase","") in ["SEEKING","SETTLING"]:return false
+	return u.get("maneuver",{}).get("phase","")!="WITHDRAW" and (u.get("orders",[]).is_empty() or u.orders[0].mode!="retreat")
+
+# Internal opt-in interface only. No automatic pickup, replacement specialist,
+# or player command is enabled by this ticket.
+static func begin_handover(u:Dictionary,item:String,receiver_id:String,now:float) -> Dictionary:
+	ensure_roster(u)
+	var owned:Dictionary=u.get("equipment",{}).get(item,{})
+	if owned.is_empty():return {}
+	var giver:=member_by_id(u,str(owned.holder))
+	var receiver:=member_by_id(u,receiver_id)
+	if giver==receiver or not handover_available(u,giver,now) or not handover_available(u,receiver,now):return {}
+	if giver.pos.distance_to(receiver.pos)>HANDOVER_REACH:return {}
+	if not u.has("equipment_handovers"):u["equipment_handovers"]={}
+	if u.equipment_handovers.has(item):return {}
+	u["handover_serial"]=int(u.get("handover_serial",0))+1
+	var ticket:Dictionary={"id":u.handover_serial,"item":item,"giver":str(giver.member_id),"receiver":receiver_id,"version":int(u.get("order_version",0)),"assignment":int(u.get("assignment",{}).get("id",0)),"ready_at":now+HANDOVER_SECONDS,"deadline":now+HANDOVER_DEADLINE}
+	u.equipment_handovers[item]=ticket
+	return ticket
+
+static func cancel_handover(u:Dictionary,ticket:Dictionary) -> void:
+	var pending:Dictionary=u.get("equipment_handovers",{})
+	var item:String=ticket.get("item","")
+	if pending.get(item,{}).get("id",-1)==ticket.get("id",-2):pending.erase(item)
+
+static func complete_handover(u:Dictionary,ticket:Dictionary,now:float) -> bool:
+	if ticket.is_empty():return false
+	var item:String=ticket.get("item","")
+	if not is_same(u.get("equipment_handovers",{}).get(item,{}),ticket):return false
+	var giver:=member_by_id(u,str(ticket.giver))
+	var receiver:=member_by_id(u,str(ticket.receiver))
+	var valid:bool=now<=float(ticket.deadline) and int(ticket.version)==int(u.get("order_version",0)) and int(ticket.assignment)==int(u.get("assignment",{}).get("id",0)) and u.get("equipment",{}).get(item,{}).get("holder","")==ticket.giver
+	valid=valid and handover_available(u,giver,now) and handover_available(u,receiver,now)
+	if valid:valid=giver.pos.distance_to(receiver.pos)<=HANDOVER_REACH
+	if not valid:cancel_handover(u,ticket);return false
+	if now<float(ticket.ready_at):return false
+	var loaded:=magazine_rounds(giver,"atgm") if item=="launcher" else 0
+	cancel_readiness(giver);cancel_readiness(receiver)
+	if item=="launcher":
+		giver.magazines.atgm=0
+		if giver.readiness_weapon=="atgm":giver.rounds=0
+		receiver.magazines.atgm=loaded
+		if receiver.readiness_weapon=="atgm":receiver.rounds=loaded
+	u.equipment[item].holder=receiver.member_id
+	cancel_handover(u,ticket)
+	return true
 
 static func reconcile(u:Dictionary) -> void:
 	if u.members.is_empty():return
@@ -30,11 +173,16 @@ static func reconcile(u:Dictionary) -> void:
 # legacy partial value), LIGHT at most LIGHT_SHARE*max_hp, SEVERE and KIA zero.
 # The section is destroyed once no soldier can fight (every one SEVERE or KIA).
 static func publish(u:Dictionary) -> void:
+	ensure_roster(u)
 	u.hp=0.0
 	for member in u.members:
 		# Legacy/external damage (tests, FPV blast) that zeroes a soldier still
 		# produces a wound state, never a vanished record.
 		if member.hp<=0 and member.get("wound",HEALTHY) in [HEALTHY,LIGHT]:external_down(member)
+		if member.hp<=0:
+			cancel_readiness(member)
+			for ticket in u.get("equipment_handovers",{}).values().duplicate():
+				if ticket.giver==member.member_id or ticket.receiver==member.member_id:cancel_handover(u,ticket)
 		u.hp+=member.hp
 	# A section whose survivors are all badly wounded still exists: it stays
 	# selectable and visible but cannot fight (it ends when the last man dies).
@@ -120,6 +268,7 @@ static func wound(u:Dictionary,member:Dictionary,outcome:String,now:float,rng:Ra
 	member.state="DOWN" if outcome==SEVERE else "KIA"
 	member.target=-1
 	member.aim=0.0
+	cancel_readiness(member)
 	release(u,member)
 	Cover.clear(member)
 
@@ -135,6 +284,7 @@ static func release(u:Dictionary,member:Dictionary) -> void:
 	member.medic=-1
 
 static func external_down(member:Dictionary) -> void:
+	cancel_readiness(member)
 	member.hp=0.0
 	var hit_at:float=float(member.get("last_hit",-100.0))
 	# Scripted removals (never hit) leave a body; combat damage is 55% KIA.
@@ -195,7 +345,7 @@ static func strike(u:Dictionary,kind:String,lethality:float,source:Vector2,now:f
 # section fights on until the fire dies down.
 const DRAG_LULL:=1.0
 static func tick_wounds(u:Dictionary,now:float,dt:float,sim=null) -> void:
-	var calm:bool=(u.orders.is_empty() or u.orders[0].mode!="retreat") and now-float(u.last_hit)>=DRAG_LULL and u.suppression<=AID_SUPPRESSION
+	var calm:bool=(u.orders.is_empty() or u.orders[0].mode!="retreat") and u.get("maneuver",{}).get("phase","")!="WITHDRAW" and now-float(u.last_hit)>=DRAG_LULL and u.suppression<=AID_SUPPRESSION
 	var quiet:bool=calm and now-float(u.last_hit)>=AID_QUIET and now-float(u.get("fired_on",-100.0))>=AID_QUIET and u.suppression<=AID_SUPPRESSION
 	var garrisoned:bool=u.get("garrison",-1)>=0
 	for casualty in u.members:
@@ -594,13 +744,24 @@ static func yield_spot(u:Dictionary,member:Dictionary,sim,a:Vector2,b:Vector2,re
 # reached. Once blocked, the soldier takes the nearest clear spot beside that
 # hull instead and keeps it while the same hull still covers the slot. Only
 # blocked soldiers (or ones already shifted) query the hulls around the slot.
+static func return_slot_free(u:Dictionary,member:Dictionary,spot:Vector2) -> bool:
+	for peer in u.members:
+		if peer.hp<=0 or peer.index==member.index:continue
+		var clearance:float=float(member.get("body_radius",0.8))+float(peer.get("body_radius",0.8))-0.05
+		if spot.distance_to(peer.pos)<clearance:return false
+		var reserved:Vector2=u.pos+peer.offset*(1.5 if peer.get("spread",false) else 1.0)
+		if peer.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"]:reserved=peer.cover_goal
+		if not peer.get("hull_slot",{}).is_empty():reserved=peer.hull_slot.spot
+		if spot.distance_to(reserved)<clearance:return false
+	return true
+
 static func clear_of_hulls(u:Dictionary,member:Dictionary,sim,goal:Vector2,stalled:bool=false) -> Vector2:
 	var held:Dictionary=member.get("hull_slot",{})
 	if held.is_empty():
 		if not stalled and member.get("regroup_blocked",0.0)<=0.5:return goal
 	else:
 		var parked:Dictionary=sim.get_unit(int(held.id))
-		if sim.alive(parked) and parked.pos==held.hull and goal.distance_to(held.goal)<0.05:return held.spot
+		if sim.alive(parked) and parked.pos==held.hull and goal.distance_to(held.goal)<0.05 and return_slot_free(u,member,held.spot) and sim.terrain.traversable(held.spot,"land",float(member.get("body_radius",0.8))):return held.spot
 		member.erase("hull_slot")
 	var radius:float=member.get("body_radius",0.8)
 	var hulls:Array=[]
@@ -618,6 +779,7 @@ static func clear_of_hulls(u:Dictionary,member:Dictionary,sim,goal:Vector2,stall
 			var spot:Vector2=at+away.rotated(0.3*ceili(i/2.0)*(1.0 if i%2==1 else -1.0))*hull.reach
 			if spot.distance_to(u.pos)>Cover.LEASH or not sim.terrain.traversable(spot,"land",radius):continue
 			if hulls.any(func(other):return spot.distance_to(other.unit.pos)<other.reach-0.01):continue
+			if not return_slot_free(u,member,spot):continue
 			member["hull_slot"]={"id":hull.unit.id,"goal":goal,"hull":at,"spot":spot}
 			return spot
 		break
@@ -642,10 +804,13 @@ static func hull_sidestep(u:Dictionary,member:Dictionary,sim,old:Vector2,desired
 	var sign:float=float(member.get("hull_side",0.0)) if sim.time<float(member.get("hull_round_until",0.0)) else 0.0
 	if sign==0.0:sign=1.0 if tangent.dot(desired-old)>=0.0 else -1.0
 	for side in [sign,-sign]:
-		var step:Vector2=old+(tangent*side*0.95+normal*0.3).normalized()*length
-		if actor_clear(u,member,step,sim):
-			member["hull_side"]=side
-			return step
+		# A nearby wall can reject the outward bias while leaving a tangent
+		# clear. Four bounded candidates keep the same swept-body validation.
+		for outward in [0.3,0.0]:
+			var step:Vector2=old+(tangent*side*0.95+normal*outward).normalized()*length
+			if actor_clear(u,member,step,sim):
+				member["hull_side"]=side
+				return step
 	return Vector2.INF
 
 static func hit(u:Dictionary,amount:float,source:Vector2,now:float) -> void:

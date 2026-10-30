@@ -132,8 +132,9 @@ static func pose(model:Node3D,u:Dictionary,sim,dt:float) -> void:
 					var leg:Node3D=part.get_node(leg_name)
 					var knee:Node3D=leg.get_node_or_null("Knee")
 					legs.append([leg,knee,knee.get_node_or_null("Foot") if knee!=null else null])
-				entry[3]=[part.get_node("Upper"),part.get_node("Upper/Weapon"),legs[0],legs[1]]
+				entry[3]=[part.get_node("Upper"),part.get_node("Upper/Weapon"),legs[0],legs[1],part.get_node_or_null("Upper/Weapon/Launcher")]
 			var rig:Array=entry[3]
+			if rig[4]!=null:rig[4].visible=sim.Infantry.has_equipment(u,member,"launcher")
 			var body:Node3D=rig[0]
 			if down:
 				pose_fallen(rig,member,wound=="KIA",sim.time,dt)

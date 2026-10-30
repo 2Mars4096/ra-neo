@@ -4,7 +4,8 @@
 Default: core/combat/probes/regression functional suites. Hardware-sensitive
 cover-cost and busy-combat CPU timing are explicit: --group performance. --group release selects
 current Harbor/regional player-facing coverage; --group regional checks the new
-battlefields and their affected integration paths; --group playthrough runs full battles.
+battlefields and their affected integration paths; --group tactical checks the
+action/readiness foundation and affected executors; --group playthrough runs full battles.
 Use --list without an installed engine. Reports/logs go into a fresh temp folder
 and artifacts/checks.json. Dedicated performance results are never implied by a
 functional pass; existing timing guards in mixed functional suites stay intact.
@@ -53,6 +54,8 @@ RELEASE_SUITES = {
     "test_riverside_navigation.gd", "test_scenario_dimensions.gd",
     "test_presentation_cache.gd", "test_regional_physics.gd", "test_regional_ui.gd",
     "test_elevation.gd", "test_operation_rules.gd", "test_regional_campaign.gd", "test_regional_campaign_ui.gd",
+    "test_tactical_actions.gd", "test_tactical_context.gd", "test_action_readiness.gd",
+    "test_action_targeting.gd", "test_action_integration.gd", "test_regroup_hull_slots.gd",
 }
 GROUPS["release"] = [(script, marker) for group, entries in GROUPS.items()
                      if group not in ("performance", "playthrough")
@@ -67,6 +70,23 @@ REGIONAL_SUITES = {
 GROUPS["regional"] = [(script, marker) for group, entries in GROUPS.items()
                       if group in ("core", "combat", "regression")
                       for script, marker in entries if script in REGIONAL_SUITES]
+TACTICAL_SUITES = {
+    "test_tactical_actions.gd", "test_tactical_context.gd", "test_action_readiness.gd",
+    "test_action_targeting.gd", "test_action_integration.gd", "test_regroup_hull_slots.gd",
+    "test_tactical_flexibility.gd", "test_spatial_targeting.gd", "test_combat.gd", "test_tactics.gd",
+    "test_regroup_recovery.gd", "test_hull_regroup.gd", "test_wreck_section_recovery.gd",
+    "test_section_contact.gd", "test_contact_drill.gd", "test_soldier_targeting.gd",
+    "test_counter_drone.gd", "test_atgm_flight.gd", "test_enemy_knowledge.gd", "test_player_swarm.gd",
+    "test_engineer_works.gd", "test_field_ops_resume.gd", "test_field_geometry.gd", "test_field_ops_edges.gd",
+    "test_garrison.gd", "test_garrison_fire.gd", "test_battlefield_interface.gd", "test_command_modes.gd",
+    "test_downed_section.gd", "test_elevation.gd", "test_hud_states.gd",
+    "test_regional_campaign.gd", "test_regional_campaign_ui.gd",
+    "test_individuals.gd", "test_wounds.gd", "test_recrew.gd", "test_animation.gd",
+    "test_clearance.gd", "test_cover_contact.gd",
+}
+GROUPS["tactical"] = [(script, marker) for group, entries in GROUPS.items()
+                     if group in ("core", "combat", "regression")
+                     for script, marker in entries if script in TACTICAL_SUITES]
 LONG = {"classic_playthrough.gd": 600, "test_city_urban.gd": 180,
         "harbor_playthrough.gd": 1800, "test_vehicle_jam.gd": 240,
         "test_harvester_dock.gd": 240, "test_harvester_threat.gd": 240,

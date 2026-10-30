@@ -11,6 +11,11 @@ const Garrison = preload("res://scripts/garrison.gd")
 var field_ops:Dictionary={}
 
 const Director = preload("res://scripts/tactical_director.gd")
+const Actions = preload("res://scripts/tactical_actions.gd")
+const Context = preload("res://scripts/tactical_context.gd")
+var actions = Actions.new()
+var context = Context.new()
+var action_tick := 0
 const Infantry = preload("res://scripts/infantry.gd")
 const VehicleDamage = preload("res://scripts/vehicle_damage.gd")
 const SectionRecovery = preload("res://scripts/section_recovery.gd")
@@ -125,6 +130,7 @@ func spawn(kind: String, team: int, pos: Vector2) -> Dictionary:
 	var u := {"id":next_id,"kind":kind,"team":team,"pos":pos,"hp":float(d.hp),"max_hp":float(d.hp),"facing":Vector2.UP if team == 0 else Vector2.DOWN,"orders":[],"path":[],"cooldown":0.0,"suppression":0.0,"visible":team == 0,"seen_by":[team == 0, team == 1],"target":-1,"repath":0.0,"state":"READY","blocked_time":0.0,"last_hit":-100.0,"recovering":false,"home":pos,"aim_time":0.0,"aim_target":-1,"last_shot":-100.0,"jammed":false,"maneuver":{},"reason":"Ready","commit_until":0.0,"next_decision":0.0,"hold_command":false,"command_group":0,"speed_now":0.0,"reversing":false,"intent":{}}
 	next_id += 1
 	Infantry.create(u,d)
+	Actions.ensure_unit(u)
 	if d.get("strike",false):u.merge({"strike_target":-1,"altitude":float(d.altitude),"fuse":time+float(d.get("endurance",60.0))})
 	if terrain.has_elevation() and d.domain=="air":follow_skyline(u,d)
 	if not field_ops.is_empty() and d.get("structure",false):
@@ -146,6 +152,46 @@ func living(team: int) -> Array[Dictionary]:
 		if u.team == team and alive(u):
 			list.append(u)
 	return list
+
+# One permission check is shared by selection and release. Player Hold position
+# remains independent of Hold fire; explicit attack scope belongs to its order.
+func engagement_allowed(u:Dictionary,target_id:int=-1)->bool:
+	return Actions.engagement_allowed(u,target_id)
+
+func set_fire_policy(ids:Array,policy:String)->int:
+	if result!="" or policy not in ["free","hold"]:return 0
+	var accepted:=0
+	for id in ids:
+		var u:=get_unit(int(id))
+		if not alive(u) or comms_blocked(u):continue
+		u.fire_policy=policy
+		if policy=="hold":
+			Actions.revoke_permission(u)
+			for queue in [u.orders,u.get("provisional_before",{}).get("orders",[])]:
+				for order in queue:
+					if order.mode in ["attack","throw"]:order["permission_revoked"]=true
+		u.target=-1;u.aim_target=-1;u.aim_time=0.0
+		for member in u.members:
+			member.target=-1;member.aim=0.0;member["aim_member"]=-1
+		for action in actions.actions.values().duplicate():
+			if action.unit==u.id and action.kind in ["aim","fire","throw"]:actions.cancel(u,action,time,"hold_fire" if policy=="hold" else "fire_policy_changed")
+		actions.invalidate(u,time,"hold_fire" if policy=="hold" else "fire_policy_changed")
+		accepted+=1
+	return accepted
+
+func capability_view(u:Dictionary)->Dictionary:
+	var d:Dictionary=definitions[u.kind]
+	var strength:Dictionary=Infantry.strength(u,time)
+	return {"strength":strength,"equipment":u.get("equipment",{}).duplicate(true),
+		"mobile":alive(u) and not u.get("combat_ineffective",false) and not d.get("structure",false) and not u.get("mobility_kill",false) and not u.has("crash"),
+		"armed":alive(u) and not u.get("combat_ineffective",false) and not u.get("firepower_kill",false) and not u.get("abandoned",false) and float(d.get("damage",0.0))>0.0,
+		"fire_policy":u.get("fire_policy","free"),"order_version":u.get("order_version",0)}
+
+func situation_view(u:Dictionary)->Dictionary:
+	var connected:=not comms_blocked(u)
+	return {"time":time,"order_version":u.get("order_version",0),
+		"geometry_version":terrain.geometry_version,"capability":capability_view(u),
+		"contacts":context.team_snapshot(u.team,time) if connected else context.local_snapshot(u.id,time,u.team)}
 
 func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool = false, target_id: int = -1) -> int:
 	if result != "":
@@ -198,6 +244,7 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 			if not terrain.traversable(held_at,domain,float(definitions[u.kind].radius),[],terrain.mobility_profile(u.kind)):held_at=destination
 			# Should no target turn up, the unit carries on as before the click.
 			var before:Dictionary={} if queued else order_snapshot(u)
+			if not queued:u["provisional_before"]=before
 			var waiting:=record_order(u,mode,held_at,target_id,queued,true)
 			waiting["slot"]=true
 			slot_queue.append({"unit":u.id,"order":waiting,"index":index,"command":command,"before":before})
@@ -290,11 +337,15 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 			return {}
 		# Attack orders pursue the last visible position, never hidden live positions.
 		target = enemy.pos
+		# The strike executor owns FPV flight; it needs no ground route.
+		if definitions[u.kind].get("strike",false):
+			return {"pos":target,"planned":true,"route":[],"recovery":{}}
 		if not terrain.traversable(target, domain, radius,[],terrain.mobility_profile(u.kind)):
 			target = attack_position(u, enemy, slots+attack_rivals(u, target_id, ids, command.queued))
 	# Over the tick's route budget, validate reachability only (grid search)
 	# and plan the route at the start of a later tick.
 	var planned:=route_cost(u.pos,target)<=0.0 if deferred else take_route_budget(u.pos,target)
+	if planned and deferred and ticking and not actions.take_work("route_searches"):planned=false
 	if mode!="attack":
 		terrain.path_probe=not planned
 		# Sections also keep clear of spots friends already hold or head for.
@@ -317,6 +368,7 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 # cover until it resolves (resolve_slots), so a unit that gets none is as it was.
 func record_order(u:Dictionary,mode:String,target:Vector2,target_id:int,queued:bool,waiting:bool=false)->Dictionary:
 	if not queued:
+		if not waiting:u.erase("provisional_before")
 		if not waiting:u.erase(SectionRecovery.KEY)
 		if not waiting:FieldOps.pause_builder(self,u.id)
 		Director.cancel(u)
@@ -328,18 +380,24 @@ func record_order(u:Dictionary,mode:String,target:Vector2,target_id:int,queued:b
 	var order := {"mode":mode,"pos":target,"target":target_id}
 	u.orders.append(order)
 	if u.orders.size()==1:u.intent=order.duplicate()
+	if not waiting:
+		if not queued:actions.accept_order(u,order,time,"player" if u.team==0 else "ai")
+		elif u.orders.size()==1:actions.activate_order(u,order,time,"player" if u.team==0 else "ai")
 	u.state = "ADVANCING" if mode == "attack_move" else "MOVING"
 	return order
 
 # What a new order replaces (record_order, Director.cancel), to put back.
 const SNAPSHOT_KEYS:=["orders","path","intent","state","command_group","route_pending","maneuver","reason","commit_until","next_decision","hold_command","maneuver_review","wreck_recovery"]
 func order_snapshot(u:Dictionary)->Dictionary:
+	# Nested provisional replacements retain the last accepted state.
+	if u.has("provisional_before"):return u.provisional_before.duplicate()
 	var snapshot:={}
 	for key in SNAPSHOT_KEYS:
 		if u.has(key):snapshot[key]=u[key].duplicate() if key in ["orders","path"] else u[key]
 	return snapshot
 
 func restore_orders(u:Dictionary,snapshot:Dictionary)->void:
+	u.erase("provisional_before")
 	for key in SNAPSHOT_KEYS:
 		if snapshot.has(key):u[key]=snapshot[key]
 		else:u.erase(key)
@@ -388,7 +446,10 @@ func resolve_slots()->int:
 		if not entry.before.is_empty():
 			FieldOps.pause_builder(self,u.id)
 			for actor in u.members:Infantry.Cover.clear(actor)
+			u.erase("provisional_before")
 		order.pos=plan.pos
+		if not entry.before.is_empty():actions.accept_order(u,order,time,"player" if u.team==0 else "ai")
+		elif at==0:actions.activate_order(u,order,time,"player" if u.team==0 else "ai")
 		entry.command.slots.append({"pos":plan.pos,"radius":crowd_radius(u.kind),"layer":collision_layer(u)})
 		if at==0:
 			u.intent=order.duplicate()
@@ -424,8 +485,8 @@ func route_cost(from:Vector2,to:Vector2)->float:
 # Charges the budget and returns true when a route may be planned now.
 func take_route_budget(from:Vector2,to:Vector2,urgent:bool=false)->bool:
 	var cost:=route_cost(from,to)
-	if cost<=0.0:return true
 	if cost>route_budget and not (urgent and route_budget>=ROUTE_BUDGET):return false
+	if ticking and not actions.take_work("route_searches"):return false
 	route_budget-=cost
 	return true
 
@@ -440,13 +501,13 @@ func order_route(u:Dictionary,target:Vector2,ignore:Array=[])->Array:
 # plans like issue(), "direct" like a resumed objective (terrain only).
 func defer_route(u:Dictionary,mode:String)->void:
 	u.path=[]
-	u["route_pending"]={"mode":mode,"order":u.orders[0]}
+	u["route_pending"]={"mode":mode,"order":u.orders[0],"version":u.order_version,"assignment":u.assignment.get("id",0)}
 	if not route_queue.has(u.id):route_queue.append(u.id)
 
 func route_waiting(u:Dictionary)->bool:
 	if u.path.is_empty() and u.maneuver.is_empty() and not u.orders.is_empty() and u.orders[0].has("slot"):return true
 	var pending:Dictionary=u.get("route_pending",{})
-	return not pending.is_empty() and u.path.is_empty() and u.maneuver.is_empty() and not u.orders.is_empty() and is_same(u.orders[0],pending.order)
+	return not pending.is_empty() and u.path.is_empty() and u.maneuver.is_empty() and not u.orders.is_empty() and is_same(u.orders[0],pending.order) and int(pending.get("version",u.order_version))==u.order_version and int(pending.get("assignment",u.assignment.get("id",0)))==int(u.assignment.get("id",0))
 
 func plan_queued_routes(spent:int=0)->void:
 	var work:=ROUTE_QUEUE_WORK-spent
@@ -465,12 +526,18 @@ func plan_queued_routes(spent:int=0)->void:
 		var pending:Dictionary=u.route_pending
 		var d:Dictionary=definitions[u.kind]
 		var goal:Vector2=u.orders[0].pos
+		if pending.has("job") and (pending.get("goal",goal)!=goal or int(pending.get("geometry_version",terrain.geometry_version))!=terrain.geometry_version):
+			pending.erase("job")
+			actions.invalidate(u,time,"route_changed")
 		if not pending.has("job"):
 			if searches<=0 or work<ROUTE_SEARCH_WORK:break
+			if ticking and not actions.take_work("route_searches"):break
 			searches-=1
 			var bodies:Array=standing_bodies(u,u.pos,goal) if pending.mode=="order" and not pending.get("terrain_only",false) else []
 			pending.around=not bodies.is_empty()
 			pending.job=terrain.path_job(u.pos,goal,d.domain,float(d.radius),bodies,terrain.mobility_profile(u.kind))
+			pending.goal=goal
+			pending.geometry_version=terrain.geometry_version
 			work-=ROUTE_SEARCH_WORK
 		var job:Dictionary=pending.job
 		var before:int=job.work
@@ -575,7 +642,9 @@ func stop(ids: Array) -> int:
 			u.orders.clear()
 			u.path.clear()
 			Director.cancel(u)
+			u.erase("provisional_before")
 			u.intent={}
+			actions.accept_order(u,{"mode":"hold","pos":u.pos,"target":-1},time,"player" if u.team==0 else "ai")
 			u.hold_command=true
 			u.erase(SectionRecovery.KEY)
 			u.speed_now=0.0
@@ -632,7 +701,7 @@ func update_tactics(dt: float) -> void:
 	tactical_clock=3.0
 	for u in living(1):
 		if definitions[u.kind].domain!="land" or u.get("combat_ineffective",false):continue
-		if u.hp<Infantry.capacity(u)*0.3:
+		if u.hp<=Infantry.assigned_capacity(u)*(0.35 if not u.members.is_empty() else 0.3):
 			if u.orders.is_empty() and u.pos.distance_to(rally_point(u))>10:retreat([u.id])
 			elif not u.orders.is_empty() and u.orders[0].mode!="retreat":retreat([u.id])
 			continue
@@ -718,10 +787,12 @@ func update_visibility() -> void:
 				for post in posts:
 					if post.distance_squared_to(target.pos) <= radius * radius and (air or terrain.line_clear(post,target.pos)) and relief_sight_clear(observer,target,post):
 						target.seen_by[observer.team] = true
+						if is_same(target,get_unit(target.id)):context.observe(observer.team,target.id,target.kind,target.pos,time,observer.id)
 						break
 			elif observer.pos.distance_squared_to(target.pos) <= radius * radius:
 				if (d.domain=="air" or definitions[target.kind].domain=="air" or terrain.line_clear(observer.pos,target.pos)) and relief_sight_clear(observer,target):
 					target.seen_by[observer.team] = true
+					if is_same(target,get_unit(target.id)):context.observe(observer.team,target.id,target.kind,target.pos,time,observer.id)
 		if observer.team == 0:
 			var origin := terrain.cell(observer.pos)
 			var sight:float=float(d.sight)*float(weather.sight_scale)
@@ -748,6 +819,7 @@ func update_visibility() -> void:
 			explored.merge(visibility_cache[key])
 	for u in units:
 		u.visible = u.team == 0 or u.seen_by[0]
+	context.expire(time)
 	if not field_ops.is_empty():FieldOps.observe_enemy_sites(self,site_probes)
 
 # Living soldiers of a section in garrison transit that are through the wall:
@@ -788,13 +860,7 @@ func auto_target_ok(u:Dictionary,other:Dictionary)->bool:
 
 func emplacement_fire(u:Dictionary,d:Dictionary,dt:float)->void:
 	u.cooldown-=dt
-	var target:Dictionary=get_unit(u.target)
-	if not can_fire(u,target):
-		target={}
-		var best:=INF
-		for other in target_candidates(u):
-			if can_fire(u,other) and auto_target_ok(u,other) and target_priority(u,other)<best:
-				best=target_priority(u,other);target=other
+	var target:Dictionary=select_combat_target(u)
 	u.target=target.get("id",-1)
 	if target.is_empty():
 		u.aim_time=0.0;u.state="READY"
@@ -803,12 +869,13 @@ func emplacement_fire(u:Dictionary,d:Dictionary,dt:float)->void:
 	u.aim_time+=dt
 	u.facing=(target.pos-u.pos).normalized()
 	u.state="ENGAGING"
-	if u.cooldown<=0 and u.aim_time>=0.5:
+	if u.cooldown<=0 and u.aim_time>=0.5 and engagement_allowed(u,int(target.id)):
 		u.last_shot=time
 		u.cooldown=float(d.interval)
 		resolve_shot(u,target,1.0)
 
 func can_fire(u: Dictionary, other: Dictionary) -> bool:
+	if not engagement_allowed(u,int(other.get("id",-1))):return false
 	if not VehicleDamage.weapon_ready(self,u):return false
 	var ud:Dictionary=definitions[u.kind]
 	if ud.get("structure",false) and (not ud.get("armed",false) or u.get("build_left",0.0)>0):return false
@@ -866,7 +933,7 @@ const SOLDIER_CHECKS:=3   # line checks per shooter and target section
 const SECTION_CHECKS:=8   # per squad can_fire call (all its soldiers)
 const SHOOTER_CHECKS:=6   # per soldier and tick across target sections
 var soldier_checks:=0
-func aim_soldier(source:Vector2,other:Dictionary,reach_sq:float,needs_line:bool,limit:float=INF,checks:int=SOLDIER_CHECKS,source_altitude:float=INF)->Dictionary:
+func aim_soldier(source:Vector2,other:Dictionary,reach_sq:float,needs_line:bool,limit:float=INF,checks:int=SOLDIER_CHECKS,source_altitude:float=INF,preferred_index:int=-1)->Dictionary:
 	var bound:float=minf(reach_sq,limit)
 	var elevated:=terrain.has_elevation()
 	var source_h:=source_altitude if is_finite(source_altitude) else terrain.height_at(source)
@@ -880,6 +947,9 @@ func aim_soldier(source:Vector2,other:Dictionary,reach_sq:float,needs_line:bool,
 			if member.hp>0 and not (tried&bit):
 				var distance:float=source.distance_squared_to(member.pos)
 				if elevated:distance+=pow(source_h-terrain.height_at(member.pos),2)
+				if attempt==0 and int(member.index)==preferred_index and distance<=bound:
+					best=member;best_distance=distance;best_bit=bit
+					break
 				if distance<best_distance and distance<=bound:best=member;best_distance=distance;best_bit=bit
 			bit<<=1
 		if best.is_empty() or (not needs_line and not elevated):return best
@@ -959,7 +1029,10 @@ func relief_fog_clear(observer:Dictionary,source:Vector2,point:Vector2) -> bool:
 # The weapon a unit brings against this kind (squads: Javelin or rifles).
 func attack_weapon(u:Dictionary,target_kind:String) -> String:
 	if u.get("members",[]).is_empty():return u.kind
-	return "atgm" if u.kind=="atgm" and missiles_left(u)>0 and effective_weapon("atgm",target_kind) else "rifle"
+	if effective_weapon("atgm",target_kind):
+		for member in u.members:
+			if member.hp>0 and section_weapon(u,member)=="atgm":return "atgm"
+	return "rifle"
 
 # Ground distance at which the weapon reaches this target, net of its altitude.
 func horizontal_reach(weapon:String,other:Dictionary,source_altitude:float=INF) -> float:
@@ -976,6 +1049,126 @@ func target_priority(u:Dictionary,other:Dictionary) -> float:
 	if u.kind=="aa" and od.domain=="air":return score*0.3
 	return score
 
+func urgent_target_rank(u:Dictionary,other:Dictionary)->int:
+	if other.is_empty():return -1
+	var od:Dictionary=definitions[other.kind]
+	if od.get("strike",false):return 2
+	return 1 if u.kind=="aa" and od.domain=="air" else 0
+
+# Only air layers can contain a higher-priority automatic threat. Live ticks
+# use the nearby index; direct fixture calls keep exhaustive semantics.
+func urgent_air_candidates(u:Dictionary)->Array:
+	if not spatial_targeting():return units
+	var reach:float=float(definitions[u.kind].range)*(Garrison.RANGE_SCALE if Garrison.inside(u) else 1.0)+section_offset(u)
+	var result:Array=[]
+	for layer in [2,3]:
+		result.append_array(layer_candidates(u.pos,reach,layer))
+	result.sort_custom(func(a,b):return a.id<b.id)
+	return result
+
+func select_combat_target(u:Dictionary,candidates:Variant=null)->Dictionary:
+	var desired:=get_unit(ordered_target(u))
+	if can_fire(u,desired):return desired
+	var current:=get_unit(int(u.target))
+	if can_fire(u,current) and auto_target_ok(u,current):
+		var rank:=urgent_target_rank(u,current)
+		var best_rank:=rank
+		var best:=INF
+		var selected:Dictionary=current
+		if rank<2:
+			var threats:Array=urgent_air_candidates(u) if candidates==null else candidates
+			for other in threats:
+				if other.team==u.team or not alive(other):continue
+				var urgency:=urgent_target_rank(u,other)
+				if urgency<=rank or urgency<best_rank or not auto_target_ok(u,other):continue
+				var score:=target_priority(u,other)
+				if urgency==best_rank and score>=best:continue
+				if can_fire(u,other):selected=other;best=score;best_rank=urgency
+		return selected
+	if candidates==null:candidates=target_candidates(u)
+	var selected:Dictionary={}
+	if not candidates.is_empty() and VehicleDamage.weapon_ready(self,u):
+		var distance:=INF
+		for other in candidates:
+			if other.team==u.team or not alive(other):continue
+			var score:=target_priority(u,other)
+			if score<distance and auto_target_ok(u,other) and can_fire(u,other):
+				selected=other;distance=score
+	return selected
+
+# Per-soldier validation retains the actual tracked body when it remains in
+# range and visible. Its first line check counts against the same bounded
+# budget; a blocked/dead body falls back to another real visible member.
+func infantry_target_candidate(u:Dictionary,member:Dictionary,weapon:String,other:Dictionary,range_scale:float,checks_left:int)->Dictionary:
+	if not alive(other) or not engagement_allowed(u,int(other.id)):return {}
+	var d:Dictionary=definitions[weapon]
+	var od:Dictionary=definitions[other.kind]
+	var air:bool=od.domain=="air"
+	var victim:Dictionary={}
+	var distance:=INF
+	if not other.members.is_empty():
+		var budget:int=mini(SOLDIER_CHECKS,checks_left-soldier_checks)
+		if budget<=0:return {}
+		var preferred:int=int(member.get("aim_member",-1)) if other.id==member.target else -1
+		victim=aim_soldier(member.pos,other,pow(float(d.range)*range_scale,2),true,INF,budget,INF,preferred)
+		if victim.is_empty():return {}
+		distance=member.pos.distance_squared_to(victim.pos)
+		if terrain.has_elevation():distance+=pow(terrain.height_at(member.pos)-terrain.height_at(victim.pos),2)
+	else:
+		distance=member.pos.distance_squared_to(other.pos)
+		var reach:float=float(d.range)*range_scale
+		if terrain.has_elevation():distance+=pow(terrain.height_at(member.pos)-unit_altitude(other),2)
+		if air:
+			if not terrain.has_elevation():distance+=pow(unit_altitude(other),2)
+			reach=weapon_range(weapon,od)
+		if distance>=reach*reach or (not air and not terrain.line_clear(member.pos,other.pos)) or not relief_sight_clear(u,other,member.pos):return {}
+	return {"target":other,"victim":victim,"score":distance*(0.2 if od.get("strike",false) else 1.0)}
+
+func infantry_target_bound(member:Dictionary,other:Dictionary)->float:
+	var distance:=INF
+	var source_h:float=terrain.height_at(member.pos) if terrain.has_elevation() else 0.0
+	if not other.members.is_empty():
+		for body in other.members:
+			if body.hp<=0.0:continue
+			var gap:float=member.pos.distance_squared_to(body.pos)
+			if terrain.has_elevation():gap+=pow(source_h-terrain.height_at(body.pos),2)
+			distance=minf(distance,gap)
+	else:
+		distance=member.pos.distance_squared_to(other.pos)
+		if terrain.has_elevation() or definitions[other.kind].domain=="air":distance+=pow(source_h-unit_altitude(other),2)
+	return distance*(0.2 if definitions[other.kind].get("strike",false) else 1.0)
+
+func select_infantry_target(u:Dictionary,member:Dictionary,weapon:String,eligible:Array,range_scale:float)->Dictionary:
+	var checks_left:int=soldier_checks+SHOOTER_CHECKS
+	var desired_id:=ordered_target(u)
+	var current_id:int=member.target
+	var desired:Dictionary={}
+	var current:Dictionary={}
+	for other in eligible:
+		if other.id==desired_id:desired=other
+		if other.id==current_id:current=other
+	if not desired.is_empty():
+		var explicit:=infantry_target_candidate(u,member,weapon,desired,range_scale,checks_left)
+		if not explicit.is_empty():return explicit
+	var selected:Dictionary={}
+	if not current.is_empty() and current_id!=desired_id:
+		selected=infantry_target_candidate(u,member,weapon,current,range_scale,checks_left)
+	var retained:=not selected.is_empty()
+	var rank:int=urgent_target_rank(u,current) if retained else -1
+	var best_rank:=rank
+	var nearest:float=float(selected.score) if retained else INF
+	for other in eligible:
+		if other.id==desired_id or other.id==current_id or not alive(other):continue
+		var urgency:=urgent_target_rank(u,other)
+		if retained and (urgency<=rank or urgency<best_rank):continue
+		if (not retained or urgency==best_rank) and infantry_target_bound(member,other)>=nearest:continue
+		var candidate:=infantry_target_candidate(u,member,weapon,other,range_scale,checks_left)
+		if candidate.is_empty():continue
+		var score:float=candidate.score
+		if (retained and urgency>best_rank) or score<nearest:
+			selected=candidate;nearest=score;best_rank=urgency
+	return selected
+
 
 func comms_blocked(u:Dictionary) -> bool:
 	return float(scenario.get("jam_radius",0))>0 and not objectives.is_empty() and objectives[0].owner==1 and u.team==0 and u.pos.distance_to(objectives[0].pos)<float(scenario.jam_radius)
@@ -987,9 +1180,13 @@ func contact_known(u:Dictionary,other:Dictionary) -> bool:
 	var sight:float=d.sight*weather.sight_scale
 	if terrain.cover(other.pos) and definitions[other.kind].domain=="land":sight*=0.7
 	if definitions[other.kind].domain=="land" and time-float(other.get("last_shot",-100.0))>=3.0:sight*=terrain.concealment(other.pos)
-	return u.pos.distance_to(other.pos)<=sight and (d.domain=="air" or definitions[other.kind].domain=="air" or terrain.line_clear(u.pos,other.pos)) and relief_sight_clear(u,other)
+	var observed:bool=u.pos.distance_to(other.pos)<=sight and (d.domain=="air" or definitions[other.kind].domain=="air" or terrain.line_clear(u.pos,other.pos)) and relief_sight_clear(u,other)
+	if observed:context.observe(u.team,other.id,other.kind,other.pos,time,u.id,false)
+	return observed
 
 func effective_unit(u:Dictionary,target_kind:String) -> bool:
+	if definitions[u.kind].get("strike",false):
+		return float(definitions[u.kind].get("blast_damage",0.0))>0.0 and definitions[target_kind].domain!="air"
 	if u.get("members",[]).is_empty():return effective_weapon(u.kind,target_kind)
 	for member in u.members:
 		if member.hp>0 and effective_weapon(section_weapon(u,member),target_kind):return true
@@ -1180,7 +1377,7 @@ func missiles_left(u:Dictionary) -> int:
 	return int(u.get("missiles",definitions.atgm.missiles))
 
 func section_weapon(u:Dictionary,member:Dictionary) -> String:
-	return "atgm" if u.kind=="atgm" and member.index==0 and missiles_left(u)>0 else "rifle"
+	return "atgm" if u.kind=="atgm" and Infantry.has_equipment(u,member,"launcher") and missiles_left(u)>0 else "rifle"
 
 func spend_missile(u:Dictionary) -> void:
 	u["missiles"]=maxi(0,missiles_left(u)-1)
@@ -1408,6 +1605,8 @@ func tick(dt: float) -> void:
 	rebuild_spatial()
 	if use_actor_index:rebuild_actor_spatial()
 	ticking=true
+	action_tick+=1
+	actions.begin_tick(action_tick,{"decisions":32,"line_checks":256,"route_searches":8,"cover_queries":32})
 	time += dt
 	weather=Weather.sample(time,scenario.get("autonomy",false))
 	terrain.wetness=weather.wetness
@@ -1455,29 +1654,7 @@ func tick(dt: float) -> void:
 		var candidates:Variant=null
 		if not u.members.is_empty():candidates=target_candidates(u)
 		elif float(d.damage)>0 and spatial_targeting():refresh_wide_sections()
-		var target: Dictionary = {}
-		if not u.orders.is_empty() and u.orders[0].mode == "attack":
-			var desired := get_unit(u.orders[0].target)
-			if can_fire(u, desired):
-				target = desired
-		if target.is_empty():
-			var previous_target:=get_unit(u.target)
-			if can_fire(u,previous_target) and auto_target_ok(u,previous_target):target=previous_target
-		# Nearest-priority choice (first wins ties). can_fire is the costly test,
-		# so it only runs for enemies that would beat the current best and pass
-		# the cheap auto_target_ok; its only side effect (VehicleDamage.weapon_ready,
-		# idempotent within a tick) is applied once up front exactly as the first
-		# can_fire call did (soldier_checks budgets are relative per call).
-		if target.is_empty() and candidates==null:candidates=target_candidates(u)
-		if target.is_empty() and not candidates.is_empty() and VehicleDamage.weapon_ready(self,u):
-			var distance := INF
-			for other in candidates:
-				# can_fire rejects the dead: skip them before the priority tests.
-				if other.team==u.team or not alive(other):continue
-				var dist: float = target_priority(u,other)
-				if dist < distance and auto_target_ok(u,other) and can_fire(u, other):
-					target = other
-					distance = dist
+		var target:Dictionary=select_combat_target(u,candidates)
 		u.target = target.get("id", -1)
 		if u.aim_target!=u.target:
 			u.aim_time=0.0
@@ -1515,7 +1692,7 @@ func tick(dt: float) -> void:
 			if not moving and u.kind not in ["tank","aa","boat"]:u.facing = (target.pos-u.pos).normalized()
 			var preparation:float=0.7 if u.kind in ["tank","atgm","boat"] else 0.25
 			if u.aim_time<preparation:u.state="AIMING"
-			if u.cooldown <= 0 and u.aim_time>=preparation:
+			if u.cooldown <= 0 and u.aim_time>=preparation and engagement_allowed(u,int(target.id)):
 				u.last_shot=time
 				u.cooldown = float(d.interval)*(1.8 if u.suppression>0.6 else 1.0)
 				resolve_shot(u,target,1.0)
@@ -1551,7 +1728,51 @@ func tick(dt: float) -> void:
 	if living(0).is_empty() and classic.is_empty():
 		result = "DEFEAT"
 
+	for u in units:sync_action_state(u)
 	ticking=false
+
+# Existing executors retain their physical rules; stable channels expose the
+# actual work and its completion to later support, throws and work adapters.
+func sync_action_state(u:Dictionary)->void:
+	if not alive(u) or u.get("combat_ineffective",false):
+		actions.cancel_unit(u,time,"owner_lost")
+		return
+	if not u.orders.is_empty() and u.orders[0].has("slot"):return
+	actions.expire(u,time)
+	var movement:Dictionary=actions.active(u,"movement")
+	if not movement.is_empty() and u.maneuver.is_empty():actions.complete(u,movement,time,"completed")
+	for member in u.members:
+		var channel:String="member:%s"%str(member.get("member_id",member.index))
+		if member.hp<=0:
+			for suffix in [":weapon",":cover"]:
+				var lost:Dictionary=actions.active(u,channel+suffix)
+				if not lost.is_empty():actions.cancel(u,lost,time,"member_lost")
+			continue
+		var kind:=""
+		var target:Dictionary={}
+		if float(member.get("reload_until",0.0))>time:
+			kind="reload";target={"weapon":member.get("reload_weapon","rifle")}
+		elif int(member.get("target",-1))>=0:
+			kind="aim";target={"unit":member.target,"member":member.get("aim_member",-1),"weapon":member.get("aim_weapon","rifle")}
+		var weapon_action:Dictionary=actions.active(u,channel+":weapon")
+		if not weapon_action.is_empty() and weapon_action.kind=="reload" and kind!="reload":
+			if Infantry.magazine_rounds(member,str(weapon_action.target.get("weapon","rifle")))>0:actions.complete(u,weapon_action,time,"reload_ready")
+			else:actions.cancel(u,weapon_action,time,"reload_interrupted")
+		sync_action_channel(u,channel+":weapon",kind,target,"reloading" if kind=="reload" else "aiming")
+		var cover:bool=member.hp>0 and member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"]
+		var cover_action:Dictionary=actions.active(u,channel+":cover")
+		var settled:bool=cover_action.get("satisfied",false)
+		sync_action_channel(u,channel+":cover","cover" if cover else "",{"pos":member.get("cover_goal",Vector2.ZERO)},"covering",settled)
+		cover_action=actions.active(u,channel+":cover")
+		if not cover_action.is_empty() and member.get("cover_phase","")=="SHELTERED":cover_action["satisfied"]=true
+
+func sync_action_channel(u:Dictionary,channel:String,kind:String,target:Dictionary,reason:String,completed:bool=false)->void:
+	if kind.is_empty():
+		var current:Dictionary=actions.active(u,channel)
+		if not current.is_empty():
+			if completed:actions.complete(u,current,time,"completed")
+			else:actions.cancel(u,current,time,"executor_interrupted")
+	else:actions.observe_existing(u,channel,kind,time,target,reason)
 
 # Sections halted to fight keep about two section radii apart, so one burst or
 # round cannot catch both. The later arrival (a section in cover never) shifts
@@ -1661,11 +1882,13 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		if member.hp<=0:continue
 		member["in_trench"]=terrain.dug_in(member.pos)
 		if u.maneuver.get("phase","")=="WITHDRAW" or (not u.orders.is_empty() and u.orders[0].mode=="retreat"):
+			Infantry.cancel_readiness(member)
 			member.state="WITHDRAWING"
 			member.target=-1
 			member.aim=0.0
 			continue
 		if member.get("aiding",-1)>=0:
+			Infantry.cancel_readiness(member)
 			# Buddy aid: the soldier stops fighting while treating a casualty, or
 			# dragging it to shelter under fire (Infantry.tick_wounds).
 			var casualty:Dictionary=u.members[member.aiding]
@@ -1677,66 +1900,59 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			if member.state in ["AIDING","DRAGGING"]:member.posture="CROUCHED"
 			continue
 		if member.get("cover_phase","") in ["SEEKING","SETTLING"]:
+			Infantry.cancel_readiness(member)
 			member.state="RUNNING TO COVER" if member.cover_phase=="SEEKING" else "SETTLING IN COVER"
 			member.aim=0.0
 			if member.posture!="RISING" or time>=member.posture_until:
 				member.posture="STANDING" if member.cover_phase=="SEEKING" and not member.in_trench else "CROUCHED"
 			continue
+		# Upper-floor windows: garrisoned soldiers out-range troops in the street.
+		var range_scale:float=Garrison.RANGE_SCALE if Garrison.inside(u) else 1.0
+		var selected:Dictionary={}
+		var selected_ready:=false
 		var weapon:String=section_weapon(u,member)
 		if weapon=="atgm":
-			# Missiles are kept for vehicles, works and troops in buildings; with
-			# none of those in reach the gunner fights with his rifle.
+			# Missiles are kept for vehicles, works and troops in buildings. A
+			# useful rifle shot takes priority over quiet launcher preparation.
 			if not eligible_by_weapon.has("atgm"):
 				var marks:Array=[]
 				for other in candidates:
-					if alive(other) and other.team!=u.team and contact_known(u,other) and effective_weapon("atgm",other.kind) and auto_target_ok(u,other) and (other.members.is_empty() or Garrison.inside(other)):marks.append(other)
+					if alive(other) and other.team!=u.team and contact_known(u,other) and engagement_allowed(u,int(other.id)) and effective_weapon("atgm",other.kind) and auto_target_ok(u,other) and (other.members.is_empty() or Garrison.inside(other)):marks.append(other)
 				eligible_by_weapon["atgm"]=marks
-			if eligible_by_weapon["atgm"].is_empty():weapon="rifle"
+			if eligible_by_weapon["atgm"].is_empty():
+				var use_rifle:=true
+				if autonomy and Infantry.magazine_rounds(member,"atgm")<=0:
+					if not eligible_by_weapon.has("rifle"):
+						var rifle_marks:Array=[]
+						for other in candidates:
+							if alive(other) and other.team!=u.team and contact_known(u,other) and engagement_allowed(u,int(other.id)) and effective_weapon("rifle",other.kind) and auto_target_ok(u,other):rifle_marks.append(other)
+						eligible_by_weapon["rifle"]=rifle_marks
+					selected=select_infantry_target(u,member,"rifle",eligible_by_weapon["rifle"],range_scale)
+					selected_ready=not selected.is_empty()
+					use_rifle=selected_ready
+				if use_rifle:weapon="rifle"
 		var d:Dictionary=definitions[weapon]
-		var target:Dictionary={}
-		var victim:Dictionary={}
-		var checks_left:int=soldier_checks+SHOOTER_CHECKS
-		# Upper-floor windows: garrisoned soldiers out-range troops in the street.
-		var range_scale:float=Garrison.RANGE_SCALE if Garrison.inside(u) else 1.0
-		var nearest:=pow(float(d.range)*range_scale,2)
+		var reloading:bool=autonomy and Infantry.update_readiness(u,member,time,weapon)
 		# Knowledge, faction and weapon suitability are shared by this squad.
 		# Position/range/line of fire remain individual and deaths are rechecked
 		# after each shot, preserving sequential combat outcomes.
 		if not eligible_by_weapon.has(weapon):
 			var eligible:Array=[]
 			for other in candidates:
-				if alive(other) and other.team!=u.team and contact_known(u,other) and effective_weapon(weapon,other.kind) and auto_target_ok(u,other):eligible.append(other)
+				if alive(other) and other.team!=u.team and contact_known(u,other) and engagement_allowed(u,int(other.id)) and effective_weapon(weapon,other.kind) and auto_target_ok(u,other):eligible.append(other)
 			eligible_by_weapon[weapon]=eligible
-		for other in eligible_by_weapon[weapon]:
-			if not alive(other):continue
-			var od:Dictionary=definitions[other.kind]
-			var air:bool=od.domain=="air"
-			if not other.members.is_empty():
-				# Sections: aim at a soldier this man can see, nearest first.
-				var ordered:bool=not u.orders.is_empty() and u.orders[0].mode=="attack" and other.id==u.orders[0].target
-				var budget:int=mini(SOLDIER_CHECKS,checks_left-soldier_checks)
-				if budget<=0:continue
-				var reach_sq:float=pow(float(d.range)*range_scale,2)
-				var soldier:=aim_soldier(member.pos,other,reach_sq,true,INF if ordered else nearest,budget)
-				if soldier.is_empty():continue
-				target=other;victim=soldier
-				nearest=-1.0 if ordered else member.pos.distance_squared_to(soldier.pos)+(pow(terrain.height_at(member.pos)-terrain.height_at(soldier.pos),2) if terrain.has_elevation() else 0.0)
-				continue
-			var distance:float=member.pos.distance_squared_to(other.pos)
-			var reach:float=float(d.range)*range_scale
-			if terrain.has_elevation():distance+=pow(terrain.height_at(member.pos)-unit_altitude(other),2)
-			if air:
-				if not terrain.has_elevation():distance+=pow(unit_altitude(other),2)
-				reach=weapon_range(weapon,od)
-			var priority:float=distance*(0.2 if od.get("strike",false) else 1.0)
-			# Keep tracking the same aircraft instead of re-aiming at every swap.
-			if air and other.id==member.target:priority*=0.5
-			if not u.orders.is_empty() and u.orders[0].mode=="attack" and other.id==u.orders[0].target:priority=-1.0
-			if distance<reach*reach and priority<nearest and (air or terrain.line_clear(member.pos,other.pos)) and relief_sight_clear(u,other,member.pos):
-				target=other;victim={};nearest=priority
+		if not selected_ready:selected=select_infantry_target(u,member,weapon,eligible_by_weapon[weapon],range_scale)
+		var target:Dictionary=selected.get("target",{})
+		var victim:Dictionary=selected.get("victim",{})
 		var target_id:int=target.get("id",-1)
-		if member.target!=target_id:member.aim=0.0
+		var victim_id:int=int(victim.get("index",-1))
+		if member.target!=target_id or int(member.get("aim_member",-1))!=victim_id or str(member.get("aim_weapon",weapon))!=weapon:member.aim=0.0
 		member.target=target_id
+		member["aim_member"]=victim_id
+		member["aim_weapon"]=weapon
+		if reloading:
+			member.state="RELOADING";member.aim=0.0
+			continue
 		if target.is_empty():
 			member.aim=0.0
 			# In a trench or any shelter soldiers stay down behind the parapet;
@@ -1775,16 +1991,6 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			var direction:Vector2=((victim.pos if not victim.is_empty() else target.pos)-member.pos).normalized()
 			member.facing=member.facing.rotated(clampf(member.facing.angle_to(direction),-dt*4,dt*4))
 			if member.facing.dot(direction)<0.97:member.state="TURNING";member.aim=0.0;continue
-			if member.reload_until>time:
-				member.state="RELOADING"
-				member.aim=0.0
-				continue
-			if member.rounds<=0:
-				member.rounds=1 if weapon=="atgm" else 6
-				member.reload_until=time+(3.0 if weapon=="atgm" else 1.8)
-				member.state="RELOADING"
-				member.aim=0.0
-				continue
 		member.aim+=dt
 		member.facing=((victim.pos if not victim.is_empty() else target.pos)-member.pos).normalized()
 		# ATGM: the seeker lock-on before launch (target in line of sight; a new
@@ -1794,6 +2000,7 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		if hurt:preparation*=Infantry.LIGHT_AIM
 		member.state="ACQUIRING" if member.aim<preparation else "CYCLING"
 		if member.cooldown>0 or member.aim<preparation:continue
+		if not engagement_allowed(u,target_id):continue
 		var proxy:Dictionary=u.duplicate()
 		proxy.kind=weapon
 		proxy.pos=member.pos
@@ -2110,6 +2317,9 @@ func finish_order(u: Dictionary) -> void:
 		u.path.clear()
 		return
 	u.orders.pop_front()
+	if u.orders.is_empty():
+		Actions.revoke_permission(u)
+		actions.invalidate(u,time,"objective_reached")
 	u.reason="Objective reached · holding"
 	u.path.clear()
 	start_next_order(u)
@@ -2120,6 +2330,7 @@ func start_next_order(u:Dictionary)->void:
 	if u.orders.is_empty() or u.has(SectionRecovery.KEY):return
 	u.intent=u.orders[0].duplicate()
 	if u.orders[0].has("slot"):return
+	actions.activate_order(u,u.orders[0],time,"player" if u.team==0 else "ai")
 	if take_route_budget(u.pos,u.orders[0].pos):u.path=order_route(u,u.orders[0].pos)
 	else:defer_route(u,"order")
 

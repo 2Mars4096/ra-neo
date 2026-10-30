@@ -231,10 +231,12 @@ func infantry(parent:Node3D,anti_tank:bool,engineer:bool=false) -> void:
 		tube(parent,o+Vector3(0.11,0.92,-0.49),o+Vector3(0.11,0.92,-0.74),0.022,steel)
 		box(parent,o+Vector3(0.11,0.99,-0.27),Vector3(0.05,0.05,0.13),rubber)
 		box(parent,o+Vector3(-0.195,1.0,0),Vector3(0.012,0.08,0.11),marking)
-		if anti_tank and i==0:
+		if anti_tank:
+			var launcher_start:=parent.get_child_count()
 			tube(parent,o+Vector3(0.28,1.05,0.36),o+Vector3(0.28,1.05,-0.64),0.095,olive)
 			tube(parent,o+Vector3(0.28,1.05,-0.64),o+Vector3(0.28,1.05,-0.66),0.075,rubber)
 			box(parent,o+Vector3(0.14,1.12,-0.28),Vector3(0.18,0.15,0.16),steel)
+			rig(parent,launcher_start,"Launcher",o).visible=i==0
 
 		rig(parent,weapon_start,"Weapon",o+Vector3(0,0.96,0))
 		rig(parent,upper_start,"Upper",o)

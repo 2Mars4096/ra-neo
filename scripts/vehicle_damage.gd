@@ -1038,8 +1038,13 @@ static func _board(sim,section:Dictionary,hull:Dictionary)->Dictionary:
 	var fresh:Dictionary=sim.spawn(hull.kind,section.team,hull.pos)
 	if fresh.is_empty():return fresh
 	var able:Array=section.members.filter(func(m):return m.hp>0)
-	# Healthy soldiers first; the highest index first, so an ATGM team keeps its launcher.
-	able.sort_custom(func(a,b):return a.wound==b.wound and a.index>b.index or a.wound!=b.wound and a.wound==sim.Infantry.HEALTHY)
+	# Preserve the current specialist when fewer than the whole section board.
+	# Within each equipment category, healthy soldiers and higher slots go first.
+	able.sort_custom(func(a,b):
+		var a_specialist:bool=sim.Infantry.has_equipment(section,a,"launcher")
+		var b_specialist:bool=sim.Infantry.has_equipment(section,b,"launcher")
+		if a_specialist!=b_specialist:return not a_specialist
+		return a.wound==b.wound and a.index>b.index or a.wound!=b.wound and a.wound==sim.Infantry.HEALTHY)
 	var crew_full:int=int(hull.get("crew_full",sim.definitions[hull.kind].get("crew",2)))
 	var count:int=mini(mini(crew_full,RECREW_CREW),able.size())
 	for k in count:

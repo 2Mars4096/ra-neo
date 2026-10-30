@@ -161,7 +161,7 @@ static func continue_queue(sim,engineer:Dictionary)->void:
 		if best.is_empty() or site.pos.distance_squared_to(engineer.pos)<best.pos.distance_squared_to(engineer.pos):best=site
 	if best.is_empty():return
 	best.erase("queued_for")
-	if not resume(sim,best.id,engineer.id):best["queued_for"]=engineer.id
+	if not resume(sim,best.id,engineer.id,false):best["queued_for"]=engineer.id
 
 # Enemy offensive: escalating two-pronged waves aimed at the player's forward
 # base. A drone scouts ahead; the main body attack-moves straight in while a
@@ -883,13 +883,17 @@ static func fail(sim,message:String)->bool:
 	if not sim.field_ops.is_empty():sim.field_ops.last_build_error=message
 	return false
 
-static func assign_builder(sim,site:Dictionary,engineer:Dictionary,plan:Dictionary)->void:
+static func assign_builder(sim,site:Dictionary,engineer:Dictionary,plan:Dictionary,replace_intent:bool=true)->void:
 	var previous:Dictionary=sim.get_unit(site.get("engineer_id",-1))
 	if not previous.is_empty() and previous.id!=engineer.id and previous.get("building_id",-1)==site.id:
 		# Stop only the superseded construction assignment, not unrelated orders.
 		sim.stop([previous.id])
 		previous.erase("building_id")
 	sim.Director.cancel(engineer)
+	var task:={"mode":"build","target":site.id,"pos":plan.work_point}
+	if replace_intent:sim.actions.accept_order(engineer,task,sim.time)
+	else:sim.actions.activate_order(engineer,task,sim.time,"executor")
+	engineer.erase("provisional_before");engineer.erase("route_pending")
 	for member in engineer.members:sim.Infantry.Cover.clear(member)
 	engineer.orders=[{"mode":"move","pos":plan.work_point,"target":-1}]
 	engineer.intent=engineer.orders[0].duplicate()
@@ -960,6 +964,8 @@ static func clear_site(sim,site_id:int,engineer_id:int)->bool:
 	if plan.reason!="":return fail(sim,"No route to the obstacle")
 	pause_builder(sim,engineer.id)
 	sim.Director.cancel(engineer)
+	sim.actions.accept_order(engineer,{"mode":"clear","target":site.id,"pos":plan.work_point},sim.time)
+	engineer.erase("provisional_before");engineer.erase("route_pending")
 	for member in engineer.members:sim.Infantry.Cover.clear(member)
 	engineer.orders=[{"mode":"move","pos":plan.work_point,"target":-1}]
 	engineer.intent=engineer.orders[0].duplicate()
@@ -987,6 +993,8 @@ static func clear_wreck(sim,hull_id:int,engineer_id:int)->bool:
 	if plan.reason!="":return fail(sim,"No route to the wreck")
 	pause_builder(sim,engineer.id)
 	sim.Director.cancel(engineer)
+	sim.actions.accept_order(engineer,{"mode":"clear","target":hull_id,"pos":plan.work_point},sim.time)
+	engineer.erase("provisional_before");engineer.erase("route_pending")
 	for member in engineer.members:sim.Infantry.Cover.clear(member)
 	engineer.orders=[{"mode":"move","pos":plan.work_point,"target":-1}]
 	engineer.intent=engineer.orders[0].duplicate()
@@ -1059,7 +1067,7 @@ static func progress_clearing(sim,dt:float)->void:
 			sim.events.append({"type":"warning","text":"%s cleared by engineers" % str(sim.definitions[site.kind].get("name",site.kind)).capitalize(),"notice":"low"})
 			sim.events.append({"type":"destroyed","kind":site.kind,"pos":site.pos,"visible":true})
 
-static func resume(sim,structure_id:int,engineer_id:int=-1)->bool:
+static func resume(sim,structure_id:int,engineer_id:int=-1,replace_intent:bool=true)->bool:
 	if not valid_site(sim,structure_id):return fail(sim,"Site unavailable")
 	var site:Dictionary=sim.get_unit(structure_id)
 	if engineer_id<0:engineer_id=available_engineer(sim,structure_id)
@@ -1072,7 +1080,7 @@ static func resume(sim,structure_id:int,engineer_id:int=-1)->bool:
 	var plan:=work_plan(sim,site.kind,site.pos,engineer,true,structure_id,site.get("rotated",false))
 	if plan.reason!="":return fail(sim,"Unable to reach work point")
 	if not occupied_clear(sim,plan.work_point,"engineer",false,[engineer_id,structure_id]):return fail(sim,"Work point unavailable")
-	assign_builder(sim,site,engineer,plan)
+	assign_builder(sim,site,engineer,plan,replace_intent)
 	return true
 
 static func switch_builder(sim,site:Dictionary)->int:
