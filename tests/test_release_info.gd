@@ -15,11 +15,21 @@ func _init() -> void:
 	var state := var_to_str([sim.units, sim.credits, sim.time, sim.result, sim.combat_rng.state])
 	var report := Info.snapshot(sim, "test")
 	check(report.mission.id == "black_sea_harbor", "report identifies the active Harbor")
-	check(report.build.version == "0.1.0-playtest", "source build has a version")
+	# A source checkout has no generated release metadata. Do not label it as
+	# an exported playtest build merely to satisfy a historical fixture.
+	if FileAccess.file_exists(Info.BUILD_PATH):
+		var metadata=JSON.parse_string(FileAccess.get_file_as_string(Info.BUILD_PATH))
+		check(metadata is Dictionary and report.build==metadata,"generated build metadata is preserved")
+	else:
+		check(report.build.version=="development" and report.build.commit=="unknown" and report.build.channel=="development","source checkout reports its honest development fallback")
 	check(not Info.label().is_empty(), "version label is available")
 	check(report.mission.objectives.size() == 3, "all objectives included")
 	check(not report.mission.own_commands.is_empty(), "own commands help reproduce stuck orders")
 	check(report.mission.own_commands.size() <= 48, "report size bounded")
+	check(report.tactics.tick==sim.action_tick and report.tactics.events.size()<=64,"tactical diagnostics are current and bounded")
+	check(report.tactics.planning.has("limits") and report.tactics.has("astar_searches"),"planning admission and actual search counts are separate")
+	check(report.mission.own_commands.all(func(command):return command.has("order_version") and command.has("assignment") and command.has("strength")),"command ownership and casualty strength accompany action reasons")
+	check(report.tactics.events.all(func(event):return int(event.team)==0),"action trace contains only own-team events")
 	check(not report.has("environment") and not report.has("machine_id"), "no environment or persistent machine identifier")
 	check(state == var_to_str([sim.units, sim.credits, sim.time, sim.result, sim.combat_rng.state]), "report never changes the match")
 	var saved := Info.write_report(sim, "test", "res://artifacts/report-test")

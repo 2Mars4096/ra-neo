@@ -1,8 +1,10 @@
 # Tactical action catalogue
 
-**Status:** proposed; implementation not started.
+**Status:** catalogue proposed; M0 foundation implemented and verified (58/58 integration suites).
 
 This index accompanies [master plan 18](plans/18-unit-tactical-autonomy.md). It consolidates the action tables from the linked subplans. The subplans own prerequisites, decision rules, implementation tasks and acceptance scenarios; update this index when those source tables change.
+
+Starting-point counts below describe the 2026-10-27 planning baseline. [M0](plans/18-1-1-m0-foundation.md) now implements readiness, stable/urgent targeting, casualty-aware strength and shared ownership/knowledge/planning contracts. That foundation does not complete the 160 domain entries or enable M1 throwables, support requests or infantry digging.
 
 The catalogue contains **160 action and decision entries**: **81 Core**, **45 Expansion** and **34 Optional**. Starting points are **35 Existing**, **75 Partial** and **50 New**. These are planning entries, not a claim of that many independent new mechanics; domain-specific repair, observation and support choices reuse shared contracts.
 

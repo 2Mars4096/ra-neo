@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-30 — M0 tactical readiness and ownership
+
+- Continue `codex/unit-tactics-implementation` from recovery checkpoint `e36b211`, completing the M0 slice over the tactical plans and regional operations. Add [18-1-1](plans/18-1-1-m0-foundation.md) and update the master plan, architecture, catalogue status and player guidance.
+- Prepare empty weapons in quiet intervals in autonomous scenarios, coordinate optional rifle topoffs with a loaded capable partner, preserve rounds on interruption, prioritize explicit/urgent targets and retain ordinary aim. Track original/effective/recoverable/available/ready strength and member-owned specialist equipment.
+- Add bounded action channels/claims, assignment versions, reasons and event invalidation. Preserve queued/internal movement, reject stale routes, restore rejected provisional orders, protect Hold/garrison/engineering semantics, and apply scoped fire permission to ordinary weapons and building bombardment. Cancellation never erases released missiles/FPVs or refunds committed work.
+- Store copied local/shared sensor facts with deterministic ageing/expiry. Add shared age/priority planning admission, resumable placement searches and current-state validation. Include legacy vehicle, economy, engineering, bombardment and deployment paths in the work audit; distinguish pending work from impossible geometry.
+- Persist original roster strength, member IDs, partial magazines and equipment ownership in campaign version 2, with version-1 migration. Add selected-section readiness counts and local bounded action/planning diagnostics.
+- Regression review corrected hull-displaced/medic-occupied regroup slots, unsafe rally withdrawal and repeated withdrawals from permanent casualty history while preserving existing collision, reunion and command assertions. Completed pressure episodes retain their loss history; fresh fire/hits/losses/heavy suppression re-arm the response. See [bugs](bugs.md) for negative controls and discarded workarounds.
+- Final validation: **58/58 integration suites pass**, including **10 M0 suites / 1,439 checks**, the unchanged **128,621-check regroup suite**, classic/harvester, world-damage/work and campaign regressions. All three native readiness captures pass and were inspected. [Validation](validation.md) retains the known shutdown warnings and expected failed-write diagnostic.
+- A valid isolated Harbor sample measures **29.816 ms CPU p95 / 354.828 ms maximum** over 900 ticks, with 29 ticks above the simulation interval. Shared admission does not remove the remaining synchronous hitch risk; no speedup, rendered-FPS, latency, full-world-save or human-balance acceptance is claimed. M1 grenade/smoke/backup/infantry-digging work remains planned.
+
 ## 2026-10-27 — Tactical-action master plan and subplans
 
 - Prepare [plan 18](plans/18-unit-tactical-autonomy.md), twelve linked subplans and a consolidated [action catalogue](tactical-action-catalogue.md) on `codex/unit-tactics-plans`, based on regional-operations `f5916e8`.

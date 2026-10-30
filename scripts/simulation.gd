@@ -13,6 +13,7 @@ var field_ops:Dictionary={}
 const Director = preload("res://scripts/tactical_director.gd")
 const Actions = preload("res://scripts/tactical_actions.gd")
 const Context = preload("res://scripts/tactical_context.gd")
+const Navigation = preload("res://scripts/tactical_navigation.gd")
 var actions = Actions.new()
 var context = Context.new()
 var action_tick := 0
@@ -183,7 +184,7 @@ func capability_view(u:Dictionary)->Dictionary:
 	var d:Dictionary=definitions[u.kind]
 	var strength:Dictionary=Infantry.strength(u,time)
 	return {"strength":strength,"equipment":u.get("equipment",{}).duplicate(true),
-		"mobile":alive(u) and not u.get("combat_ineffective",false) and not d.get("structure",false) and not u.get("mobility_kill",false) and not u.has("crash"),
+		"mobile":alive(u) and not u.get("combat_ineffective",false) and not d.get("structure",false) and not u.get("mobility_kill",false) and not u.get("abandoned",false) and not u.has("crash"),
 		"armed":alive(u) and not u.get("combat_ineffective",false) and not u.get("firepower_kill",false) and not u.get("abandoned",false) and float(d.get("damage",0.0))>0.0,
 		"fire_policy":u.get("fire_policy","free"),"order_version":u.get("order_version",0)}
 
@@ -192,6 +193,63 @@ func situation_view(u:Dictionary)->Dictionary:
 	return {"time":time,"order_version":u.get("order_version",0),
 		"geometry_version":terrain.geometry_version,"capability":capability_view(u),
 		"contacts":context.team_snapshot(u.team,time) if connected else context.local_snapshot(u.id,time,u.team)}
+
+# Cheap invalidation is separate from planning. Existing executors still obey
+# physical preparation and movement, while the next scheduled review can use
+# newly observed danger or a changed capability immediately.
+func wake_tactical(u:Dictionary,reason:String)->void:
+	if not alive(u):return
+	for key in ["next_decision","maneuver_review","contact_review","pressure_review","cover_next"]:
+		u[key]=minf(float(u.get(key,time)),time)
+	u["tactical_wake_at"]=time
+	u["tactical_wake_tick"]=action_tick
+	u["tactical_wake_reason"]=reason
+	if int(u.get("last_wake_event_tick",-1))!=action_tick or u.get("last_wake_event","")!=reason:
+		u["last_wake_event_tick"]=action_tick;u["last_wake_event"]=reason
+		actions.invalidate(u,time,reason)
+
+func refresh_tactical_events()->void:
+	for u in units:
+		if not alive(u):
+			actions.cancel_unit(u,time,"owner_lost")
+			terrain.planning.cancel_owner(int(u.id))
+			context.forget_observer(int(u.id))
+			continue
+		var able:=0
+		for member in u.members:
+			if member.hp>0:able+=1
+		var facts:Array=[able,bool(u.get("combat_ineffective",false)),bool(u.get("mobility_kill",false)),
+			bool(u.get("firepower_kill",false)),bool(u.get("optics_kill",false)),bool(u.get("abandoned",false)),
+			int(u.get("crew",-1)),bool(Infantry.strength(u,time).launcher_available) if u.kind=="atgm" else false]
+		var previous:Array=u.get("tactical_capability_seen",[])
+		if not previous.is_empty() and previous!=facts:
+			wake_tactical(u,"casualty" if able<int(previous[0]) else "capability_changed")
+			u.target=-1;u.aim_target=-1;u.aim_time=0.0
+		u["tactical_capability_seen"]=facts
+		if float(u.last_hit)>float(u.get("tactical_hit_seen",u.last_hit)):
+			wake_tactical(u,"under_fire")
+		u["tactical_hit_seen"]=u.last_hit
+		var geometry:int=int(u.get("tactical_geometry_seen",terrain.geometry_version))
+		if geometry!=terrain.geometry_version and (not u.path.is_empty() or not u.maneuver.is_empty() or u.members.any(func(m):return not str(m.get("cover_phase","")).is_empty())):
+			wake_tactical(u,"geometry_changed")
+		u["tactical_geometry_seen"]=terrain.geometry_version
+
+# Only a real sighting writes memory. The recorded position is a value copy;
+# neither a future lookup nor loss of radio follows an unseen live target.
+func record_observation(observer:Dictionary,target:Dictionary,upload:bool=true)->void:
+	if not is_same(target,get_unit(int(target.id))):return
+	var previous:Dictionary=context.local_for(observer.id,target.id,time,observer.team)
+	var shared:Dictionary=context.team_contact(observer.team,target.id,time) if upload else {}
+	context.observe(observer.team,target.id,target.kind,target.pos,time,observer.id,upload)
+	if previous.is_empty() or float(previous.age)>0.65:wake_tactical(observer,"contact_observed")
+	if upload and (shared.is_empty() or float(shared.age)>0.65):
+		var reach:=0.0
+		for definition in definitions.values():reach=maxf(reach,maxf(float(definition.range),float(definition.sight))+6.0)
+		for ally in range_candidates(target.pos,reach):
+			if ally.id==observer.id or ally.team!=observer.team or not alive(ally) or comms_blocked(ally):continue
+			var definition:Dictionary=definitions[ally.kind]
+			var interested:float=maxf(float(definition.range),float(definition.sight))+section_offset(ally)
+			if ally.pos.distance_squared_to(target.pos)<=interested*interested:wake_tactical(ally,"contact_received")
 
 func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool = false, target_id: int = -1) -> int:
 	if result != "":
@@ -235,25 +293,14 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 		# A large group's click records its orders only: past the first
 		# CLICK_SLOTS units, targets (formation slots, reachability) resolve in
 		# command order over the next ticks while the units hold their orders.
-		if mode!="attack" and resolved>=click_slots:
-			if queued and u.orders.size()>=12:continue
-			if is_same(command.ids,ids):command.ids=ids.duplicate()
-			if not u.members.is_empty() and domain=="land" and not command.held.has(u.team):command.held[u.team]=held_spots(u,destination,ids)
-			var held_at:=destination
-			if ids.size()>1:held_at+=Vector2((index % 3 - 1) * spacing[domain], (index / 3) * spacing[domain])
-			if not terrain.traversable(held_at,domain,float(definitions[u.kind].radius),[],terrain.mobility_profile(u.kind)):held_at=destination
-			# Should no target turn up, the unit carries on as before the click.
-			var before:Dictionary={} if queued else order_snapshot(u)
-			if not queued:u["provisional_before"]=before
-			var waiting:=record_order(u,mode,held_at,target_id,queued,true)
-			waiting["slot"]=true
-			slot_queue.append({"unit":u.id,"order":waiting,"index":index,"command":command,"before":before})
-			command.pending+=1
-			order_resolving+=1
-			accepted += 1
+		if (mode!="attack" and resolved>=click_slots) or not terrain.planning.request("formation",int(u.id),"order",2):
+			if queue_order_target(u,command,index):accepted+=1
 			continue
 		resolved+=1
 		var plan:=order_target(u,command,index,false)
+		if plan.get("pending",false):
+			if queue_order_target(u,command,index):accepted+=1
+			continue
 		if plan.is_empty():continue
 		if u.orders.size()>=12 and queued:continue
 		var order:=record_order(u,mode,plan.pos,target_id,queued)
@@ -267,6 +314,25 @@ func issue(ids: Array, destination: Vector2, mode: String = "move", queued: bool
 	terrain.end_path_memo()
 	if command.pending>0:last_command=command
 	return accepted
+
+# A planner deferral is not a rejected command. Keep the previous accepted
+# state until the whole destination has been physically validated.
+func queue_order_target(u:Dictionary,command:Dictionary,index:int)->bool:
+	if command.queued and u.orders.size()>=12:return false
+	command.ids=command.ids.duplicate()
+	var domain:String=definitions[u.kind].domain
+	if not u.members.is_empty() and domain=="land" and not command.held.has(u.team):command.held[u.team]=held_spots(u,command.destination,command.ids)
+	var held_at:Vector2=command.destination
+	if command.ids.size()>1:held_at+=Vector2((index%3-1)*command.spacing[domain],(index/3)*command.spacing[domain])
+	if not terrain.traversable(held_at,domain,float(definitions[u.kind].radius),[],terrain.mobility_profile(u.kind)):held_at=command.destination
+	var before:Dictionary={} if command.queued else order_snapshot(u)
+	if not command.queued:u["provisional_before"]=before
+	var waiting:=record_order(u,command.mode,held_at,command.target,command.queued,true)
+	waiting["slot"]=true
+	slot_queue.append({"unit":u.id,"order":waiting,"index":index,"command":command,"before":before})
+	command.pending+=1
+	order_resolving+=1
+	return true
 
 # Units of the last issue() whose targets still resolve (slot_queue); its
 # return value counts them as accepted until they do.
@@ -298,6 +364,7 @@ var click_slots:=CLICK_SLOTS # (tests raise it to resolve a whole group in the c
 # within the tick's budget is planned on the spot; resolved later, only short
 # hops are, the rest join the route queue.
 func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dictionary:
+	var states:Dictionary=command.get_or_add("planning",{}).get_or_add(int(u.id),{})
 	# Validate from a prospective clear exit, without moving the authoritative
 	# anchor. A valid command then walks the bounded wreck recovery before its
 	# normal route starts; an invalid destination still changes no orders.
@@ -320,7 +387,13 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 		if not sector_order:
 			# Candidate spots only need reachability, not a whole smoothed route.
 			terrain.path_probe=true
-			target=terrain.reachable_destination(u.pos,destination,domain,radius,terrain.mobility_profile(u.kind))
+			if ticking:
+				var projection:Dictionary=terrain.reachable_destination_step(u.pos,destination,domain,radius,terrain.mobility_profile(u.kind),states.get_or_add("projection",{}))
+				if not projection.done:
+					terrain.path_probe=false
+					return {"pending":true}
+				target=projection.pos
+			else:target=terrain.reachable_destination(u.pos,destination,domain,radius,terrain.mobility_profile(u.kind))
 			terrain.path_probe=false
 			if target.x<0:return {}
 			order_adjusted=true
@@ -341,17 +414,35 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 		if definitions[u.kind].get("strike",false):
 			return {"pos":target,"planned":true,"route":[],"recovery":{}}
 		if not terrain.traversable(target, domain, radius,[],terrain.mobility_profile(u.kind)):
-			target = attack_position(u, enemy, slots+attack_rivals(u, target_id, ids, command.queued))
+			if ticking:
+				var firing:Dictionary=Navigation.attack(self,u,enemy,slots+attack_rivals(u,target_id,ids,command.queued),states.get_or_add("attack",{}))
+				if not firing.done:return {"pending":true}
+				target=firing.pos
+			else:target = attack_position(u, enemy, slots+attack_rivals(u, target_id, ids, command.queued))
 	# Over the tick's route budget, validate reachability only (grid search)
 	# and plan the route at the start of a later tick.
-	var planned:=route_cost(u.pos,target)<=0.0 if deferred else take_route_budget(u.pos,target)
-	if planned and deferred and ticking and not actions.take_work("route_searches"):planned=false
+	var planned:=route_cost(u.pos,target)<=0.0 if deferred else take_route_budget(u.pos,target,false,int(u.id),"order")
+	if planned and deferred and not terrain.planning.request("routes",int(u.id),"order"):planned=false
 	if mode!="attack":
-		terrain.path_probe=not planned
+		# A pending placement must not restart when the route quota changes.
+		# Live placement always validates connectivity; the final route follows.
+		terrain.path_probe=ticking or not planned
 		# Sections also keep clear of spots friends already hold or head for.
 		if not u.members.is_empty() and domain=="land":
 			if not command.held.has(u.team):command.held[u.team]=held_spots(u,destination,ids)
-			target=formation_slot(target,u,slots,command.section_open.get_or_add(u.team,{}),command.held[u.team])
+			if ticking:
+				var placement:Dictionary=Navigation.formation(self,target,u,slots,command.section_open.get_or_add(u.team,{}),command.held[u.team],states.get_or_add("formation",{}))
+				if not placement.done:
+					terrain.path_probe=false
+					return {"pending":true}
+				target=placement.pos
+			else:target=formation_slot(target,u,slots,command.section_open.get_or_add(u.team,{}),command.held[u.team])
+		elif ticking:
+			var placement:Dictionary=Navigation.formation(self,target,u,slots,command.open,[],states.get_or_add("formation",{}))
+			if not placement.done:
+				terrain.path_probe=false
+				return {"pending":true}
+			target=placement.pos
 		else:target=formation_slot(target,u,slots,command.open)
 		terrain.path_probe=false
 		if target.x<0: return {}
@@ -381,26 +472,50 @@ func record_order(u:Dictionary,mode:String,target:Vector2,target_id:int,queued:b
 	u.orders.append(order)
 	if u.orders.size()==1:u.intent=order.duplicate()
 	if not waiting:
-		if not queued:actions.accept_order(u,order,time,"player" if u.team==0 else "ai")
+		if not queued:
+			terrain.planning.cancel_owner(int(u.id))
+			cancel_preparation(u)
+			actions.accept_order(u,order,time,"player" if u.team==0 else "ai")
 		elif u.orders.size()==1:actions.activate_order(u,order,time,"player" if u.team==0 else "ai")
 	u.state = "ADVANCING" if mode == "attack_move" else "MOVING"
 	return order
+
+func cancel_preparation(u:Dictionary,reload:bool=true)->void:
+	u.erase("tactical_navigation")
+	for ticket in u.get("equipment_handovers",{}).values().duplicate():Infantry.cancel_handover(u,ticket)
+	if reload:
+		for member in u.members:Infantry.cancel_readiness(member)
 
 # What a new order replaces (record_order, Director.cancel), to put back.
 const SNAPSHOT_KEYS:=["orders","path","intent","state","command_group","route_pending","maneuver","reason","commit_until","next_decision","hold_command","maneuver_review","wreck_recovery"]
 func order_snapshot(u:Dictionary)->Dictionary:
 	# Nested provisional replacements retain the last accepted state.
-	if u.has("provisional_before"):return u.provisional_before.duplicate()
+	if u.has("provisional_before"):
+		var retained:Dictionary=u.provisional_before.duplicate()
+		retained.orders=retained.get("orders",[]).duplicate()
+		for queued in u.orders.slice(1):
+			if not retained.orders.any(func(order):return is_same(order,queued)):retained.orders.append(queued)
+		return retained
 	var snapshot:={}
 	for key in SNAPSHOT_KEYS:
 		if u.has(key):snapshot[key]=u[key].duplicate() if key in ["orders","path"] else u[key]
 	return snapshot
 
 func restore_orders(u:Dictionary,snapshot:Dictionary)->void:
+	# Shift orders received after this provisional replacement still belong
+	# to the player. Reject only the unresolved head, then append its live tail
+	# to the previously accepted queue without duplicating retained records.
+	var queued_after:Array=u.orders.slice(1) if u.has("provisional_before") and not u.orders.is_empty() else []
+	var resume_queued:bool=snapshot.get("orders",[]).is_empty() and not queued_after.is_empty()
 	u.erase("provisional_before")
 	for key in SNAPSHOT_KEYS:
 		if snapshot.has(key):u[key]=snapshot[key]
 		else:u.erase(key)
+	for queued in queued_after:
+		if not u.orders.any(func(order):return is_same(order,queued)):u.orders.append(queued)
+	if resume_queued:
+		u.state="ADVANCING" if u.orders[0].mode=="attack_move" else "MOVING"
+		start_next_order(u)
 	# A route it was waiting for queues again (the queue may have dropped it).
 	if u.has("route_pending") and route_waiting(u) and not route_queue.has(u.id):route_queue.append(u.id)
 
@@ -427,10 +542,24 @@ func resolve_slots()->int:
 			for i in u.orders.size():
 				if is_same(u.orders[i],order):at=i;break
 		if at<0:
+			# A later provisional replacement temporarily hides the accepted
+			# queued tail in its rollback snapshot. Keep its still-pending slot
+			# alive until the new head accepts or rejects; bound bookkeeping too.
+			var saved:Array=u.get("provisional_before",{}).get("orders",[]) if alive(u) else []
+			if saved.any(func(previous):return is_same(previous,order)):
+				slot_queue.append(entry)
+				work+=SLOT_WORK
+				continue
 			_slot_resolved(entry.command,false)
 			continue
+		if not terrain.planning.request("formation",int(u.id),"order",2):
+			slot_queue.push_front(entry)
+			break
 		work+=SLOT_WORK
 		var plan:=order_target(u,entry.command,entry.index,true)
+		if plan.get("pending",false):
+			slot_queue.push_front(entry)
+			break
 		order.erase("slot")
 		_slot_resolved(entry.command,not plan.is_empty())
 		if plan.is_empty():
@@ -448,7 +577,10 @@ func resolve_slots()->int:
 			for actor in u.members:Infantry.Cover.clear(actor)
 			u.erase("provisional_before")
 		order.pos=plan.pos
-		if not entry.before.is_empty():actions.accept_order(u,order,time,"player" if u.team==0 else "ai")
+		if not entry.before.is_empty():
+			terrain.planning.cancel_owner(int(u.id))
+			cancel_preparation(u)
+			actions.accept_order(u,order,time,"player" if u.team==0 else "ai")
 		elif at==0:actions.activate_order(u,order,time,"player" if u.team==0 else "ai")
 		entry.command.slots.append({"pos":plan.pos,"radius":crowd_radius(u.kind),"layer":collision_layer(u)})
 		if at==0:
@@ -459,18 +591,28 @@ func resolve_slots()->int:
 	terrain.end_path_memo()
 	return work
 
-# Route planning budget. A cross-map route costs ~20 ms of GDScript, so each
-# tick spends a fixed, deterministic amount of planning: ROUTE_BUDGET units
-# (~ms, estimated 1 + length/40 per route) for routes planned on the spot, and
-# ROUTE_QUEUE_WORK string-pull checks for queued routes, which plan
-# incrementally at the start of each tick, first come first served. Routes over
-# budget queue (deferrable callers) or retry next tick; an urgent caller may
-# still take the first route of a tick. Short tactical hops are never deferred.
+# Caller admits one formation bundle before using this helper. Its persistent
+# cursor prevents a crowded search restarting at its first candidate each tick.
+func formation_plan(origin:Vector2,u:Dictionary,slots:Array[Dictionary],open:Dictionary={},held:Array=[],part:String="formation")->Dictionary:
+	var held_slots:Array[Dictionary]=[]
+	held_slots.assign(held)
+	if not ticking:return {"done":true,"pos":formation_slot(origin,u,slots,open,held_slots)}
+	var state:Dictionary=u.get_or_add("tactical_navigation",{}).get_or_add(part,{})
+	return Navigation.formation(self,origin,u,slots,open,held_slots,state)
+
+func attack_plan(u:Dictionary,enemy:Dictionary,taken:Array=[],part:String="attack")->Dictionary:
+	if not ticking:return {"done":true,"pos":attack_position(u,enemy,taken)}
+	var state:Dictionary=u.get_or_add("tactical_navigation",{}).get_or_add(part,{})
+	return Navigation.attack(self,u,enemy,taken,state)
+
+# The legacy distance estimate still limits synchronous command receipt outside
+# a tick. Live work uses the shared age/priority scheduler: a distance gate ahead
+# of it would keep a costly retry from ever joining the fair queue. route_budget
+# remains an estimate/counter, not an elapsed-time guarantee.
 const ROUTE_BUDGET:=14.0
 const ROUTE_FREE_DISTANCE:=16.0
-# Queued routes per tick: string-pull checks (~0.08-0.12 ms each on long
-# routes) and at most one grid search, which runs whole (not resumable) and
-# only starts with room left for it, so routing stays ~10-20 ms per tick.
+# Queued routes admit at most one grid-search bundle and slice string-pulling.
+# Initial A* is synchronous; these counts do not certify a millisecond bound.
 const ROUTE_QUEUE_WORK:=100
 const ROUTE_SEARCH_WORK:=40 # a queued route's grid search, in check units
 const ROUTE_SEARCHES_PER_TICK:=1
@@ -483,10 +625,10 @@ func route_cost(from:Vector2,to:Vector2)->float:
 	return 0.0 if distance<ROUTE_FREE_DISTANCE else 1.0+distance/40.0
 
 # Charges the budget and returns true when a route may be planned now.
-func take_route_budget(from:Vector2,to:Vector2,urgent:bool=false)->bool:
+func take_route_budget(from:Vector2,to:Vector2,urgent:bool=false,owner:int=-1,part:String="route")->bool:
 	var cost:=route_cost(from,to)
-	if cost>route_budget and not (urgent and route_budget>=ROUTE_BUDGET):return false
-	if ticking and not actions.take_work("route_searches"):return false
+	if not terrain.planning.active and cost>route_budget and not (urgent and route_budget>=ROUTE_BUDGET):return false
+	if not terrain.planning.request("routes",owner,part,2 if urgent else 0):return false
 	route_budget-=cost
 	return true
 
@@ -531,7 +673,7 @@ func plan_queued_routes(spent:int=0)->void:
 			actions.invalidate(u,time,"route_changed")
 		if not pending.has("job"):
 			if searches<=0 or work<ROUTE_SEARCH_WORK:break
-			if ticking and not actions.take_work("route_searches"):break
+			if not terrain.planning.request("routes",int(u.id),"queued_route",1):break
 			searches-=1
 			var bodies:Array=standing_bodies(u,u.pos,goal) if pending.mode=="order" and not pending.get("terrain_only",false) else []
 			pending.around=not bodies.is_empty()
@@ -644,6 +786,8 @@ func stop(ids: Array) -> int:
 			Director.cancel(u)
 			u.erase("provisional_before")
 			u.intent={}
+			terrain.planning.cancel_owner(int(u.id))
+			cancel_preparation(u,false)
 			actions.accept_order(u,{"mode":"hold","pos":u.pos,"target":-1},time,"player" if u.team==0 else "ai")
 			u.hold_command=true
 			u.erase(SectionRecovery.KEY)
@@ -782,17 +926,16 @@ func update_visibility() -> void:
 			if sheltered_all.has(target.id) and time-float(target.get("last_shot",-100.0))>=3.0:radius*=0.6
 			if land and time-float(target.get("last_shot",-100.0))>=3.0:radius*=ground[1]
 			if not posts.is_empty():
-				if target.seen_by[observer.team]:continue
 				var air:bool=definitions[target.kind].domain == "air"
 				for post in posts:
 					if post.distance_squared_to(target.pos) <= radius * radius and (air or terrain.line_clear(post,target.pos)) and relief_sight_clear(observer,target,post):
 						target.seen_by[observer.team] = true
-						if is_same(target,get_unit(target.id)):context.observe(observer.team,target.id,target.kind,target.pos,time,observer.id)
+						record_observation(observer,target)
 						break
 			elif observer.pos.distance_squared_to(target.pos) <= radius * radius:
 				if (d.domain=="air" or definitions[target.kind].domain=="air" or terrain.line_clear(observer.pos,target.pos)) and relief_sight_clear(observer,target):
 					target.seen_by[observer.team] = true
-					if is_same(target,get_unit(target.id)):context.observe(observer.team,target.id,target.kind,target.pos,time,observer.id)
+					record_observation(observer,target)
 		if observer.team == 0:
 			var origin := terrain.cell(observer.pos)
 			var sight:float=float(d.sight)*float(weather.sight_scale)
@@ -847,7 +990,10 @@ func passive_work(other:Dictionary)->bool:
 	return od.get("structure",false) and not od.get("armed",false)
 
 func ordered_target(u:Dictionary)->int:
-	return int(u.orders[0].get("target",-1)) if not u.orders.is_empty() and u.orders[0].mode=="attack" else -1
+	var accepted:Array=u.orders
+	if not accepted.is_empty() and accepted[0].has("slot"):
+		accepted=u.get("provisional_before",{}).get("orders",[])
+	return int(accepted[0].get("target",-1)) if not accepted.is_empty() and accepted[0].mode=="attack" else -1
 
 # A tank's coax never locks onto a scout drone by itself (it would ignore armour);
 # it engages scouts on order and inbound strike drones automatically.
@@ -1181,7 +1327,7 @@ func contact_known(u:Dictionary,other:Dictionary) -> bool:
 	if terrain.cover(other.pos) and definitions[other.kind].domain=="land":sight*=0.7
 	if definitions[other.kind].domain=="land" and time-float(other.get("last_shot",-100.0))>=3.0:sight*=terrain.concealment(other.pos)
 	var observed:bool=u.pos.distance_to(other.pos)<=sight and (d.domain=="air" or definitions[other.kind].domain=="air" or terrain.line_clear(u.pos,other.pos)) and relief_sight_clear(u,other)
-	if observed:context.observe(u.team,other.id,other.kind,other.pos,time,u.id,false)
+	if observed:record_observation(u,other,false)
 	return observed
 
 func effective_unit(u:Dictionary,target_kind:String) -> bool:
@@ -1607,6 +1753,7 @@ func tick(dt: float) -> void:
 	ticking=true
 	action_tick+=1
 	actions.begin_tick(action_tick,{"decisions":32,"line_checks":256,"route_searches":8,"cover_queries":32})
+	terrain.planning.begin_tick(action_tick)
 	time += dt
 	weather=Weather.sample(time,scenario.get("autonomy",false))
 	terrain.wetness=weather.wetness
@@ -1622,6 +1769,7 @@ func tick(dt: float) -> void:
 		update_visibility()
 		sensor_clock = 0.3
 	if profiling:lap=_lap("visibility",lap)
+	refresh_tactical_events()
 	Director.update(self)
 	if profiling:lap=_lap("director",lap)
 	Garrison.tick(self,dt)
@@ -1714,7 +1862,7 @@ func tick(dt: float) -> void:
 	else:Classic.tick(self,dt)
 	if profiling:lap=_lap("mission",lap)
 	enemy_clock -= dt
-	if enemy_clock <= 0 and field_ops.is_empty() and not scenario.get("autonomy",false):
+	if enemy_clock <= 0 and field_ops.is_empty() and not scenario.get("autonomy",false) and terrain.planning.request("formation",-10,"legacy_reserves"):
 		enemy_clock = 50.0
 		wave += 1
 		if wave <= 4:
@@ -1729,6 +1877,7 @@ func tick(dt: float) -> void:
 		result = "DEFEAT"
 
 	for u in units:sync_action_state(u)
+	terrain.planning.end_tick()
 	ticking=false
 
 # Existing executors retain their physical rules; stable channels expose the
@@ -1736,11 +1885,15 @@ func tick(dt: float) -> void:
 func sync_action_state(u:Dictionary)->void:
 	if not alive(u) or u.get("combat_ineffective",false):
 		actions.cancel_unit(u,time,"owner_lost")
+		terrain.planning.cancel_owner(int(u.id))
 		return
 	if not u.orders.is_empty() and u.orders[0].has("slot"):return
 	actions.expire(u,time)
 	var movement:Dictionary=actions.active(u,"movement")
 	if not movement.is_empty() and u.maneuver.is_empty():actions.complete(u,movement,time,"completed")
+	if u.members.is_empty():
+		var aiming:bool=int(u.target)>=0 and not u.get("firepower_kill",false) and not u.get("abandoned",false)
+		sync_action_channel(u,"weapon","aim" if aiming else "",{"unit":u.target},"aiming")
 	for member in u.members:
 		var channel:String="member:%s"%str(member.get("member_id",member.index))
 		if member.hp<=0:
@@ -1756,7 +1909,7 @@ func sync_action_state(u:Dictionary)->void:
 			kind="aim";target={"unit":member.target,"member":member.get("aim_member",-1),"weapon":member.get("aim_weapon","rifle")}
 		var weapon_action:Dictionary=actions.active(u,channel+":weapon")
 		if not weapon_action.is_empty() and weapon_action.kind=="reload" and kind!="reload":
-			if Infantry.magazine_rounds(member,str(weapon_action.target.get("weapon","rifle")))>0:actions.complete(u,weapon_action,time,"reload_ready")
+			if float(member.get("reload_completed_at",-INF))>=float(weapon_action.started) and str(member.get("reload_completed_weapon",""))==str(weapon_action.target.get("weapon","rifle")):actions.complete(u,weapon_action,time,"reload_ready")
 			else:actions.cancel(u,weapon_action,time,"reload_interrupted")
 		sync_action_channel(u,channel+":weapon",kind,target,"reloading" if kind=="reload" else "aiming")
 		var cover:bool=member.hp>0 and member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"]
@@ -2019,6 +2172,12 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		u.last_shot=time
 
 func move_unit(u: Dictionary, dt: float) -> void:
+	# Provisional attacks have no accepted ownership yet. In particular, their
+	# pursuit/dead-target handling must not move or pop the unresolved order;
+	# resolve_slots either accepts it or restores the previous accepted state.
+	if not u.orders.is_empty() and u.orders[0].has("slot"):
+		u.speed_now=move_toward(u.speed_now,0.0,dt*8.0)
+		return
 	var mobility:float=VehicleDamage.before_move(self,u)
 	if mobility<=0.0:return
 	dt*=mobility
@@ -2037,7 +2196,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			# (re-planning it would discard detours round bodies and wrecks).
 			if order.pos.distance_to(target.pos)<=1.0 and not u.path.is_empty():u.repath = 1.0
 			# Over budget: keep the current route and retry next tick.
-			elif take_route_budget(u.pos,target.pos,true):
+			elif take_route_budget(u.pos,target.pos,true,int(u.id),"pursuit"):
 				order.pos = target.pos
 				u.path = terrain.path(u.pos, order.pos, d.domain,float(d.radius),[],terrain.mobility_profile(u.kind))
 				u.repath = 1.0
@@ -2078,7 +2237,7 @@ func move_unit(u: Dictionary, dt: float) -> void:
 			if jam>JAM_GIVE_WAY and time>=float(u.get("give_way_at",0.0)):
 				u["give_way_at"]=time+1.0
 				if not make_way(u,true,jam>JAM_UNDER_FIRE) and jam>JAM_BACK_OFF:back_off(u)
-	if (u.blocked_time>1.5 or stalled) and u.repath<=0 and take_route_budget(u.pos,order.pos,true):
+	if (u.blocked_time>1.5 or stalled) and u.repath<=0 and take_route_budget(u.pos,order.pos,true,int(u.id),"blocked_route"):
 		var avoid:Array=[]
 		var keep_right:Array=[]
 		var friend_ahead:=false
@@ -2316,22 +2475,26 @@ func finish_order(u: Dictionary) -> void:
 		u.speed_now=0.0
 		u.path.clear()
 		return
+	var child:bool=bool(u.orders[0].get("give_way",false)) or bool(u.orders[0].get("internal_child",false))
+	var task_approach:bool=u.orders[0].has("bombard_approach")
 	u.orders.pop_front()
-	if u.orders.is_empty():
+	if u.orders.is_empty() and not child:
 		Actions.revoke_permission(u)
 		actions.invalidate(u,time,"objective_reached")
 	u.reason="Objective reached · holding"
 	u.path.clear()
-	start_next_order(u)
+	# An approach can finish with an implicit task still active. Any later
+	# player-queued command is a new assignment, not that task's parent move.
+	start_next_order(u,child and not task_approach)
 
 # The next order takes over: its route now or queued (its target still
 # resolving: the unit holds until resolve_slots() queues the route).
-func start_next_order(u:Dictionary)->void:
+func start_next_order(u:Dictionary,resume_child:bool=false)->void:
 	if u.orders.is_empty() or u.has(SectionRecovery.KEY):return
 	u.intent=u.orders[0].duplicate()
 	if u.orders[0].has("slot"):return
-	actions.activate_order(u,u.orders[0],time,"player" if u.team==0 else "ai")
-	if take_route_budget(u.pos,u.orders[0].pos):u.path=order_route(u,u.orders[0].pos)
+	if not resume_child:actions.activate_order(u,u.orders[0],time,"player" if u.team==0 else "ai")
+	if take_route_budget(u.pos,u.orders[0].pos,false,int(u.id),"next_order"):u.path=order_route(u,u.orders[0].pos)
 	else:defer_route(u,"order")
 
 func update_objectives(dt: float) -> void:
@@ -2802,7 +2965,6 @@ func make_way(u:Dictionary,movers:bool=false,insistent:bool=false)->bool:
 			if _shelling_short(other):
 				if time>=float(other.get("press_on_until",0.0)):other["press_on_until"]=time+PRESS_ON
 			elif time>=float(other.get("shift_at",0.0)):
-				other["shift_at"]=time+SHIFT_EVERY
 				_shift_firing_spot(other,u,legs)
 			asked=true
 			continue
@@ -2817,6 +2979,7 @@ func make_way(u:Dictionary,movers:bool=false,insistent:bool=false)->bool:
 		if not _near_legs(other.pos,legs,clearance):continue
 		# Never step aside through the unit being let past.
 		var keep_off:Array=[{"pos":u.pos,"radius":minf(clearance,other.pos.distance_to(u.pos)-0.05)}]
+		if not terrain.planning.request("routes",int(other.id),"give_way"):continue
 		var found:Array=_give_way_spot(other,legs,keep_off,clearance,false,parked,route_legs)
 		if found.is_empty():
 			other["give_way_retry"]=time+GIVE_WAY_RETRY
@@ -2849,7 +3012,8 @@ func _shelling_short(u:Dictionary)->bool:
 # it. No such spot: it stays.
 func _shift_firing_spot(u:Dictionary,asker:Dictionary,legs:Array)->void:
 	var enemy:=get_unit(int(u.orders[0].target))
-	if not alive(enemy):return
+	if not alive(enemy) or not contact_known(u,enemy):return
+	if not terrain.planning.request("formation",int(u.id),"shift_firing"):return
 	var d:Dictionary=definitions[u.kind]
 	var layer:=collision_layer(u)
 	var crowd:=crowd_radius(u.kind)
@@ -2858,7 +3022,10 @@ func _shift_firing_spot(u:Dictionary,asker:Dictionary,legs:Array)->void:
 	for k in range(1,legs.size()):
 		var steps:=ceili(legs[k-1].distance_to(legs[k])/2.0)
 		for j in steps+1:taken.append({"pos":legs[k-1].lerp(legs[k],float(j)/maxf(1,steps)),"radius":clearance-crowd-0.7,"layer":layer})
-	var spot:=attack_position(u,enemy,taken)
+	var placement:Dictionary=attack_plan(u,enemy,taken,"shift_firing")
+	if not placement.done:return
+	var spot:Vector2=placement.pos
+	u["shift_at"]=time+SHIFT_EVERY
 	if spot.x<0 or _near_legs(spot,legs,clearance) or taken.any(func(slot):return spot.distance_to(slot.pos)<crowd+float(slot.radius)+0.7):return
 	var keep_off:Array=[{"pos":asker.pos,"radius":minf(clearance,u.pos.distance_to(asker.pos)-0.05)}]
 	var route:=terrain.path(u.pos,spot,d.domain,float(d.radius),keep_off,terrain.mobility_profile(u.kind))
@@ -2890,6 +3057,7 @@ func back_off(u:Dictionary)->void:
 	# immobilised hulls lets nobody pass and just repeats (the detour routes
 	# round them instead).
 	if keep_off.is_empty() or legs.is_empty():return
+	if not terrain.planning.request("routes",int(u.id),"give_way"):return
 	var found:Array=_give_way_spot(u,legs,keep_off,own*2.0+0.5,true)
 	if found.is_empty():return
 	u["yield_until"]=time+6.0
@@ -3001,12 +3169,13 @@ func attack_respot(u:Dictionary,order:Dictionary)->bool:
 		u["respot_target"]=target_id;u["respots"]=0;u["respot_at"]=0.0
 	var count:int=u.respots
 	if count>=RESPOT_MAX or time<float(u.respot_at):return false
-	u["respot_at"]=time+RESPOT_EVERY
 	var enemy:=get_unit(target_id)
 	var d:Dictionary=definitions[u.kind]
-	if not alive(enemy) or terrain.traversable(enemy.pos,d.domain,float(d.radius)):return false
+	if not alive(enemy) or not contact_known(u,enemy):return false
+	if terrain.traversable(enemy.pos,d.domain,float(d.radius)):return false
 	# (It stops to fire once its gun is ready.)
 	if contact_known(u,enemy) and weapon_reaches(attack_weapon(u,enemy.kind),u.pos,enemy):return false
+	if not terrain.planning.request("formation",int(u.id),"attack_respot"):return false
 	# Routes round friendly hulls standing still (firing, parked): a plain
 	# route would lead straight back into the line of friends firing.
 	var avoid:Array=[]
@@ -3014,7 +3183,10 @@ func attack_respot(u:Dictionary,order:Dictionary)->bool:
 		if other.id==u.id or not alive(other) or other.team!=u.team or collision_layer(other)!=collision_layer(u) or not other.members.is_empty() or float(other.speed_now)>0.5:continue
 		var clearance:float=float(d.radius)+0.4+float(definitions[other.kind].radius)+0.08
 		avoid.append({"pos":other.pos,"radius":minf(clearance,u.pos.distance_to(other.pos)-0.05)})
-	var spot:=attack_position(u,enemy,attack_rivals(u,enemy.id,[],true))
+	var placement:Dictionary=attack_plan(u,enemy,attack_rivals(u,enemy.id,[],true),"attack_respot")
+	if not placement.done:return false
+	var spot:Vector2=placement.pos
+	u["respot_at"]=time+RESPOT_EVERY
 	if spot.x<0:return false
 	var route:=terrain.path(u.pos,spot,d.domain,float(d.radius),avoid,terrain.mobility_profile(u.kind))
 	# Pressed hard against a friend there may be no way round from here yet.
@@ -3064,6 +3236,9 @@ func showcase_mission() -> void:
 		counterattack_at=time+12.0
 		events.append({"type":"warning","text":"VILLAGE secured • Enemy counterattack approaching in 12 seconds","notice":"alert"})
 	if counterattack_at<0 or time<counterattack_at or counterattack_sent:return
+	# Admission precedes the once-only dispatch flag; deferred placement keeps
+	# the promised reserve intact and retries on the next authoritative tick.
+	if not terrain.planning.request("formation",-11,"showcase_reserve"):return
 	counterattack_sent=true
 	var force:Array=[]
 	for kind in ["tank","rifle","atgm"]:

@@ -4,8 +4,8 @@
 Default: core/combat/probes/regression functional suites. Hardware-sensitive
 cover-cost and busy-combat CPU timing are explicit: --group performance. --group release selects
 current Harbor/regional player-facing coverage; --group regional checks the new
-battlefields and their affected integration paths; --group tactical checks the
-action/readiness foundation and affected executors; --group playthrough runs full battles.
+battlefields and their affected integration paths; --group m0 checks the tactical
+foundation; --group tactical also checks affected executors; --group playthrough runs full battles.
 Use --list without an installed engine. Reports/logs go into a fresh temp folder
 and artifacts/checks.json. Dedicated performance results are never implied by a
 functional pass; existing timing guards in mixed functional suites stay intact.
@@ -54,8 +54,9 @@ RELEASE_SUITES = {
     "test_riverside_navigation.gd", "test_scenario_dimensions.gd",
     "test_presentation_cache.gd", "test_regional_physics.gd", "test_regional_ui.gd",
     "test_elevation.gd", "test_operation_rules.gd", "test_regional_campaign.gd", "test_regional_campaign_ui.gd",
-    "test_tactical_actions.gd", "test_tactical_context.gd", "test_action_readiness.gd",
-    "test_action_targeting.gd", "test_action_integration.gd", "test_regroup_hull_slots.gd",
+    "test_tactical_actions.gd", "test_tactical_context.gd",
+    "test_action_targeting.gd", "test_action_integration.gd",
+    "test_tactical_readiness.gd", "test_tactical_budget.gd", "test_tactical_navigation.gd", "test_runtime_planning.gd", "test_tactical_pressure.gd",
 }
 GROUPS["release"] = [(script, marker) for group, entries in GROUPS.items()
                      if group not in ("performance", "playthrough")
@@ -71,8 +72,10 @@ GROUPS["regional"] = [(script, marker) for group, entries in GROUPS.items()
                       if group in ("core", "combat", "regression")
                       for script, marker in entries if script in REGIONAL_SUITES]
 TACTICAL_SUITES = {
-    "test_tactical_actions.gd", "test_tactical_context.gd", "test_action_readiness.gd",
-    "test_action_targeting.gd", "test_action_integration.gd", "test_regroup_hull_slots.gd",
+    "test_tactical_actions.gd", "test_tactical_context.gd",
+    "test_action_targeting.gd", "test_action_integration.gd",
+    "test_tactical_readiness.gd", "test_tactical_budget.gd", "test_tactical_navigation.gd", "test_runtime_planning.gd", "test_tactical_pressure.gd",
+    "test_release_info.gd", "test_give_way_spots.gd", "test_pressed_route.gd", "test_vehicle_stability.gd",
     "test_tactical_flexibility.gd", "test_spatial_targeting.gd", "test_combat.gd", "test_tactics.gd",
     "test_regroup_recovery.gd", "test_hull_regroup.gd", "test_wreck_section_recovery.gd",
     "test_section_contact.gd", "test_contact_drill.gd", "test_soldier_targeting.gd",
@@ -83,10 +86,22 @@ TACTICAL_SUITES = {
     "test_regional_campaign.gd", "test_regional_campaign_ui.gd",
     "test_individuals.gd", "test_wounds.gd", "test_recrew.gd", "test_animation.gd",
     "test_clearance.gd", "test_cover_contact.gd",
+    "test_bombard_feedback.gd", "test_world_damage.gd", "test_field_ops.gd",
+    "test_wave_overlap.gd", "test_wave_strength.gd", "test_operation_rules.gd", "test_wreck_goal.gd",
+    "test_classic.gd", "test_classic_navigation.gd", "test_harvester_access.gd",
+    "test_harvester_dock.gd", "test_harvester_threat.gd",
 }
 GROUPS["tactical"] = [(script, marker) for group, entries in GROUPS.items()
                      if group in ("core", "combat", "regression")
                      for script, marker in entries if script in TACTICAL_SUITES]
+M0_SUITES = {
+    "test_tactical_actions.gd", "test_tactical_context.gd", "test_tactical_readiness.gd",
+    "test_action_targeting.gd", "test_action_integration.gd", "test_tactical_budget.gd",
+    "test_tactical_navigation.gd", "test_release_info.gd", "test_runtime_planning.gd", "test_tactical_pressure.gd",
+}
+GROUPS["m0"] = [(script, marker) for group, entries in GROUPS.items()
+                if group in ("core", "combat", "regression")
+                for script, marker in entries if script in M0_SUITES]
 LONG = {"classic_playthrough.gd": 600, "test_city_urban.gd": 180,
         "harbor_playthrough.gd": 1800, "test_vehicle_jam.gd": 240,
         "test_harvester_dock.gd": 240, "test_harvester_threat.gd": 240,

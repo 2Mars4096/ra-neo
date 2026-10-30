@@ -10,6 +10,11 @@ static func cancel(u:Dictionary) -> void:
 	u.next_decision=0.0
 	u.hold_command=false
 	u.maneuver_review=0.0
+	u["pressure_pending"]=false
+	u["pressure_review"]=0.0
+	u.erase("pressure_route_after")
+	u.erase("pressure_retry_facts")
+	u.erase("pressure_reservations")
 
 static func plan(sim,u:Dictionary,pos:Vector2,phase:String,reason:String,duration:float=6.0, route_hint:Array=[]) -> bool:
 	if phase=="SUPPORT" and sim.time<u.get("support_after",0.0):return false
@@ -20,7 +25,11 @@ static func plan(sim,u:Dictionary,pos:Vector2,phase:String,reason:String,duratio
 		if not other.maneuver.is_empty() and pos.distance_to(other.maneuver.pos)<float(d.radius)+float(sim.definitions[other.kind].radius)+0.4:return false
 	# Over the tick's route budget the maneuver is not taken now; the next
 	# decision (<1 s) reconsiders it.
-	if route_hint.is_empty() and not sim.take_route_budget(u.pos,pos,true):return false
+	if route_hint.is_empty() and not sim.take_route_budget(u.pos,pos,true,int(u.id),"maneuver:"+phase):
+		u.next_decision=sim.time
+		u.maneuver_review=sim.time
+		if phase=="WITHDRAW":u["pressure_review"]=sim.time
+		return false
 	var t0:int=Time.get_ticks_usec() if sim.profiling else 0
 	var route:Array=route_hint if not route_hint.is_empty() else sim.terrain.path(u.pos,pos,d.domain,d.radius,[],sim.terrain.mobility_profile(u.kind))
 	if sim.profiling:sim._lap("director_path",t0)
@@ -30,7 +39,7 @@ static func plan(sim,u:Dictionary,pos:Vector2,phase:String,reason:String,duratio
 	var deadline:float=sim.time+duration+(37.0 if phase=="WITHDRAW" else 12.0)
 	var action:Dictionary=sim.actions.begin(u,phase.to_lower(),sim.time,{"channel":"movement","claims":["unit:%d:movement"%u.id],"target":{"pos":pos},"deadline":deadline,"reason":phase.to_lower()})
 	if action.is_empty():
-		if not u.maneuver.is_empty():resume(sim,u,"Decision pending · resuming objective")
+		if not u.maneuver.is_empty() and u.maneuver.get("phase","")!="PRESSURE_WAIT":resume(sim,u,"Decision pending · resuming objective")
 		return false
 	sim.actions.transition(u,action,"executing",sim.time,phase.to_lower())
 	u.maneuver={"pos":pos,"mode":"retreat" if phase=="WITHDRAW" else "maneuver","phase":phase,"arrived":u.pos.distance_to(pos)<0.15,"progress_pos":u.pos,"progress_at":sim.time,"deadline":sim.time+duration+(37.0 if phase=="WITHDRAW" else 12.0)}
@@ -53,7 +62,7 @@ static func resume(sim,u:Dictionary,reason:String="Regrouping toward objective")
 	u.next_decision=sim.time+5.0
 	u.commit_until=sim.time+5.0
 	if not u.orders.is_empty():
-		if not sim.take_route_budget(u.pos,u.orders[0].pos):
+		if not sim.take_route_budget(u.pos,u.orders[0].pos,false,int(u.id),"resume"):
 			sim.defer_route(u,"direct")
 			return
 		var d:Dictionary=sim.definitions[u.kind]
@@ -65,23 +74,36 @@ static func critical_pressure(u:Dictionary)->bool:
 	var threshold:=0.35 if not u.get("members",[]).is_empty() else 0.33
 	return float(u.get("suppression",0.0))>0.82 or float(u.hp)<=float(u.get("assigned_hp",u.max_hp))*threshold
 
-# Emergency withdrawal precedes a contact hold. It still needs a known threat
-# and never turns a direct move, retreat, or hard Hold into another order.
+# Emergency assessment precedes a contact hold. A viable local survival action
+# can continue; a rally route is useful only if it does not close on a known
+# threat along the way. Direct move, retreat and hard Hold remain authoritative.
 static func pressure_response(sim,u:Dictionary)->bool:
+	# A response handles an episode of pressure, not the permanent fact that
+	# dead squadmates cannot heal. Seeing the same contact again is no new hit.
+	if u.has("pressure_resolved") and _new_pressure(u,u.pressure_resolved):
+		u.erase("pressure_resolved")
+		u.erase("pressure_route_after")
+		u.erase("pressure_retry_facts")
+	if u.has("pressure_retry_facts") and _new_pressure(u,u.pressure_retry_facts):
+		u.erase("pressure_route_after")
+		u.erase("pressure_retry_facts")
+	# Evaluate the purpose of an active withdrawal even after suppression has
+	# fallen below the entry threshold. Its original commitment still applies.
+	if u.maneuver.get("phase","")=="WITHDRAW":return _disengaged(sim,u)
 	if not critical_pressure(u):
+		_clear_pressure_wait(sim,u)
 		if u.reason=="Hold position · under pressure":u.reason="Holding position"
 		return false
-	if u.maneuver.get("phase","")=="WITHDRAW":return false
 	var intent:Dictionary=u.intent if u.orders.is_empty() else u.orders[0]
-	if intent.get("mode","") in ["move","retreat"]:return false
+	if intent.get("mode","") in ["move","retreat"]:
+		_clear_pressure_wait(sim,u)
+		return false
 	if sim.time<float(u.get("pressure_review",0.0)):return u.get("pressure_pending",false)
 	u["pressure_review"]=sim.time+0.3
 	u["pressure_pending"]=false
-	var danger:=false
-	for other in sim.range_candidates(u.pos,25.0):
-		if other.team!=u.team and sim.alive(other) and u.pos.distance_to(other.pos)<25.0 and sim.contact_known(u,other) and sim.effective_unit(other,u.kind):
-			danger=true;break
-	if not danger:
+	var threats:=_pressure_contacts(sim,u)
+	if threats.is_empty():
+		_clear_pressure_wait(sim,u)
 		if u.reason=="Hold position · under pressure":u.reason="Holding position"
 		return false
 	if u.hold_command:
@@ -91,17 +113,161 @@ static func pressure_response(sim,u:Dictionary)->bool:
 			sim.actions.invalidate(u,sim.time,"hold_under_pressure")
 			if u.team==0:sim.events.append({"type":"warning","text":"HOLD POSITION • Section under pressure","notice":"low"})
 		return true
+	if u.has("pressure_resolved"):
+		_clear_pressure_wait(sim,u)
+		return false
+	# Losing most of a section is not a reason to abandon its last medic or
+	# an already useful shelter. These are existing, physically validated local
+	# choices, not a second cover search outside the work budget.
+	if _pressure_local_response(sim,u,threats):
+		_release_pressure_search(sim,u)
+		return false
+	if sim.time<float(u.get("pressure_route_after",0.0)):return false
 	u["pressure_pending"]=true
+	# Emergency acknowledgement is cheap and immediate. An exhausted planner
+	# must never leave a stale flank advancing for another review interval.
+	if u.maneuver.get("phase","")!="PRESSURE_WAIT":
+		var previous:Dictionary=sim.actions.active(u,"movement")
+		if not previous.is_empty():sim.actions.cancel(u,previous,sim.time,"urgent_withdrawal")
+		u.maneuver={"phase":"PRESSURE_WAIT","mode":"maneuver","pos":u.pos,"arrived":true,"deadline":INF}
+		u.path=[]
+		u.reason="Under pressure · planning withdrawal"
+		u.erase("pressure_reservations")
+	if not sim.terrain.planning.request("formation",int(u.id),"withdrawal",2):
+		u["pressure_review"]=sim.time
+		return true
 	var reservations:Array[Dictionary]=[]
 	for other in sim.units:
 		if other.id!=u.id and sim.alive(other) and other.team==u.team:
 			reservations.append({"pos":other.maneuver.get("pos",other.pos),"radius":sim.definitions[other.kind].radius,"layer":sim.collision_layer(other)})
-	var destination:Vector2=sim.formation_slot(sim.rally_point(u),u,reservations)
-	if destination.x>=0 and plan(sim,u,destination,"WITHDRAW","Withdrawing under pressure",10):
+	# A moving friendly anywhere on the map must not restart the formation
+	# cursor every tick. Snapshot claims for this search and validate the chosen
+	# position against live claims before committing the route.
+	if not u.has("pressure_reservations"):u["pressure_reservations"]=reservations.duplicate(true)
+	var held:Array[Dictionary]=[]
+	var placement:Dictionary=sim.formation_plan(sim.rally_point(u),u,u.pressure_reservations,{},held,"withdrawal")
+	if not placement.done:
+		u["pressure_review"]=sim.time
+		return true
+	var destination:Vector2=placement.pos
+	if destination.x<0 or not sim.slot_clear(destination,sim.collision_layer(u),sim.crowd_radius(u.kind),reservations):
+		_release_pressure_search(sim,u)
+		u["pressure_route_after"]=sim.time+2.0
+		u["pressure_retry_facts"]=_pressure_facts(u)
+		u.reason="No safe withdrawal · holding for cover"
+		return false
+	if not sim.take_route_budget(u.pos,destination,true,int(u.id),"maneuver:WITHDRAW"):
+		u["pressure_review"]=sim.time
+		return true
+	var d:Dictionary=sim.definitions[u.kind]
+	var route:Array=sim.terrain.path(u.pos,destination,d.domain,d.radius,[],sim.terrain.mobility_profile(u.kind))
+	if route.is_empty() or not _pressure_route_safe(u.pos,route,threats):
+		# The candidate failed; no withdrawal action has begun or completed.
+		# Stay physically halted while the normal, bounded cover/contact drill
+		# finds local protection. Retry the rally later, rather than every tick.
+		_release_pressure_search(sim,u)
+		u["pressure_route_after"]=sim.time+2.0
+		u["pressure_retry_facts"]=_pressure_facts(u)
+		u.reason="No safe withdrawal · holding for cover"
+		return false
+	if plan(sim,u,destination,"WITHDRAW","Withdrawing under pressure",10,route):
+		_release_pressure_search(sim,u)
 		if u.orders.is_empty() and not intent.is_empty():u.orders.append(intent.duplicate())
 		for action in sim.actions.actions.values().duplicate():
 			if action.unit==u.id and action.channel!="movement":sim.actions.cancel(u,action,sim.time,"urgent_withdrawal")
 	return true
+
+static func _pressure_facts(u:Dictionary)->Dictionary:
+	var able:=0
+	for member in u.get("members",[]):
+		if member.hp>0:able+=1
+	return {"hp":float(u.hp),"able":able,"last_hit":float(u.last_hit),
+		"fired_on":float(u.get("fired_on",-100.0)),"suppression":float(u.suppression)}
+
+static func _new_pressure(u:Dictionary,previous:Dictionary)->bool:
+	var current:=_pressure_facts(u)
+	return current.hp<float(previous.hp)-0.001 or current.able<int(previous.able) \
+		or current.last_hit>float(previous.last_hit) or current.fired_on>float(previous.fired_on) \
+		or (current.suppression>0.82 and float(previous.suppression)<=0.82)
+
+static func _pressure_quiet(sim,u:Dictionary)->bool:
+	return sim.time-maxf(float(u.last_hit),float(u.get("fired_on",-100.0)))>=CONSOLIDATE_QUIET and float(u.suppression)<=0.2
+
+static func _disengaged(sim,u:Dictionary)->bool:
+	if u.maneuver.get("arrived",false) or sim.time<u.commit_until or not _pressure_quiet(sim,u):return false
+	if sim.time<float(u.get("pressure_review",0.0)):return false
+	u["pressure_review"]=sim.time+0.3
+	if not _pressure_contacts(sim,u).is_empty():return false
+	u["pressure_resolved"]=_pressure_facts(u)
+	var action:Dictionary=sim.actions.active(u,"movement")
+	if not action.is_empty():sim.actions.cancel(u,action,sim.time,"disengaged")
+	u.path=[]
+	resume(sim,u,"Disengaged · resuming objective")
+	# A resumed accepted order gets this update; another autonomy choice must
+	# not replace it again in the same pass through the director.
+	return true
+
+static func _pressure_contacts(sim,u:Dictionary)->Array:
+	var threats:Array=[]
+	for other in (sim.range_candidates(u.pos,25.0) if sim.ticking else sim.units):
+		if other.team==u.team or not sim.alive(other) or not sim.contact_known(u,other) or not sim.effective_unit(other,u.kind):continue
+		# Position is read only after the current-contact gate. Copy it so this
+		# assessment never follows a hidden actor through a retained reference.
+		var observed:Vector2=other.pos
+		if u.pos.distance_to(observed)<25.0:threats.append({"id":other.id,"kind":other.kind,"pos":observed})
+	return threats
+
+static func _pressure_route_safe(origin:Vector2,route:Array,threats:Array)->bool:
+	for threat in threats:
+		var nearest:float=origin.distance_to(threat.pos)-2.0
+		var previous:Vector2=origin
+		for point in route:
+			# Checking just waypoints misses a straight route through an enemy
+			# whose far endpoint happens to be farther away than the origin.
+			if Geometry2D.get_closest_point_to_segment(threat.pos,previous,point).distance_to(threat.pos)<nearest:return false
+			previous=point
+	return true
+
+static func _pressure_local_response(sim,u:Dictionary,threats:Array)->bool:
+	if u.members.is_empty():return false
+	var phase:String=u.maneuver.get("phase","")
+	if phase=="BOUND" and not u.maneuver.get("arrived",false) and not u.path.is_empty():
+		return _pressure_route_safe(u.pos,u.path,threats)
+	if phase not in ["","SUPPORT","CONSOLIDATE","BOUND","PRESSURE_WAIT"]:return false
+	var medic:bool=u.members.any(func(member):return member.hp>0)
+	for member in u.members:
+		var point:Vector2=Vector2.INF
+		var casualty_care:=false
+		if member.hp>0 and member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"]:
+			if float(member.get("cover_blocked",0.0))>2.0:continue
+			if member.cover_phase!="SHELTERED" and sim.time>float(member.get("cover_deadline",0.0)):continue
+			point=member.cover_goal
+		elif medic and member.get("wound","")==sim.Infantry.SEVERE and not member.get("stable",false):
+			point=member.get("drag_to",member.pos)
+			if point.distance_to(member.pos)>sim.Infantry.DRAG_REACH:continue
+			if not sim.terrain.segment_clear(member.pos,point,"land",0.42):continue
+			casualty_care=true
+		if point==Vector2.INF or point.distance_to(u.pos)>sim.Infantry.Cover.LEASH:continue
+		if not sim.terrain.cover(point) or not sim.terrain.traversable(point,"land",0.8):continue
+		# Buddy aid already accepts this physical shelter. A casualty need not
+		# be able to return fire from it, as a new firing position would require.
+		if casualty_care:return true
+		var weapon:String=sim.Infantry.Cover.member_weapon(u,member)
+		if sim.Infantry.Cover.rate(sim,point,threats[0],threats,weapon).ok:return true
+	return false
+
+static func _release_pressure_search(sim,u:Dictionary) -> void:
+	u["pressure_pending"]=false
+	u.erase("pressure_reservations")
+	u.get("tactical_navigation",{}).erase("withdrawal")
+	sim.terrain.planning.cancel_request("formation",int(u.id),"withdrawal")
+	sim.terrain.planning.cancel_request("routes",int(u.id),"maneuver:WITHDRAW")
+
+static func _clear_pressure_wait(sim,u:Dictionary) -> void:
+	_release_pressure_search(sim,u)
+	u.erase("pressure_route_after")
+	u.erase("pressure_retry_facts")
+	if u.maneuver.get("phase","")=="PRESSURE_WAIT":resume(sim,u,"Pressure eased · resuming objective")
 
 static func update(sim) -> void:
 	if not sim.scenario.get("autonomy",false):return
@@ -115,14 +281,18 @@ static func update(sim) -> void:
 		if u.hold_command:continue
 		if not u.members.is_empty() and contact_drill(sim,u):continue
 		var intent:Dictionary=u.intent if u.orders.is_empty() else u.orders[0]
-		if u.orders.is_empty() and (intent.is_empty() or intent.mode in ["move","retreat"] or u.maneuver.get("phase","")=="ENGAGE"):
+		var withdrawing:bool=u.maneuver.get("phase","")=="WITHDRAW"
+		# An idle section can withdraw without a parent order. Its arrival,
+		# stall and deadline still belong to the active maneuver lifecycle.
+		if not withdrawing and u.orders.is_empty() and (intent.is_empty() or intent.mode in ["move","retreat"] or u.maneuver.get("phase","")=="ENGAGE"):
 			engage_idle(sim,u)
 			continue
-		if intent.is_empty() or intent.mode in ["move","retreat"]:continue
+		if not withdrawing and (intent.is_empty() or intent.mode in ["move","retreat"]):continue
 		# Active maneuvers still reassess observed danger/support at a bounded cadence.
 		if u.maneuver.is_empty() and sim.time<u.next_decision:continue
 		if not u.maneuver.is_empty() and sim.time<u.get("maneuver_review",0.0):continue
-		if sim.ticking and not sim.actions.take_work("decisions"):continue
+		var priority:=2 if int(u.get("tactical_wake_tick",-1))==sim.action_tick else 0
+		if not sim.terrain.planning.request("decisions",int(u.id),"director",priority):continue
 		u.maneuver_review=sim.time+0.8
 		u.next_decision=sim.time+0.8+float(u.id%4)*0.1
 		var contacts:Array=[]
@@ -158,6 +328,7 @@ static func update(sim) -> void:
 				resume(sim,u,"Maneuver blocked · resuming objective")
 			elif u.maneuver.arrived and sim.time>=u.commit_until:
 				if phase=="WITHDRAW" and u.hp<sim.Infantry.capacity(u)*0.55 and sim.time<u.maneuver.deadline-2:continue
+				if phase=="WITHDRAW" and _pressure_quiet(sim,u) and _pressure_contacts(sim,u).is_empty():u["pressure_resolved"]=_pressure_facts(u)
 				resume(sim,u,"Maneuver complete · resuming objective")
 			continue
 		if contacts.is_empty():
@@ -205,7 +376,7 @@ static func update(sim) -> void:
 # in reach that stays under fire bounds to the nearest real cover within
 # BOUND_REACH; prone and firing remains the first response. Explicit move,
 # retreat, assault (attack) and hold orders are obeyed as given.
-const HOLDS:=["CONSOLIDATE","BOUND"]
+const HOLDS:=["CONSOLIDATE","BOUND","PRESSURE_WAIT"]
 const CONSOLIDATE_QUIET:=6.0  # seconds without incoming fire before resuming
 const CONSOLIDATE_HOLD:=18.0  # commit; the maneuver deadline adds 12 s
 const BOUND_AFTER:=7.0        # sustained incoming fire before a bound
@@ -237,7 +408,7 @@ static func contact_drill(sim,u:Dictionary) -> bool:
 			else:resume(sim,u,"Contact over · resuming objective")
 			return true
 		# A weakened section under threat may still withdraw (update's rule).
-		return not critical_pressure(u)
+		if phase!="PRESSURE_WAIT":return not critical_pressure(u)
 	# A section standing where the player moved it (an explicit move, even one
 	# completed) keeps that position; only attack-move pauses.
 	var mode:String=u.orders[0].mode if not u.orders.is_empty() else str(u.intent.get("mode",""))
@@ -248,7 +419,10 @@ static func contact_drill(sim,u:Dictionary) -> bool:
 			u["consolidated_at"]=sim.time
 			u["hold_since"]=sim.time
 			return true
-	if phase in ["","SUPPORT","ENGAGE"] and fired and sim.time-float(u.fire_since)>=BOUND_AFTER and sim.time>=float(u.get("bound_check",0.0)) and caught_open(sim,u):
+	if phase in ["","SUPPORT","ENGAGE","PRESSURE_WAIT"] and fired and sim.time-float(u.fire_since)>=BOUND_AFTER and sim.time>=float(u.get("bound_check",0.0)) and caught_open(sim,u):
+		if not sim.terrain.planning.request("decisions",int(u.id),"bound",1):
+			u["contact_review"]=sim.time
+			return false
 		u["bound_check"]=sim.time+2.0
 		var cover:=bound_destination(sim,u)
 		if not cover.is_empty() and plan(sim,u,cover.pos,"BOUND","No cover here · bounding to cover",BOUND_HOLD,cover.path):
@@ -269,6 +443,13 @@ static func caught_open(sim,u:Dictionary) -> bool:
 # a soldier's shelter) and not toward the main threat; the anchor stops a few
 # metres short so the soldiers take the cover from there.
 static func bound_destination(sim,u:Dictionary) -> Dictionary:
+	# One finite bundle: seven rings, at most three routes each (21 total).
+	# Admitting individual candidates and restarting on denial would never
+	# reach a valid ninth candidate behind eight unreachable ones.
+	if not sim.take_route_budget(u.pos,u.pos+Vector2.RIGHT*BOUND_REACH,true,int(u.id),"bound"):
+		u["bound_check"]=sim.time
+		u["contact_review"]=sim.time
+		return {}
 	var threats:Array=[]
 	var threat:Dictionary={}
 	for other in (sim.range_candidates(u.pos,25) if sim.ticking else sim.units):
@@ -277,7 +458,9 @@ static func bound_destination(sim,u:Dictionary) -> Dictionary:
 		threats.append(other)
 		if threat.is_empty() or u.pos.distance_to(other.pos)<u.pos.distance_to(threat.pos):threat=other
 	var d:Dictionary=sim.definitions[u.kind]
-	var weapon:String="atgm" if u.kind=="atgm" else "rifle"
+	var weapon:="rifle"
+	for member in u.members:
+		if sim.Infantry.Cover.member_weapon(u,member)=="atgm":weapon="atgm";break
 	for ring in [10.5,12.0,13.5,15.0,16.5,18.0,BOUND_REACH]:
 		var found:Array=[]
 		for i in 24:
@@ -290,7 +473,6 @@ static func bound_destination(sim,u:Dictionary) -> Dictionary:
 			found.append(anchor)
 		found.sort_custom(func(a,b):return u.pos.distance_squared_to(a)<u.pos.distance_squared_to(b))
 		for anchor in found.slice(0,3):
-			if not sim.take_route_budget(u.pos,anchor,true):return {}
 			var route:Array=sim.terrain.path(u.pos,anchor,d.domain,d.radius,[],sim.terrain.mobility_profile(u.kind))
 			if route.is_empty() or sim.Infantry.Cover.route_length(u.pos,route)>BOUND_REACH*1.4:continue
 			# The rush must not close on the main threat on its way.
@@ -312,6 +494,7 @@ static func engage_idle(sim,u:Dictionary)->void:
 			u.maneuver={};u.reason="Engaging"
 		return
 	if not u.maneuver.is_empty() or u.target>=0 or sim.time<float(u.get("engage_check",0.0)):return
+	if not sim.terrain.planning.request("decisions",int(u.id),"engage"):return
 	u["engage_check"]=sim.time+0.7+float(u.id%5)*0.06
 	if u.get("post_group",-1)!=u.command_group or not u.has("post"):
 		u["post"]=u.pos;u["post_group"]=u.command_group
@@ -347,6 +530,12 @@ static func engage_idle(sim,u:Dictionary)->void:
 static func flank_choice(sim,u:Dictionary,goal:Vector2,contacts:Array) -> Dictionary:
 	var d:Dictionary=sim.definitions[u.kind]
 	var forward:Vector2=(goal-u.pos).normalized()
+	# Both sides belong to one bounded comparison (at most two route calls).
+	# A one-slot allowance still evaluates the second side after the first
+	# proves blocked, retaining the original candidate order and best score.
+	if not sim.take_route_budget(u.pos,u.pos+forward*7.0+forward.orthogonal()*8.0,true,int(u.id),"flank"):
+		u.next_decision=sim.time
+		return {}
 	var avoid:Array=[]
 	# Friendly positions are known. Enemy avoidance/scoring uses observed contacts only.
 	for other in sim.units:
@@ -363,7 +552,6 @@ static func flank_choice(sim,u:Dictionary,goal:Vector2,contacts:Array) -> Dictio
 		if destination.distance_to(goal)>u.pos.distance_to(goal)+3:continue
 		if not sim.terrain.traversable(destination,d.domain,d.radius):continue
 		if avoid.any(func(body):return destination.distance_to(body.pos)<body.radius):continue
-		if not sim.take_route_budget(u.pos,destination,true):return best
 		var t0:int=Time.get_ticks_usec() if sim.profiling else 0
 		var route:Array=sim.terrain.path(u.pos,destination,d.domain,d.radius,avoid,sim.terrain.mobility_profile(u.kind))
 		if sim.profiling:sim._lap("director_path",t0)

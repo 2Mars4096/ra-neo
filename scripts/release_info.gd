@@ -42,10 +42,15 @@ static func snapshot(sim, reason: String = "player-report") -> Dictionary:
 			orders.append({"mode":order.get("mode", ""), "destination":[destination.x, destination.y], "target_id":order.get("target", -1)})
 		own_commands.append({"id":unit.id, "kind":unit.kind, "position":[unit.pos.x, unit.pos.y],
 			"health":unit.hp, "state":unit.state, "reason":unit.get("reason", ""),
-			"blocked_seconds":unit.get("blocked_time", 0.0), "route_points":unit.path.size(), "orders":orders})
+			"blocked_seconds":unit.get("blocked_time", 0.0), "route_points":unit.path.size(), "orders":orders,
+			"order_version":unit.get("order_version",0), "assignment":unit.get("assignment",{}).get("id",0),
+			"action_reason":unit.get("action_reason","ready"), "strength":sim.Infantry.strength(unit,sim.time)})
 	report["mission"] = {"id":sim.scenario.get("id", ""), "seconds":sim.time, "result":sim.result,
 		"supply":sim.credits, "hold_seconds":sim.score_hold, "kills":sim.kills, "losses":sim.losses,
 		"objectives":objectives, "army_counts":army_counts, "own_commands":own_commands}
+	report["tactics"]={"tick":sim.action_tick,"planning":sim.terrain.planning.snapshot(),
+		"path_calls":sim.terrain.path_calls,"astar_searches":sim.terrain.astar_calls,
+		"events":sim.actions.event_log.filter(func(event):return int(event.team)==0).slice(-64)}
 	return report
 
 static func write_report(sim, reason: String = "player-report", directory: String = "user://reports") -> Dictionary:

@@ -3,6 +3,8 @@ extends RefCounted
 
 const Elevation = preload("res://scripts/elevation.gd")
 var elevation = Elevation.new()
+const WorkBudget = preload("res://scripts/tactical_work_budget.gd")
+var planning = WorkBudget.new()
 # Path helpers share the current profile without changing existing call sites.
 # Public path calls restore it before returning; live motion passes a profile.
 var _elevation_profile := "infantry"
@@ -747,6 +749,47 @@ func reachable_destination(from:Vector2, desired:Vector2, domain:String, radius:
 			if not path(from,candidate,domain,radius,[],profile).is_empty():return candidate
 	return Vector2(-1,-1)
 
+# Incremental form for live command resolution. The caller retains `state`
+# while pending and retries without publishing an invalid destination. Limits
+# bound both geometric candidate work and expensive route/reachability queries;
+# one synchronous A* itself still has variable CPU cost.
+func reachable_destination_step(from:Vector2,desired:Vector2,domain:String,radius:float,profile:String,state:Dictionary,checks:int=4,points:int=64) -> Dictionary:
+	var signature:=[from,desired,domain,radius,profile,geometry_version]
+	if state.get("signature",[])!=signature:
+		state.clear()
+		state.merge({"signature":signature,"done":false,"pos":Vector2(-1,-1),"index":0,"queries":0})
+	if state.done:return state
+	if not inside(desired) or domain!="land" or is_water(desired) or blocked(desired):
+		state.done=true
+		return state
+	for rect in dynamic_blocks:
+		if rect.has_point(desired):
+			state.done=true
+			return state
+	var known:Dictionary=destination_memo.get_or_add("%s:%s"%[domain,radius],{}) if path_memo_active else {}
+	var tried:=0
+	var scanned:=0
+	while int(state.index)<385 and tried<maxi(0,checks) and scanned<maxi(0,points):
+		var at:=int(state.index)
+		var ring:=0 if at==0 else (at-1)/32+1
+		var angle:=0 if at==0 else (at-1)%32
+		var candidate:=desired+Vector2.from_angle(angle*TAU/32.0)*(ring*0.5)
+		state.index=at+1
+		scanned+=1
+		var open=known.get(candidate)
+		if open==null:
+			open=traversable(candidate,domain,radius)
+			known[candidate]=open
+		if not open:continue
+		tried+=1
+		state.queries+=1
+		if not path(from,candidate,domain,radius,[],profile).is_empty():
+			state.pos=candidate
+			state.done=true
+			return state
+	state.done=int(state.index)>=385
+	return state
+
 func path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid:Array = [], profile:String="default") -> Array[Vector2]:
 	if path_probe and avoid.is_empty():
 		var reach:Array[Vector2]=[]
@@ -780,6 +823,7 @@ var path_probe:=false
 # Planning statistics for profiling tools.
 var path_calls:=0
 var path_usec:=0
+var astar_calls:=0
 
 # Grid-search reachability without route smoothing (~1 ms instead of ~20 ms
 # for a cross-map route). Agrees with path() except in rare cases where a found
@@ -800,6 +844,7 @@ func _reachable(from:Vector2,to:Vector2,domain:String,radius:float,profile:Strin
 		var start:=nearest_cell(from,grid,domain,radius)
 		var end:=nearest_cell(to,grid,domain,radius)
 		if start.x<0 or end.x<0:return false
+		astar_calls+=1
 		return not grid.get_id_path(start,end).is_empty()
 	# Within a batch the grid is fixed, so connectivity is transitive: link both
 	# ends to a cell of a route found earlier with short searches instead of a
@@ -816,6 +861,7 @@ func _reachable(from:Vector2,to:Vector2,domain:String,radius:float,profile:Strin
 		var linked:=_memo_linked(grid,start,i,links,memo)
 		if linked!=_memo_linked(grid,end,i,links,memo):return false
 		if linked:return true
+	astar_calls+=1
 	var ids:=grid.get_id_path(start,end)
 	if ids.is_empty():return false
 	var cells:=PackedVector2Array()
@@ -845,7 +891,9 @@ func _linked(grid:AStarGrid2D,id:Vector2i,cells:PackedVector2Array)->bool:
 	for cell in cells:
 		var distance:=Vector2(id).distance_squared_to(cell)
 		if distance<nearest:nearest=distance;best=cell
-	return nearest==0.0 or not grid.get_id_path(id,Vector2i(best)).is_empty()
+	if nearest==0.0:return true
+	astar_calls+=1
+	return not grid.get_id_path(id,Vector2i(best)).is_empty()
 
 func _path(from: Vector2, to: Vector2, domain: String, radius: float = -1, avoid:Array = [], profile:String="default") -> Array[Vector2]:
 	var job:=_path_begin(from,to,domain,radius,avoid,profile)
@@ -922,6 +970,7 @@ func _path_begin(from: Vector2, to: Vector2, domain: String, radius: float, avoi
 	# edge fails, close its anchored cells for this query and plan again.
 	var skip:=0 if anchors.is_empty() else 2
 	for attempt in 5:
+		astar_calls+=1
 		ids=grid.get_id_path(start,end)
 		raw.clear()
 		for id in ids:raw.append(_anchor(anchors,id))

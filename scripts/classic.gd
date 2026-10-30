@@ -161,8 +161,8 @@ static func harvest(sim,u:Dictionary,dt:float) -> void:
 		# Hit with nothing aboard: back to a safe spot by the refinery for now.
 		u.reason="Under fire · pulling back"
 		if u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0)):
-			u["haul_retry_at"]=sim.time+1.0
 			if not safe(sim,u.team,u.pos,true) or not defended(sim,u.team,u.pos) or u.pos.distance_to(refinery.pos)>STAGE_RINGS[-1]+4.0 or u.pos.distance_to(refinery.pos)<DOCK_REACH+float(sim.definitions[u.kind].radius):stage(sim,u,refinery)
+			else:u["haul_retry_at"]=sim.time+1.0
 		return
 	if u.haul=="COLLECT" and sim.time>=float(u.get("safety_at",0.0)):
 		u["safety_at"]=sim.time+1.0
@@ -191,12 +191,14 @@ static func harvest(sim,u:Dictionary,dt:float) -> void:
 			return
 		var staged:bool=u.get("dock_wait",false)
 		if taken or (u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0))) or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and own):
+			if not sim.terrain.planning.request("routes",int(u.id),"haul_delivery"):return
 			var excluded:Vector2=u.get("haul_destination",Vector2.INF) if own and not staged else Vector2.INF
 			var dock:=delivery_route(sim,u,refinery,excluded)
 			if dock.is_empty():dock=delivery_route(sim,u,refinery,excluded,7.0,true)
 			u["haul_repath_at"]=sim.time+5.0
 			if not dock.is_empty() and sim.issue([u.id],dock.pos)>0:
-				u.path=dock.path;u["haul_destination"]=dock.pos;u["haul_command"]=u.command_group;u["dock_wait"]=false;staged=false
+				if not u.orders.is_empty() and not u.orders[0].get("slot",false):u.path=dock.path
+				u["haul_destination"]=dock.pos;u["haul_command"]=u.command_group;u["dock_wait"]=false;staged=false
 			else:
 				u["haul_retry_at"]=sim.time+1.0
 				# Every dock spot taken: queue off the dock (where it waits already, or a staging spot).
@@ -213,9 +215,9 @@ static func harvest(sim,u:Dictionary,dt:float) -> void:
 			# waits out a threat, somewhere safe near its refinery.
 			if own and u.blocked_time>4.0:sim.stop([u.id])
 			if u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0)):
-				u["haul_retry_at"]=sim.time+1.0
 				var exposed:bool=threatened and (not safe(sim,u.team,u.pos,true) or u.pos.distance_to(refinery.pos)>STAGE_RINGS[-1]+4.0)
 				if exposed or u.pos.distance_to(refinery.pos)<DOCK_REACH+float(sim.definitions[u.kind].radius) or claimed(u.pos,haul_claims(sim,u)):stage(sim,u,refinery)
+				else:u["haul_retry_at"]=sim.time+1.0
 		return
 	# Passing over the centre it collects there, unless another harvester stands
 	# or is headed within a hull of it.
@@ -226,6 +228,7 @@ static func harvest(sim,u:Dictionary,dt:float) -> void:
 		u.reason="Harvesting: %d / 120" % u.cargo
 		if u.cargo>=119.9 or field.remaining<=0:u.haul="RETURN"
 	elif taken or (u.orders.is_empty() and sim.time>=float(u.get("haul_retry_at",0.0))) or (u.blocked_time>4.0 and sim.time>=float(u.get("haul_repath_at",0.0)) and own):
+		if not sim.terrain.planning.request("routes",int(u.id),"haul_collect"):return
 		var excluded:Vector2=u.get("haul_destination",Vector2.INF) if own else Vector2.INF
 		u["haul_repath_at"]=sim.time+5.0
 		clear_deposit(sim,u,field)
@@ -236,7 +239,8 @@ static func harvest(sim,u:Dictionary,dt:float) -> void:
 		# movement and the blocked re-plan handle them.
 		if approach.is_empty():approach=ore_route(sim,u,field,excluded,true)
 		if not approach.is_empty() and sim.issue([u.id],approach.pos)>0:
-			u.path=approach.path;u["haul_destination"]=approach.pos;u["haul_command"]=u.command_group;u["ore_cell"]=approach.pos
+			if not u.orders.is_empty() and not u.orders[0].get("slot",false):u.path=approach.path
+			u["haul_destination"]=approach.pos;u["haul_command"]=u.command_group;u["ore_cell"]=approach.pos
 		else:
 			# Walled off by wrecks or immobilised hulls: try another deposit
 			# (soon again where friends merely hold the open stand points).
@@ -253,12 +257,18 @@ static func dock_holder(sim,refinery:Dictionary)->Dictionary:
 
 # Sends the harvester to a staging spot off the dock; false when none is free.
 static func stage(sim,u:Dictionary,refinery:Dictionary,excluded:Vector2=Vector2.INF)->bool:
+	if not sim.terrain.planning.request("routes",int(u.id),"haul_staging"):
+		# A caller may already have tried an occupied dock this tick. Retry the
+		# still-pending staging plan promptly without marking the deposit blocked.
+		u["haul_retry_at"]=sim.time
+		return bool(u.get("dock_wait",false))
 	u["haul_repath_at"]=sim.time+5.0
 	var spot:=stage_route(sim,u,refinery,excluded)
 	if spot.is_empty() or sim.issue([u.id],spot.pos)==0:
 		u["haul_retry_at"]=sim.time+1.0
 		return false
-	u.path=spot.path;u["haul_destination"]=spot.pos;u["haul_command"]=u.command_group;u["dock_wait"]=true
+	if not u.orders.is_empty() and not u.orders[0].get("slot",false):u.path=spot.path
+	u["haul_destination"]=spot.pos;u["haul_command"]=u.command_group;u["dock_wait"]=true
 	return true
 
 # Where other friendly harvesters are stopped or headed, as (x, y, keep-off
@@ -587,6 +597,9 @@ static func tick(sim,dt:float) -> void:
 			var item:Dictionary=u.queue[0]
 			item.left=maxf(0,item.left-dt*(1.0 if electricity.x>=electricity.y else 0.35))
 			if item.left<=0:
+				if not sim.terrain.planning.request("formation",int(u.id),"production_exit"):
+					u.reason="Production ready · deployment pending"
+					continue
 				var exit_point:=production_exit(sim,u,item.kind)
 				if exit_point.x<0:
 					u.reason="Production ready · exit blocked"
@@ -614,14 +627,21 @@ static func tick(sim,dt:float) -> void:
 	if sim.classic.attack_clock<=0:
 		sim.classic.attack_clock=40.0
 		var force:Array=sim.living(1).filter(func(u):return not sim.definitions[u.kind].get("structure",false) and u.kind!="harvester").map(func(u):return u.id)
-		# Starting base locations are disclosed in this skirmish; live enemy positions are not.
-		for id in force:
-			var unit:Dictionary=sim.get_unit(id)
-			var targets:Array=structures(sim,0,"",false).filter(func(target):return sim.contact_known(unit,target) and sim.effective_unit(unit,target.kind))
-			if not targets.is_empty():sim.issue([id],targets[0].pos,"attack",false,targets[0].id)
-			else:
-				var approach:=known_base_approach(sim,unit,0)
-				if approach.x>=0:sim.issue([id],approach,"attack_move")
+		sim.classic["attack_pending"]=force
+	# Starting base locations are disclosed in this skirmish; live enemy positions
+	# are not. Deferred approaches retry next tick instead of losing the assault
+	# for the full forty-second strategic cadence.
+	var pending:Array=sim.classic.get("attack_pending",[])
+	for id in pending.duplicate():
+		var unit:Dictionary=sim.get_unit(id)
+		if not sim.alive(unit):pending.erase(id);continue
+		var targets:Array=structures(sim,0,"",false).filter(func(target):return sim.contact_known(unit,target) and sim.effective_unit(unit,target.kind))
+		if not targets.is_empty():sim.issue([id],targets[0].pos,"attack",false,targets[0].id)
+		else:
+			if not sim.terrain.planning.request("routes",int(id),"classic_base_approach"):continue
+			var approach:=known_base_approach(sim,unit,0)
+			if approach.x>=0:sim.issue([id],approach,"attack_move")
+		pending.erase(id)
 
 # Starting HQ locations are disclosed map setup, not live hidden contacts.
 # Reach a clear observation approach rather than stopping outside rifle sight.

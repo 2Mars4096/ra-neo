@@ -1,5 +1,70 @@
 # Validation evidence
 
+## M0 tactical foundation — 2026-10-30
+
+Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, on `codex/unit-tactics-implementation`, continuing recovery checkpoint `e36b211` over planning baseline `caf1b4c`. The final serial `--group tactical` gate passed **58/58 suites** in 347 seconds. This includes the **10 dedicated M0 suites, 1,439 checks, zero failures**, plus the affected command, combat, geometry, garrison, engineering, economy and campaign regressions. [The complete functional report](evidence/m0-tactical-checks.json) retains outputs and source hashes.
+
+| M0 suite | Checks | Failures |
+|---|---:|---:|
+| Action registry, claims, deadlines and interruption | 70 | 0 |
+| Actual command/executor integration | 169 | 0 |
+| Explicit, stable and urgent targeting | 20 | 0 |
+| Quiet readiness, assigned strength and equipment | 61 | 0 |
+| Copied local/shared contact facts | 26 | 0 |
+| Deterministic shared admission and fairness | 71 | 0 |
+| Resumable navigation and legacy-result equivalence | 924 | 0 |
+| Legacy runtime planning and retained paid work | 22 | 0 |
+| Pressure response, disengagement and renewed danger | 61 | 0 |
+| Release metadata fallback and tactical diagnostics | 15 | 0 |
+
+Integration coverage includes provisional and rejected replacements, queued commands, building bombardment permissions, released ATGM/FPV effects, garrison exit, paid engineer continuation, wave/reserve deployment, re-crewing, classic harvesters, terrain elevation and contact isolation. Existing campaign persistence and scene-flow suites pass **66 and 47 checks**, including version-1 migration, partial magazines, durable equipment ownership, casualty history and isolated failed writes. Campaign saves remain deployment checkpoints; transient tactical actions and contacts are not restored.
+
+The original regroup-recovery suite passes **128,621 checks**, and the hull-regroup suite passes **1,186**. Mission deadlines, reunion distance and collision tolerances were not relaxed. Failures exposed a hull-displaced slot, a medic-occupied slot and repeated withdrawals caused by permanent casualty history; [bugs](bugs.md) records their corrections. The contact fixture completes its objective with a combat-effective survivor, but continued diagnostic combat can still kill that survivor. These assertions establish ownership/recovery behavior, not reliable survival or balanced engagements.
+
+There were **no script errors or assertion failures** in the final gate. The report deliberately retains the invalid-directory engine error from `test_release_info.gd`, which verifies a copyable report survives a failed write. Re-crewing, ATGM flight and campaign UI also emit `ObjectDB instances leaked at exit` warnings; shutdown cleanup remains a separate follow-up. A functional pass does not mean warning-free execution or prove long-session memory behavior.
+
+### Native readiness review
+
+`tests/m0_native_review.gd` completed **3 captures, 0 failures**, using the actual scene/HUD at **1280 × 720**, GL Compatibility with llvmpipe software rendering. All final captures were inspected. The fixture stages ammunition and uses the real readiness, replacement-order and reload completion paths; ordinary fog is retained and scripted review does not access the player's campaign.
+
+| Capture | Observed state |
+|---|---|
+| [Quiet empty-weapon reload](images/m0-readiness.png) | Reloading, empty magazine, two ready partners |
+| [Move interrupts reload](images/m0-reload-interrupted.png) | Marching, magazine still empty, readiness unavailable during movement |
+| [Completed reload](images/m0-ready.png) | Holding, six rounds, all three members ready |
+
+[Capture metadata and action traces](images/m0-native-review.json) record the authoritative state. These staged visuals establish presentation and interruption behavior; they are not human gameplay, rendered-FPS or input-latency measurements.
+
+### Isolated busy-combat CPU sample
+
+The existing Harbor policy reached sustained two-sided contact at 74 simulated seconds, then measured **900 ticks over 30 seconds**, ending at 104 seconds. It used ordinary commands/purchases, seed `47291`, fixed 30 Hz simulation and the authored economy/forces. All workload checks passed: **113 shots**, with at least four active contacts on **782/900 ticks**. No functional suites or agent Godot runs overlapped this sample. [The raw report](evidence/m0-harbor-busy-cpu.json) includes source hashes, force counts, commands, phase timings, state fingerprints and spikes.
+
+| Measure | Observed result |
+|---|---:|
+| Headless simulation CPU p50 / p95 | 18.673 / 29.816 ms |
+| Headless simulation CPU p99 / maximum | 93.668 / 354.828 ms |
+| Ticks above the 33.333 ms simulation interval | 29 / 900 |
+| Public path calls / actual A* starts | 239 / 293 |
+| Planner admissions / deferred requests in the window | 2,268 / 23 |
+| Maximum pending requests / observed pending age | 3 / 1 tick |
+| Rejected / expired requests in the window | 0 / 0 |
+| Navigation grids added during the window | 0 |
+
+The largest tick occurred at 90.03 seconds; its nested `field_ops` phase accounted for **328.504 ms**. The director's independent maximum phase cost was **112.376 ms**. These observations locate expensive work but do not isolate each underlying query. The next performance work is finer profiling and splitting the remaining expensive synchronous batches before raising action or force counts. Admission alone has not removed hitch risk.
+
+The host reports **Linux, AMD EPYC 9V74 80-Core Processor, 9 available processors**. Setup (5.15 seconds) and warm-up (33.59 seconds wall time) were excluded from the timed ticks; command API calls, queue snapshots and reporting were also outside tick timing. This is one instrumented current-build CPU sample with OS scheduling effects, **not a paired speedup comparison, rendered frame time, input-latency measurement or hardware-capacity guarantee**. Short observed queue age does not bound one synchronous search's cost.
+
+### Reproduction and remaining boundaries
+
+```sh
+python3 tools/check.py --group m0
+python3 tools/check.py --group tactical
+./tools/play.sh --audio-driver Dummy --script tests/m0_native_review.gd
+godot --headless --path . --script tests/profile_harbor_busy.gd -- --seconds=30 --warmup-limit=300 --seed=47291 --report=/tmp/m0-harbor-busy-cpu.json
+```
+
+Set `GODOT_BIN` to the pinned 4.5.1 executable for the Python runner; use that same executable for the profiling command. Native capture requires a graphical display. Planning admission bounds finite caller bundles, with resumable large placement searches; individual Godot A* calls and some legacy batches remain synchronous. [The work audit](plans/18-12-performance-and-validation.md#m0-work-audit) records the largest bounds, including crowded spawn placement, blocked-goal recovery and engineer continuation. No current 16.7 ms rendered-frame, 100 ms input-latency or supported-hardware acceptance is established. Human command clarity, balance, prolonged sessions and larger forces remain open. M1 throwables, smoke, backup requests and infantry digging remain subsequent work.
+
 ## Regional operations, persistence and elevation — 2026-10-25
 
 Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, from regional-map commit `342a919` on `codex/regional-operations`. The integration gate passed **14/14 suites**, followed by **9/9 focused suites**; the latter repeats HUD layout and adds campaign scene flow, combat, field geometry, effects, animation, battlefield interface, HUD states and input actions. Final elevation checks were rerun after native rendering corrections. No historical full-suite or hardware-performance rerun is implied.

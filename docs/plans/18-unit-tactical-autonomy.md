@@ -1,11 +1,11 @@
 # 18: Tactical actions and capable individual units
 
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Expand meaningful actions across all unit domains and make units choose, coordinate and execute them promptly under clear player intent.
 
 ## Planning baseline
 
-Prepared 2026-10-27 from `codex/regional-operations` at `f5916e8`, with the previous review of `main` at `e97e82f`. This document set completes the requested planning work; every implementation task remains unstarted. It does not authorize gameplay implementation or establish measured improvements. The documentation branch is `codex/unit-tactics-plans`.
+Prepared 2026-10-27 from `codex/regional-operations` at `f5916e8`, with the previous review of `main` at `e97e82f`. That documentation-only delivery is on `codex/unit-tactics-plans`. The user subsequently authorized implementation starting with M0; current work is on `codex/unit-tactics-implementation`, tracked in [18-1-1](18-1-1-m0-foundation.md). The tables below retain their planning baseline; measured acceptance is recorded separately in [validation](../validation.md).
 
 The user explicitly requested a broader repertoire including grenades, calls for backup and digging trenches, extending beyond infantry to other units. Preserve the existing approachable RTS controls, individual casualties, shared physical rules and independent regional battlefields.
 
@@ -44,7 +44,7 @@ The [action catalogue](../tactical-action-catalogue.md) consolidates the domain 
 
 ## Tasks
 
-- [ ] 1. M0 — Stabilize current decisions: establish action contracts, minimal timestamped observation records, quiet reloads, explicit-target precedence, urgent threat overrides, original-strength assessment and a complete work budget; add the first diagnostic scenarios.
+- [x] 1. M0 — Stabilize current decisions: establish action contracts, minimal timestamped observation records, quiet reloads, explicit-target precedence, urgent threat overrides, original-strength assessment and a complete work budget; add the first diagnostic scenarios. [Implementation and measured limits](18-1-1-m0-foundation.md) record shared admission across the audited planning paths; synchronous A* performance remains a separate follow-up.
 - [ ] 2. M1 — Deliver the infantry defense slice: coordinated cover/reload/movement, one fragmentation payload and optical smoke, a nearby backup request, and a hasty fighting position with an engineer upgrade. Integrate compact controls and resource persistence for the enabled features.
 - [ ] 3. M2 — Give each existing domain a role: vehicle facing/short reposition and repair return, recon observation, AA protection, gunship support and corvette coastal support. Verify interruption and resumption across mixed forces.
 - [ ] 4. M3 — Expand coordinated operations: richer urban actions, specialist transfer, field-work coordination, memory-driven investigation, shared fire commitments and delegated sustainment.
@@ -90,4 +90,4 @@ Dependencies refer to the minimal contracts needed for a slice, not completion o
 
 ## Notes
 
-No implementation duration or hardware capacity is promised. The first implementation session should recheck the branch head, reproduce the relevant review findings and select M0/M1 tasks. The broad catalogue records the intended design space; it is not an instruction to implement every item at once.
+No implementation duration or hardware capacity is promised. M0 is delivered and verified; M1 is the next planned increment. The broad catalogue records the intended design space; it is not an instruction to implement every item at once.

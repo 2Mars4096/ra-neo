@@ -1,10 +1,12 @@
 # 18-11: Command interface and feedback
 
 **Parent:** [18-unit-tactical-autonomy](18-unit-tactical-autonomy.md)
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Make expanded tactical behavior easy to command, predict and interrupt with a compact battlefield interface.
 
 ## Baseline and evidence
+
+M0 protects existing replacement, queued, provisional, Hold and internal-approach ownership. The HUD adds reloading/ready counts and pressure/fire-policy reasons; the local diagnostic report adds bounded own-team action traces, strength and planner counters. [18-1-1](18-1-1-m0-foundation.md) tracks verification. New initiative, fire-policy, throw, backup and digging controls remain future work; internal permission support is not a shipped button.
 
 [Battle](../../scripts/battle.gd) handles contextual right-click, queued commands, selection, targeting and tactical pause. [HUD](../../scripts/hud.gd) already shows selected-unit state/reasons, movement routes, engineer placement and purchase queues. [NoticeFeed](../../scripts/notice_feed.gd) limits and merges notifications. Extend these surfaces rather than adding a separate panel for every soldier action.
 
@@ -37,7 +39,7 @@ Hold fire is a separate authoritative engagement permission, so observing or wai
 
 ## Tasks
 
-- [ ] 1. Document current command semantics and protect them with focused input/replacement tests.
+- [x] 1. Document current command semantics and protect them with focused input/replacement tests.
 - [ ] 2. Add the minimal initiative/engagement permission view with [18-1](18-1-action-framework-and-readiness.md); show scope in hover text and selection overlays.
 - [ ] 3. Add a capability-filtered context strip for the M1 grenade, smoke, backup and digging slice; use concise labels and recognizable icons.
 - [ ] 4. Make previews and commit validation share current geometry, inventory, knowledge and authorization checks. A stale preview may fail clearly without consuming resources.

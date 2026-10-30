@@ -1,10 +1,12 @@
 # 18-9: Information, observation and electronic warfare
 
 **Parent:** [18-unit-tactical-autonomy](18-unit-tactical-autonomy.md)
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Let units make useful decisions from timely, shared and imperfect observations while keeping concealment, smoke and lost communications consistent.
 
 ## Baseline and ownership
+
+M0 adds `tactical_context.gd` and sensor adapters: copied last-observed positions with source/time, deterministic confidence/30-second expiry, bounded local/team stores and radio-aware sharing. Memory never authorizes firing or follows hidden motion/death. This is the minimal contract in [18-1-1](18-1-1-m0-foundation.md); uncertainty areas, new sensor types, markers, investigation and smoke remain future work. The baseline below is historical.
 
 At `f5916e8`, [simulation.gd](../../scripts/simulation.gd) refreshes visibility every 0.3 seconds and uses local observation under jamming. Existing orders survive link loss; new remote orders and sensor uploads are blocked. Explicit pursuit retains a last visible destination. [field_ops.gd](../../scripts/field_ops.gd) remembers observed enemy sites. General mobile-contact memory and gameplay smoke are absent. [terrain.gd](../../scripts/terrain.gd) and [elevation.gd](../../scripts/elevation.gd) share physical sight and ridge rules.
 
@@ -12,7 +14,7 @@ This plan owns observation records, information access and smoke's effect on sen
 
 ## Action catalogue
 
-Starting point describes the primitive; all extensions remain unimplemented.
+Starting point describes the planning baseline; the M0 observation subset above is implemented and the remaining extensions are planned.
 
 | ID | Action | Starting point | First delivery | Decision / limit |
 |---|---|---|---|---|
@@ -45,6 +47,7 @@ Radio policy retains the current usability abstraction of friendly position trac
 ## Tasks
 
 - [ ] 1. Define observation, report and hazard contracts with [18-1](18-1-action-framework-and-readiness.md); add bounded stores and deterministic expiry.
+  - [x] M0 observation/report subset, storage limits, expiry, hidden-state isolation and event invalidation. Hazards remain future work.
 - [ ] 2. Adapt current visibility, explicit pursuit and enemy-site memory through those contracts; preserve legacy scenario behaviour behind explicit defaults.
 - [ ] 3. Deliver contact ageing, sector watching, local warnings and support-area marking using existing sensing geometry.
 - [ ] 4. Integrate authoritative optical smoke with the first grenade slice; unify acquisition, known-contact queries, fog and selected-unit explanations.
@@ -68,4 +71,4 @@ Radio policy retains the current usability abstraction of friendly position trac
 
 ## Notes
 
-Implementation touchpoints: `simulation.gd`, `terrain.gd`, `elevation.gd`, `field_ops.gd`, `tactical_director.gd`, `battle.gd`, `hud.gd` and effect presentation. New module boundaries are proposals. No source code, balance values or runtime results are changed by this document.
+Implementation touchpoints: `simulation.gd`, `terrain.gd`, `elevation.gd`, `field_ops.gd`, `tactical_director.gd`, `battle.gd`, `hud.gd` and effect presentation. Remaining module boundaries are proposals beyond the implemented M0 context adapter. This plan does not itself enable the later actions.

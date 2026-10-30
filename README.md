@@ -101,6 +101,14 @@ Retreating units stop firing and withdraw faster. In Field Operations, use aid/r
 
 The command deck shows supply, reinforcements, selected-unit health/state, and mission progress. Selected orders have destination markers; a single section shows its weapon range or UAV sight radius.
 
+### M0: readiness and reliable orders
+
+In autonomous tactical modes, stationary soldiers prepare empty weapons during quiet moments. A low rifle magazine can top off while another capable loaded member watches; movement, casualty aid and cover transit take precedence. The selection panel shows how many members are reloading and ready. Explicit targets take priority, ordinary targets stay stable, and AA can switch to a newly observed urgent air threat. Depleted sections assess losses against their originally assigned strength; healing still restores only survivors.
+
+Accepted replacement orders cancel obsolete preparation and plans. Queued commands retain their order, temporary movement preserves the parent task, and pending route work retries without being reported as impossible. **S remains Stop and hold position.** M0's separate fire-permission contract is internal; it adds no new control to learn. Grenades, smoke, backup requests and infantry digging are the next planned slice.
+
+Campaign checkpoints now preserve partial magazines, specialist equipment ownership and original section strength, with migration from the earlier save format. **Settings → Copy bug report** includes bounded action reasons, assignment versions and planning diagnostics. See [the M0 plan](docs/plans/18-1-1-m0-foundation.md) and [validation evidence](docs/validation.md) for tested behavior and limits.
+
 Rifles cannot chip away at armored hulls. The small UAV is hard to hit but disabled by one successful rifle hit; AA provides better tracking and is recruitable. In the hidden **Urban** fixture, the marked EXCHANGE jammer blocks new orders and reconnaissance uploads. Units keep their last orders and defend locally; capture EXCHANGE to restore communications. See [combat rules and limitations](docs/combat-design.md).
 
 ## Implemented
@@ -121,11 +129,14 @@ This is a **tactical MVP**, not an AAA release. It contains eleven scenario conf
 
 ```sh
 python3 tools/check.py
+python3 tools/check.py --group m0
+python3 tools/check.py --group tactical
 python3 tools/check.py --group regional
 python3 tools/build_region_maps.py --check
 python3 -m unittest discover -s tools -p 'test_regional_*.py'
 ./tools/play.sh --audio-driver Dummy --script tests/render_review.gd
 ./tools/play.sh --audio-driver Dummy --script tests/model_review.gd
+./tools/play.sh --audio-driver Dummy --script tests/m0_native_review.gd
 ./tools/play.sh --audio-driver Dummy -- --benchmark
 ```
 

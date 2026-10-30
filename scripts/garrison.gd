@@ -88,10 +88,11 @@ static func order(sim,ids:Array,building_id:int)->int:
 		if occupants(sim,building_id,u.team).size()+sent>=int(building.capacity):break
 		var door:=entry_point(sim,building_id,u.pos,float(sim.definitions[u.kind].radius))
 		if door.x<0:continue
-		leave(sim,u)
 		if sim.issue([u.id],door,"move")<=0:continue
+		leave(sim,u)
 		u["garrison_target"]=building_id
 		u["garrison_door"]=door
+		u["garrison_order_version"]=int(u.order_version)
 		sent+=1
 	return sent
 
@@ -111,6 +112,7 @@ static func wall_point(sim,building_id:int,door:Vector2)->Vector2:
 
 static func begin_entry(sim,u:Dictionary,building_id:int)->void:
 	var door:Vector2=u.get("garrison_door",u.pos)
+	sim.cancel_preparation(u)
 	sim.actions.activate_order(u,{"mode":"garrison","target":building_id,"pos":door},sim.time,"executor")
 	u["garrison_transit"]="IN"
 	u["garrison_wall"]=wall_point(sim,building_id,door)
@@ -181,8 +183,11 @@ static func step_transit(sim,u:Dictionary,dt:float)->void:
 		if walking.is_empty() and waiting.is_empty():
 			u.erase("garrison_transit")
 			u.erase("garrison_exit")
-			u.hold_command=false
-			u.state="READY"
+			# A newer Stop/Move received during the exit owns the final posture.
+			if int(u.get("garrison_exit_version",u.order_version))==int(u.order_version):u.hold_command=bool(u.get("garrison_exit_hold",false))
+			u.erase("garrison_exit_hold")
+			u.erase("garrison_exit_version")
+			u.state="HOLDING" if u.hold_command else "READY"
 			for m in living:m.erase("at_door")
 
 static func enter(sim,u:Dictionary,building_id:int)->void:
@@ -193,6 +198,7 @@ static func enter(sim,u:Dictionary,building_id:int)->void:
 	sim.Actions.revoke_permission(u)
 	u["garrison"]=building_id
 	u.erase("garrison_target")
+	u.erase("garrison_order_version")
 	u.orders=[];u.path=[];u.intent={}
 	u.hold_command=true
 	u.state="GARRISONED"
@@ -220,6 +226,7 @@ static func leave(sim,u:Dictionary)->void:
 	u["garrison"]=-1
 	# Those still inside while the section files out keep this building's shelter.
 	u["garrison_exit"]=building
+	u["garrison_exit_version"]=int(u.order_version)
 	var door:Vector2=u.get("garrison_door",u.pos)
 	u["garrison_wall"]=wall_point(sim,building,door)
 	u["garrison_transit"]="OUT"
@@ -240,15 +247,27 @@ static func leave(sim,u:Dictionary)->void:
 static func tick(sim,dt:float=1.0/30.0)->void:
 	for u in sim.units:
 		if not sim.alive(u) or u.members.is_empty():continue
-		if transit(u)=="IN" and not u.orders.is_empty():
+		# A formation slot is still provisional: neither commit the old entry nor
+		# cancel it until the replacement has passed its route/placement checks.
+		if not u.orders.is_empty() and u.orders[0].has("slot"):continue
+		var replaced:bool=u.has("garrison_target") and int(u.get("garrison_order_version",u.order_version))!=int(u.order_version)
+		if transit(u)=="IN" and (replaced or not u.orders.is_empty()):
 			# Re-ordered mid-entry: whoever got in files back out.
+			u["garrison_exit_hold"]=bool(u.hold_command)
+			u["garrison_exit_version"]=int(u.order_version)
 			u["garrison_exit"]=int(u.garrison_target)
 			u.erase("garrison_target")
+			u.erase("garrison_order_version")
 			u["garrison_transit"]="OUT"
 			var rank:=0
 			for m in u.members:
 				if m.hp>0 and m.get("indoors",false):m.transit_rank=rank;rank+=1
 				else:m["at_door"]=true
+		elif replaced:
+			# Being close to the previous doorway is never authority to overwrite a
+			# newer move or hard Hold with an old garrison request.
+			u.erase("garrison_target")
+			u.erase("garrison_order_version")
 		if transit(u)!="":
 			step_transit(sim,u,dt)
 			continue
@@ -303,10 +322,11 @@ static func man_windows(sim,u:Dictionary)->void:
 # The building is gone (collapse): survivors are thrown clear where they stand,
 # with no doorway walk, and drop any pending entry.
 static func evict(sim,u:Dictionary)->void:
+	sim.cancel_preparation(u)
 	sim.actions.cancel_unit(u,sim.time,"garrison_lost")
 	sim.Actions.revoke_permission(u)
 	u["garrison"]=-1
-	for key in ["garrison_transit","garrison_target","garrison_exit","garrison_wall","window_threat","window_threat_pos"]:u.erase(key)
+	for key in ["garrison_transit","garrison_target","garrison_order_version","garrison_exit","garrison_exit_hold","garrison_exit_version","garrison_wall","window_threat","window_threat_pos"]:u.erase(key)
 	u.hold_command=false
 	u.orders=[];u.path=[];u.intent={}
 	u.state="READY"

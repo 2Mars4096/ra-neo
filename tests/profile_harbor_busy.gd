@@ -108,7 +108,7 @@ func distribution(values:Array)->Dictionary:
 func run()->void:
 	var started:=Time.get_ticks_usec()
 	var sources:Dictionary={}
-	for name in ["simulation","terrain","cover_behavior","infantry","field_ops"]:sources[name]=FileAccess.get_sha256("res://scripts/%s.gd" % name)
+	for name in ["simulation","terrain","cover_behavior","infantry","field_ops","classic","structure_damage","vehicle_damage","tactical_director","tactical_actions","tactical_context","tactical_navigation","tactical_work_budget"]:sources[name]=FileAccess.get_sha256("res://scripts/%s.gd" % name)
 	sources["policy"]=FileAccess.get_sha256("res://tests/fixtures/harbor_pressure_policy.gd")
 	var sim=Sim.new(true,Sim.default_selection())
 	sim.combat_rng.seed=combat_seed
@@ -139,6 +139,10 @@ func run()->void:
 	var contact_ticks:=0
 	var measure_ticks:=roundi(seconds/DT)
 	var paths_before:int=sim.terrain.path_calls
+	var astar_before:int=sim.terrain.astar_calls
+	var planning_before:Dictionary=sim.terrain.planning.snapshot()
+	var maximum_pending:=0
+	var maximum_queue_age:=0
 	var path_usec_before:int=sim.terrain.path_usec
 	var grids_before:Array=sim.terrain.navigation.keys()
 	if failures.is_empty():
@@ -150,6 +154,9 @@ func run()->void:
 			sim.tick(DT);tick+=1
 			var cost:float=(Time.get_ticks_usec()-stamp)/1000.0
 			costs.append(cost)
+			var planning:Dictionary=sim.terrain.planning.snapshot()
+			maximum_pending=maxi(maximum_pending,int(planning.pending))
+			maximum_queue_age=maxi(maximum_queue_age,int(planning.oldest_ticks))
 			for key in phase_costs:phase_costs[key].append(0.0)
 			for key in sim.profile:
 				if not phase_costs.has(key):
@@ -174,7 +181,10 @@ func run()->void:
 		"setup_ms":setup_ms,"warmup_wall_ms":warmup_wall_ms,"first_shot_seconds":first_shot,
 		"admission":{"minimum_warmup_seconds":MIN_WARMUP,"minimum_shots_last_10s":MIN_RECENT_SHOTS,"minimum_recent_shooters_per_team":MIN_SHOOTERS_PER_TEAM,"minimum_active_contacts":MIN_ACTIVE_CONTACTS,"observed":gate},
 		"before":before,"after":force_state(sim),"measurement":{"requested_seconds":seconds,"shots":shots,"ticks_with_four_contacts":contact_ticks,"cpu_tick":distribution(costs),"nested_cpu_phases":phases,
-			"phase_note":"Phases are nested: cover_find_slot is inside cover_update, inside infantry_move, inside unit_loop. Do not add all phase totals.","path_calls":sim.terrain.path_calls-paths_before,"path_cpu_ms":(sim.terrain.path_usec-path_usec_before)/1000.0,"grids_added":sim.terrain.navigation.keys().filter(func(key):return key not in grids_before)},
+			"phase_note":"Phases are nested: cover_find_slot is inside cover_update, inside infantry_move, inside unit_loop. Do not add all phase totals.",
+			"path_calls":sim.terrain.path_calls-paths_before,"astar_searches":sim.terrain.astar_calls-astar_before,
+			"planning":{"before":planning_before,"after":sim.terrain.planning.snapshot(),"maximum_pending":maximum_pending,"maximum_queue_age_ticks":maximum_queue_age},
+			"path_cpu_ms":(sim.terrain.path_usec-path_usec_before)/1000.0,"grids_added":sim.terrain.navigation.keys().filter(func(key):return key not in grids_before)},
 		"rendered_frame_ms":null,"rendered_frames_measured":0,"gpu_frame_ms":null,
 		"policy":"combined-public-objectives","policy_stats":policy.stats,"commands":policy.actions,"command_api_costs":policy.api_costs,
 		"events":event_counts,"fingerprints":fingerprints,"spikes":spikes,"valid_busy_window":failures.is_empty(),"failures":failures}

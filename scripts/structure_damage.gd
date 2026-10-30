@@ -21,6 +21,7 @@ extends RefCounted
 
 const Garrison=preload("res://scripts/garrison.gd")
 const VehicleDamage=preload("res://scripts/vehicle_damage.gd")
+const Actions=preload("res://scripts/tactical_actions.gd")
 
 # Structural points per round against building integrity, and the burst radius
 # (m) that flattens props and cuts wire. Keyed by unit kind, then combat alias.
@@ -211,7 +212,7 @@ static func collapse(sim,building_id:int,exempt:int=-1)->void:
 	# Fire missions on the building end with it.
 	if sim.has_meta(STATE):
 		for gunner in _state(sim).bombard:
-			if int(gunner.get("bombard",-1))==building_id:_end_mission(gunner)
+			if int(gunner.get("bombard",-1))==building_id:_end_mission(sim,gunner)
 	var center:Vector2=building.bounds.get_center()
 	sim.terrain.collapse_blocks(building.blocks,building.bounds.grow(0.6))
 	sim.visibility_cache.clear()
@@ -330,21 +331,29 @@ const BOMBARD_REPLANS:=2
 # Candidate firing spots tested for a route per search (each a grid search).
 const ROUTE_TRIES:=8
 static func bombard(sim,ids:Array,building_id:int)->int:
-	if building_id<0 or building_state(sim,building_id)>=COLLAPSED:return 0
+	if sim.result!="" or building_id<0 or building_id>=Garrison.index(sim).buildings.size() or building_state(sim,building_id)>=COLLAPSED:return 0
 	var building:Dictionary=Garrison.index(sim).buildings[building_id]
 	var accepted:=0
 	var stranded:=0
 	for id in ids:
 		var u:Dictionary=sim.get_unit(int(id))
-		if not sim.alive(u) or not u.members.is_empty() or he_spec(sim,u).is_empty():continue
+		if not sim.alive(u) or sim.comms_blocked(u) or not u.members.is_empty() or he_spec(sim,u).is_empty():continue
 		var d:Dictionary=sim.definitions[u.kind]
 		if d.get("strike",false) or (d.get("structure",false) and not d.get("armed",false)):continue
-		u.erase("bombard_move")
-		if not _take_position(sim,u,building):
+		var plan:=_position_plan(sim,u,building)
+		if plan.get("pending",false):continue
+		if plan.is_empty():
 			stranded+=1
 			continue
+		# Validate the complete approach before replacing intent. A building
+		# target has its own permission kind; its numeric ID is never a unit ID.
+		sim.command_serial+=1
+		sim.record_order(u,"bombard",wall_point(building,u.pos),building_id,false)
 		u["bombard"]=building_id
+		u["bombard_version"]=int(u.order_version)
+		u["bombard_assignment"]=int(u.assignment.id)
 		u["bombard_replans"]=0
+		_apply_position(u,plan,building_id)
 		if not _state(sim).bombard.has(u):_state(sim).bombard.append(u)
 		accepted+=1
 	if accepted==0 and stranded>0:sim.events.append({"type":"warning","text":NO_POSITION,"notice":"info"})
@@ -356,20 +365,41 @@ static func fire_line(sim,u:Dictionary,building:Dictionary,from:Vector2)->bool:
 	var aim:=wall_point(building,from)
 	return sim.terrain.line_clear(from,aim+(from-aim).normalized()*0.3)
 
-# Stays and fires when in range with a line; otherwise moves to a firing
-# position. False when the unit can do neither.
-static func _take_position(sim,u:Dictionary,building:Dictionary)->bool:
+# Pure preparation: no received order or physical state changes until both
+# the firing spot and approach are known. One admitted formation bundle has
+# at most ROUTE_TRIES reachability probes, a bounded live placement step and
+# the ordered-route pair; a denied replan retains the task and retries.
+static func _position_plan(sim,u:Dictionary,building:Dictionary)->Dictionary:
 	var d:Dictionary=sim.definitions[u.kind]
 	var reach:float=float(d.range)*0.85
 	var aim:=wall_point(building,u.pos)
 	if u.pos.distance_to(aim)<=reach and fire_line(sim,u,building,u.pos):
-		if not d.get("structure",false):sim.stop([u.id])
-		return true
-	if float(d.speed)<=0.0:return false
+		return {"pos":u.pos,"path":[]}
+	if float(d.speed)<=0.0:return {}
+	if not sim.terrain.planning.request("formation",int(u.id),"bombard_position",1):return {"pending":true}
 	var spot:Vector2=aim+(u.pos-aim).normalized()*reach*0.8 if d.domain=="air" else firing_position(sim,u,building,reach)
-	if not spot.is_finite() or sim.issue([u.id],spot,"move")<=0:return false
-	u["bombard_move"]=u.orders.back().pos
-	return true
+	if not spot.is_finite():return {}
+	var slots:Array[Dictionary]=[]
+	var placement:Dictionary=sim.formation_plan(spot,u,slots,{},[],"bombard_position")
+	if not placement.done:return {"pending":true}
+	if placement.pos.x<0:return {}
+	var route:Array=sim.order_route(u,placement.pos)
+	return {"pos":placement.pos,"path":route} if not route.is_empty() else {}
+
+static func _apply_position(u:Dictionary,plan:Dictionary,building_id:int)->void:
+	u.orders=[]
+	u.path=plan.path
+	u.erase("route_pending")
+	if u.path.is_empty():
+		u.erase("bombard_move")
+		u.hold_command=true
+		u.speed_now=0.0
+		u.state="HOLDING"
+	else:
+		u.orders=[{"mode":"move","pos":plan.pos,"target":-1,"internal_child":true,"bombard_approach":building_id}]
+		u["bombard_move"]=plan.pos
+		u.hold_command=false
+		u.state="MOVING"
 
 # Nearest open spot (fog-grid cell centres) within `reach` of the wall it faces,
 # with a clear line to that wall and a route from the unit; INF when none.
@@ -395,19 +425,34 @@ static func firing_position(sim,u:Dictionary,building:Dictionary,reach:float)->V
 		if tries>=ROUTE_TRIES:break
 	return Vector2.INF
 
-static func _end_mission(u:Dictionary)->void:
-	for key in ["bombard","bombard_move","bombard_replans"]:u.erase(key)
+static func _owns_mission(u:Dictionary)->bool:
+	return int(u.get("bombard_version",-1))==int(u.get("order_version",0)) and int(u.get("bombard_assignment",-1))==int(u.get("assignment",{}).get("id",0)) and u.get("assignment",{}).get("mode","")=="bombard" and int(u.assignment.target)==int(u.get("bombard",-1))
+
+static func _end_mission(sim,u:Dictionary)->void:
+	if _owns_mission(u):
+		Actions.revoke_permission(u)
+		if u.intent.get("mode","")=="bombard":u.intent={}
+		if not u.orders.is_empty() and u.orders[0].has("bombard_approach"):
+			u.orders.pop_front();u.path=[]
+			sim.start_next_order(u)
+		sim.actions.invalidate(u,sim.time,"bombard_ended")
+	sim.terrain.planning.cancel_request("formation",int(u.id),"bombard_position")
+	u.get("tactical_navigation",{}).erase("bombard_position")
+	for key in ["bombard","bombard_move","bombard_replans","bombard_version","bombard_assignment"]:u.erase(key)
 
 static func _bombard_tick(sim,list:Array)->void:
 	for i in range(list.size()-1,-1,-1):
 		var u:Dictionary=list[i]
 		var id:int=int(u.get("bombard",-1))
-		if not sim.alive(u) or id<0 or building_state(sim,id)>=COLLAPSED:
-			_end_mission(u);list.remove_at(i);continue
+		if not sim.alive(u) or id<0 or not _owns_mission(u) or u.assignment.get("permission_revoked",false) or building_state(sim,id)>=COLLAPSED:
+			_end_mission(sim,u);list.remove_at(i);continue
 		if not u.orders.is_empty():
+			# A deferred replacement has not received ownership yet. Its result
+			# either restores this task or invalidates the captured assignment.
+			if u.orders[0].has("slot"):continue
 			# Any other order cancels the fire mission.
-			if u.orders.size()>1 or u.orders[0].mode!="move" or not u.has("bombard_move") or u.orders[0].pos.distance_to(u.bombard_move)>0.5:
-				_end_mission(u);list.remove_at(i)
+			if u.orders[0].get("bombard_approach",-1)!=id:
+				_end_mission(sim,u);list.remove_at(i)
 			continue
 		u.erase("bombard_move")
 		if int(u.target)>=0 or u.cooldown>0.0 or not VehicleDamage.weapon_ready(sim,u):continue
@@ -417,11 +462,16 @@ static func _bombard_tick(sim,list:Array)->void:
 		if u.pos.distance_to(aim)>float(d.range) or not fire_line(sim,u,building,u.pos):
 			# Arrived off the line (or pushed out of range): look again, then give up.
 			var replans:int=int(u.get("bombard_replans",0))
-			if replans<BOMBARD_REPLANS and _take_position(sim,u,building):
-				u["bombard_replans"]=replans+1
-				continue
+			if replans<BOMBARD_REPLANS:
+				var plan:=_position_plan(sim,u,building)
+				if plan.get("pending",false):continue
+				if not plan.is_empty():
+					_apply_position(u,plan,id)
+					u["bombard_replans"]=replans+1
+					continue
 			if u.team==0:sim.events.append({"type":"warning","text":NO_POSITION,"notice":"info"})
-			_end_mission(u);list.remove_at(i);continue
+			_end_mission(sim,u);list.remove_at(i);continue
+		if not Actions.engagement_allowed(u,id,"bombard"):continue
 		u.last_shot=sim.time
 		u.cooldown=float(d.interval)
 		u.state="BOMBARDING"

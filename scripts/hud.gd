@@ -666,6 +666,12 @@ func draw_sidebar(sim) -> void:
 			if member.get("cover_phase","")=="SHELTERED":sheltered+=1
 		if seekers>0:status="%d seeking cover · Partners holding" % seekers
 		elif sheltered>0:status="%d sheltered · Watching approach" % sheltered
+		var preparing:int=unit.members.filter(func(member):return member.hp>0 and float(member.get("reload_until",0.0))>sim.time).size()
+		if preparing>0 and seekers==0:status="%d reloading · %d ready" % [preparing,int(sim.Infantry.strength(unit,sim.time).ready_members)]
+		if unit.get("fire_policy","free")=="hold":
+			var assignment:Dictionary=unit.get("assignment",{})
+			if not sim.Actions.engagement_allowed(unit,int(assignment.get("target",-1)),str(assignment.get("mode","")),assignment.get("pos",Vector2.INF)):status="Holding fire"
+		if unit.hold_command and unit.reason=="Hold position · under pressure":status=unit.reason
 		if sim.definitions[unit.kind].get("strike",false):status="Autonomous strike munition · no orders"
 		if unit.get("structure",false) and not sim.field_ops.is_empty():
 			detail="%d / %d HP · %s" % [maxi(0,int(unit.hp)),int(unit.max_hp),"UNFINISHED" if float(unit.get("build_left",0.0))>0 else "COMPLETE"]

@@ -45,11 +45,11 @@ The current increment deepens distinct battlefield decisions, carries expedition
 
 ## Current delivery focus
 
-### Tactical action planning — 2026-10-27
+### Tactical foundation implementation — 2026-10-30
 
-The user requested a master plan and subplans for richer individual decisions across infantry, vehicles, air, naval and support units, explicitly including grenades, backup requests and trench digging. [Plan 18](plans/18-unit-tactical-autonomy.md) and its [action catalogue](tactical-action-catalogue.md) define that proposed work. This is planning-only authorization; no new action is implemented by the document set.
+The user requested a master plan and subplans for richer individual decisions across infantry, vehicles, air, naval and support units, explicitly including grenades, backup requests and trench digging, then authorized implementation starting with M0. [Plan 18](plans/18-unit-tactical-autonomy.md) and its [action catalogue](tactical-action-catalogue.md) define the sequence. [M0](plans/18-1-1-m0-foundation.md) is implemented on `codex/unit-tactics-implementation` with 58/58 integration suites passing, inspected native readiness captures and a documented busy-combat CPU sample. Synchronous work still causes long ticks; M1 remains planned.
 
-Proposed sequence: stabilize readiness/targeting/action ownership; prove an infantry defense slice with throwables, support and preparation; give existing vehicle/air/sea units persistent roles; then expand urban, engineering and sustainment decisions. Keep shared physical/information rules, a compact command interface and measured responsiveness in every increment. New transport classes, generalized fuel, towing, minefields, full interiors and wider evacuation remain gated optional scope. The existing regional operations below remain the implemented baseline.
+The sequence is readiness/targeting/action ownership; an infantry defense slice with throwables, support and preparation; persistent roles for existing vehicle/air/sea units; then urban, engineering and sustainment decisions. M0 also adds minimal contact memory, durable magazine/equipment identity and planning admission. Shared physical/information rules, compact feedback and measured responsiveness remain gates for each increment. New transport classes, generalized fuel, towing, minefields, full interiors and wider evacuation remain optional scope. Regional operations retain their existing checkpoint boundary.
 
 ### Regional operations — 2026-10-25
 

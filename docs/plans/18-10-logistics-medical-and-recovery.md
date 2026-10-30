@@ -1,14 +1,14 @@
 # 18-10: Logistics, medical support and recovery
 
 **Parent:** [18-unit-tactical-autonomy](18-unit-tactical-autonomy.md)
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Help units maintain combat readiness, obtain appropriate support and resume their assignment without duplicate resource spending or loss of campaign state.
 
 ## Baseline and ownership
 
 [infantry.gd](../../scripts/infantry.gd) implements wounds, stabilization, dragging, carrying and treatment. [field_ops.gd](../../scripts/field_ops.gd) supplies aid/repair posts and obstacle/wreck clearing. [vehicle_damage.gd](../../scripts/vehicle_damage.gd) implements component repair and re-crewing/capture. [simulation.gd](../../scripts/simulation.gd) has finite AT missiles, nearby replenishment and enemy automatic return. Player automatic return and general finite reserve ammunition are absent.
 
-[regional_campaign.gd](../../scripts/regional_campaign.gd) saves a version-1 roster, wounds, missiles, damage, supply and deployment checkpoints. This plan owns replenishment, service accounting and persistent equipment migration, using [18-1](18-1-action-framework-and-readiness.md) reservations and [18-4](18-4-coordination-and-support-requests.md) requests. Domain plans own movement/execution.
+[regional_campaign.gd](../../scripts/regional_campaign.gd) now saves a version-2 roster: M0 adds assigned strength, stable member IDs, partial magazines and equipment ownership to the existing wounds, missiles, damage, supply and deployment checkpoints. Version-1 migration and specialist-loss/resource-conservation fixtures are part of [18-1-1](18-1-1-m0-foundation.md). Reload/action timers and tactical contacts remain transient. This plan owns later replenishment, service accounting and equipment migration, using [18-1](18-1-action-framework-and-readiness.md) reservations and [18-4](18-4-coordination-and-support-requests.md) requests. Domain plans own movement/execution.
 
 ## Action catalogue
 
@@ -62,6 +62,7 @@ Distinguish in-battle cancellation from ending the whole tactical simulation. Be
 - [ ] 2. Deliver opt-in AT resupply-and-return, capability-aware repair selection and safe service queues using current facilities.
 - [ ] 3. Integrate buddy-aid/drag/carry roles with covering and movement assignments; preserve the deferred evacuation scope.
 - [ ] 4. Add throwable replenishment and persistent equipment fields with transaction and migration tests before grenades enter a regional campaign.
+  - [x] M0 existing-roster magazine/equipment/assigned-strength persistence and version-1 migration. Throwable stock and replenishment remain M1.
 - [ ] 5. Extend re-crewing and optional delivery/transfer jobs after actual providers and stock exist.
 - [ ] 6. Evaluate recovery vehicles, personnel replacement and finite fuel/batteries as separately enabled expansion work.
 - [ ] 7. Pass [18-12](18-12-performance-and-validation.md) accounting, persistence and congestion gates; expose concise status through [18-11](18-11-command-interface-and-feedback.md).

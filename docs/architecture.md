@@ -1,8 +1,8 @@
 # Architecture
 
-## Planned tactical-action work — not implemented
+## M0 tactical foundation
 
-[Plan 18](plans/18-unit-tactical-autonomy.md) specifies proposed action lifecycle, capability/observation records, persistent local assignments, support requests, resource accounting and budgeted execution. Its twelve subplans and [action catalogue](tactical-action-catalogue.md) are documentation, not new runtime modules. The implemented systems below remain the source baseline. Future adapters must preserve explicit order semantics, shared collision/elevation/sensing rules, one live tactical battlefield, and the existing checkpoint/outcome persistence boundary.
+[M0](plans/18-1-1-m0-foundation.md) adds action/assignment ownership, quiet readiness, stable/urgent targeting, original-strength assessment, contact observations and shared planning admission around the existing executors. [Plan 18](plans/18-unit-tactical-autonomy.md) and the [action catalogue](tactical-action-catalogue.md) retain broader future scope: throwables, smoke, support requests, infantry digging and domain assignments are subsequent increments. Shared collision/elevation/sensing rules, one live battlefield and the deployment-checkpoint persistence boundary remain authoritative.
 
 ## Implemented stack
 
@@ -18,6 +18,11 @@
 |---|---|
 | `project.godot`, `scenes/main.tscn` | Engine settings and entry point |
 | `scripts/simulation.gd` | Commands, squads, damage, targeting, knowledge, suppression, economy, objectives, opponent waves, terminal states |
+| `scripts/tactical_actions.gd` | Assignment/order versions, action channels, atomic claims, interruption/deadline/backoff and bounded structured traces |
+| `scripts/tactical_context.gd` | Copied timestamped local/shared sensor facts, deterministic confidence/expiry and bounded contact stores |
+| `scripts/tactical_work_budget.gd` | Deterministic per-tick planning admission, age/priority service, cancellation and queue diagnostics |
+| `scripts/tactical_navigation.gd` | Resumable formation and firing-position candidate searches with current-state validation |
+| `scripts/infantry.gd` | Individual bodies, wounds, aim/readiness, durable member/equipment identity and strength accounting |
 | `scripts/cover_behavior.gd` | Bounded individual shelter search, reservations, commitment and routes for autonomy scenarios |
 | `scripts/terrain.gd`, `scripts/elevation.gd` | Shared scenery, plateau/ramp height, slope-aware navigation, cover and visibility |
 | `scripts/scenario_catalog.gd` | Stable legacy scenario indices, lightweight regional descriptors, lazy external map loading and deployment reload |
@@ -41,13 +46,35 @@
 
 ## Simulation and navigation
 
+### Ownership, readiness and knowledge
+
+An accepted replacement increments a unit's `order_version` and creates an assignment; a queued order activates its assignment when reached. Provisional destinations retain the accepted snapshot and cannot grant a new target permission or movement. Rejected placement restores that snapshot. Executor-owned give-way and approach orders retain their parent assignment. Deferred routes carry order/assignment and geometry versions, so an older result cannot overwrite a newer command.
+
+`TacticalActions` tracks existing reload/aim/cover/maneuver execution through small adapters. It owns claims and terminal outcomes, not inventories or world effects. The existing firing/purchase/projectile executors retain commitment ownership. Cancelling preparation releases claims without granting rounds or deleting an already released missile/FPV. Action traces retain at most 128 events; the local report includes at most 64 own-team events, planning queue statistics and actual path/A* counts.
+
+In autonomous scenarios, empty infantry weapons reload while stationary and available even without a target. A low partial rifle magazine can top off after a quiet interval only if a capable loaded partner remains. Movement, aid, withdrawal, cover transit, death and weapon changes invalidate incompatible preparation; a new contact interrupts an optional topoff while retaining its remaining rounds. Assigned strength is independent of healing capacity. Equipment refers to stable member IDs, and a timed internal handover validates giver/receiver, proximity and unchanged assignment before moving ownership.
+
+Pressure handling preserves useful shelter and casualty care, and checks a proposed withdrawal route against currently known effective threats. After its commitment and a quiet disengagement, a section can resume its accepted objective before reaching the rally. A separate physical snapshot acknowledges that pressure episode without restoring lost strength; new fire, hits, casualties or heavy suppression can re-arm the response. Failed or replaced withdrawals do not acknowledge safety. Idle withdrawals use the same arrival/stall/deadline lifecycle without inventing a parent order.
+
+Explicit targets are checked before the bounded incidental line-of-fire shortlist. Ordinary viable targets remain stable; an effective observed urgent air threat can preempt an AA vehicle's ground target. Selection and release both check engagement permission. Hold position remains the existing movement command; Hold fire is a separate internal policy with scoped explicit-attack permission. M0 adds no fire-policy or initiative button.
+
+`TacticalContext` stores copied sensor facts: contact ID/kind, observed position/time, observer and source. Team stores hold up to 256 contacts; each local observer holds up to 32, with at most 256 observers and 8 teams. Confidence decays linearly over 30 seconds, then the fact expires. Radio loss preserves local facts without uploading them. Hidden motion/death does not refresh or erase a remembered fact, and memory alone does not authorize a shot. Casualty, capability, geometry and fresh observed-contact events wake the relevant cheap review clocks.
+
+### Planning admission
+
+Terrain owns one `TacticalWorkBudget` enabled during the 30 Hz simulation tick. Default admission limits are 8 route bundles, 2 cover searches, 1 regroup search, 32 tactical decisions and 8 formation/placement bundles per tick. Priority can advance a request by at most eight ticks; age and stable owner/part ordering prevent fixed unit iteration from starving later requesters. Inactive requests retain age but cease reserving capacity after a missed tick; abandoned entries expire after 60 ticks. Accepted replacements and owner loss cancel stale requests.
+
+Denial means pending: callers preserve their current safe action, accepted order, paid queue and inventory, without setting a failed-route cooldown. TacticalNavigation's formation and unit-attack placement searches, plus Terrain's invalid-ground search, retain candidate cursors. Unit-attack placement snapshots moving inputs to make progress, then revalidates current known target range/line, geometry, claims and route before use; stale searches refresh at most twice. Building bombardment retains its separate bounded synchronous firing-position search. Route smoothing remains incremental. Cover and regroup admissions bound their route shortlists to 6 and 9 respectively; other legacy bundles have explicit finite caller loops.
+
+Admission is not a CPU-time cap: one Godot A* search is still synchronous, can retry internally, and can take longer on difficult geometry. Spawn batches retain their finite placement loop; load/setup and direct test/tool calls are synchronous. `path_calls` counts public path work and `astar_calls` counts actual grid searches, including connectivity and internal retries. No worker-thread navigation or measured frame-rate improvement is implied.
+
 Squads remain command/navigation groups. Infantry soldiers now have independent positions, health, weapon cooldowns, target acquisition, targeting, facing, suppression, hit reactions, and casualties in `scripts/infantry.gd`. They follow stable local slots inside a conservative group envelope, with terrain and peer-separation checks; the showcase adds bounded local cover selection, but not independent long-range pathfinding. Squad HP is the sum of surviving members. Repair heals living soldiers and never resurrects casualties. Ground, sea, UAV, and helicopter bodies have distinct collision layers. The UAV and helicopter use altitude bands above the tallest scenery. Collision radii cover the actual mesh vertices, including guns and rotors, rather than only the chassis.
 
 Navigation uses Godot AStarGrid2D, with cached grids per movement domain, radius and mobility profile; cell size comes from the selected scenario (one-meter legacy default, four-meter regional maps). Paths only simplify when the entire footprint clears geometry. Footprint tests include ridges, warehouses, shared tree positions, piers, containers, objective poles, map edges, and coastline. A spatial hash narrows dynamic avoidance checks; swept movement prevents bodies stepping through each other. Deployment and formation slots reserve safe space. Crowded units may yield; this is not a full rigid-body vehicle or infantry navigation simulation. In autonomy scenarios, an infantry section's definition radius (2.65) is only its terrain envelope. Against other units it uses `Simulation.crowd_radius` (2.0) for spawn and slot spacing, and its soldiers' bodies for contact: anchors skip other sections, vehicles test soldiers, and detours avoid soldiers. Cross-section soldier clearance is 0.7 x body sum.
 
 Team knowledge is updated every 0.3 seconds. Ground line of sight respects blockers; elevated reconnaissance can reveal beyond them. Targeting still respects weapon line of fire. The fog/minimap terrain field is cached by observer cell; target detection uses current positions. Explicit pursuit remembers the last visible target position rather than tracking hidden live movement.
 
-Combat uses the explicit seven-by-seven effectiveness matrix in `resources/combat.json`. Eligibility, slant range, acquisition, seeded hit probability, and on-hit damage are separate stages. Rifles cannot damage armored hulls; a successful rifle hit disables the small UAV. Motion/range/suppression affect accuracy, cover mitigates infantry damage, and front/side/rear facings affect eligible armor damage. Resolution occurs immediately at the shot event; projectile travel remains presentation. See `docs/combat-design.md`.
+Combat uses the explicit seven-by-seven effectiveness matrix in `resources/combat.json`. Eligibility, slant range, acquisition, seeded hit probability, and on-hit damage are separate stages. Rifles cannot damage armored hulls; a successful rifle hit disables the small UAV. Motion/range/suppression affect accuracy, cover mitigates infantry damage, and front/side/rear facings affect eligible armor damage. Direct-fire hitscan resolves at the shot event with presentation-only tracer travel. Guided missiles and released FPV strikes instead retain simulation-owned delayed effects; replacing the originating order cannot undo a committed release. See `docs/combat-design.md`.
 
 ## Presentation and performance
 
@@ -91,7 +118,7 @@ Opening the atlas pauses and preserves the live simulation, blocks tactical comm
 
 ## Operational campaign state
 
-`RegionalCampaign` persists a versioned `user://regional_campaign.json` with the last deployment, roster, supply, secured locations, outcome history and retry checkpoint. `Battle` loads it before presenting the operation, prepares the carried force, writes a checkpoint when play begins, and records victory, defeat or withdrawal. A later force replaces the authored starting army. Soldiers retain individual wounds, casualty slots and remaining bleed time; vehicles retain integrity, crew/component damage, ammunition and remaining fire/flood hazards. Unsupported domains and units that cannot yet fit the insertion stay in a parked roster and retry compatible deployment. Off-map units do not simulate.
+`RegionalCampaign` persists a versioned `user://regional_campaign.json` with the last deployment, roster, supply, secured locations, outcome history and retry checkpoint. `Battle` loads it before presenting the operation, prepares the carried force, writes a checkpoint when play begins, and records victory, defeat or withdrawal. A later force replaces the authored starting army. Soldiers retain individual wounds, casualty slots and remaining bleed time; vehicles retain integrity, crew/component damage, ammunition and remaining fire/flood hazards. M0's version-2 roster also preserves assigned strength, stable member IDs, partial per-weapon magazines and explicit equipment ownership. Version-1 migration initializes missing legacy fields without resurrecting a lost launcher operator; an explicit empty inventory stays empty. Reload timers, action claims, routes and contact memory are transient. Unsupported domains and units that cannot yet fit the insertion stay in a parked roster and retry compatible deployment. Off-map units do not simulate.
 
 Queue purchases are refunded once at outcome. Each secured battlefield contributes at most once: Harbor +1 supply/s, Rail Valley +2/s, Inlet +1/s, Fields +1/s, and Pass +45 seconds before the first reserve dispatch. Modifiers apply to the next deployment; they are separate from live battlefield facility income. Withdrawal or defeat removes ownership of that battlefield. Defeat retry restores the pre-battle checkpoint; atlas reset is explicit and confirmed.
 
@@ -117,7 +144,7 @@ After 1.5 seconds blocked, moving groups may replan around nearby bodies at most
 
 ## Scenario identity and stable vehicle motion
 
-Scenario config now supplies objective coordinates, landscape style, and harbor presence as well as obstacle/cover geometry. Terrain poles use those objective coordinates; Fields disables both rendered and collidable harbor props. The ground shader and building generator select rural parcels/barns or asphalt/flat-roof urban blocks. Scenario `shore_x` and optional `size: [width,height]` define the shoreline and extent; omitted size retains 96×72. Tracked hull presentation turns at a bounded rate with no artificial vertical bob; turrets remain independent. Automatic target acquisition retains an eligible target until lost, while avoidance scoring penalizes heading reversals.
+Scenario config now supplies objective coordinates, landscape style, and harbor presence as well as obstacle/cover geometry. Terrain poles use those objective coordinates; Fields disables both rendered and collidable harbor props. The ground shader and building generator select rural parcels/barns or asphalt/flat-roof urban blocks. Scenario `shore_x` and optional `size: [width,height]` define the shoreline and extent; omitted size retains 96×72. Tracked hull presentation turns at a bounded rate with no artificial vertical bob; turrets remain independent. Ordinary automatic targeting retains an eligible target; explicit targeting and an eligible observed urgent air threat can preempt it. Avoidance scoring penalizes heading reversals.
 
 ## Painted miniature materials
 

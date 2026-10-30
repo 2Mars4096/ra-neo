@@ -1,10 +1,12 @@
 # 18-1: Action framework and readiness
 
 **Parent:** [18-unit-tactical-autonomy](18-unit-tactical-autonomy.md)
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Give every action clear prerequisites, ownership, interruption and completion while removing avoidable hesitation in current units.
 
 ## Baseline and evidence
+
+M0 implementation and its exact delivery boundary are tracked in [18-1-1](18-1-1-m0-foundation.md). The review findings below describe the pre-M0 baseline; focused fixtures now cover readiness, explicit/urgent targeting, original strength and ownership. Later action adapters remain open.
 
 [Simulation](../../scripts/simulation.gd) currently distributes behavior across `orders`, `intent`, `maneuver`, target/aim state, cover phases and regroup flags. [TacticalDirector](../../scripts/tactical_director.gd) retains player intent during temporary maneuvers. [Infantry](../../scripts/infantry.gd) and [Cover](../../scripts/cover_behavior.gd) manage additional commitments. Extend these in small adapters; do not replace the whole simulation at once.
 
@@ -17,7 +19,7 @@ Static review findings to reproduce before changing behavior:
 - `contact_drill` can keep a contact hold ahead of the separate high-suppression withdrawal rule.
 - The AT launcher and cover-role helper identify the operator by member index zero, rather than transferable equipment.
 
-These are source/control-flow findings, not newly reproduced runtime bugs or measured slowdowns.
+These began as source/control-flow findings. M0 supplies runtime regressions for the selected cases; it does not establish a frame-time improvement.
 
 ## Proposed state contract
 
@@ -29,7 +31,7 @@ These are source/control-flow findings, not newly reproduced runtime bugs or mea
 | Action instance | Action ID, owner, originating order version, target snapshot, phase, reserved roles/positions/resources, start/deadline, reason, fallback and completion outcome |
 | Result/event | Tick, stable event ID, known-to teams/actors, state change, completion/failure reason and invalidated cached facts |
 
-Fields are a proposed contract, not implemented classes. Use typed small records at module boundaries before introducing new modules. Initial candidate modules, if justified during implementation, are an action registry, executor and tactical context beside the existing scripts; final filenames are not fixed by this plan.
+M0 implements the selected contract in `tactical_actions.gd`, `tactical_context.gd`, `tactical_work_budget.gd` and `tactical_navigation.gd`, with adapters in the existing simulation/infantry/director. The broader boundary, support-request, spending and hazard fields remain future slice requirements.
 
 ## Lifecycle and decision policy
 
@@ -47,13 +49,15 @@ Separate original/assigned strength, current effective strength and recoverable 
 
 ## Tasks
 
-- [ ] 1. Reproduce the readiness, target-priority and strength cases using small fixtures; record intentional old behavior separately from defects.
-- [ ] 2. Add order/assignment versions, capability views and a minimal action contract around existing reload/aim/cover executors.
+- [x] 1. Reproduce the readiness, target-priority and strength cases using small fixtures; record intentional old behavior separately from defects.
+- [x] 2. Add order/assignment versions, capability views and a minimal action contract around existing reload/aim/cover executors.
 - [ ] 3. Move reload readiness outside target acquisition; coordinate magazine timing through section-role reservations in [18-2](18-2-infantry-fire-and-movement.md).
-- [ ] 4. Apply explicit-target-first validation, stable aim tracking and a cheap urgent-threat override; retain actual weapon acquisition requirements.
+  - [x] M0 quiet reloads and a loaded-partner guard for voluntary topoffs; persistent section roles remain M1.
+- [x] 4. Apply explicit-target-first validation, stable aim tracking and a cheap urgent-threat override; retain actual weapon acquisition requirements.
 - [ ] 5. Unify interruption precedence for contact holds, withdrawal, aid, digging, throwing and direct orders; add bounded failure backoff and a valid temporary action.
-- [ ] 6. Separate assigned strength and equipment identity from healing capacity/member array indices; provide the handover interface without automatically completing a transfer.
-- [ ] 7. Add event invalidation and bounded work scheduling with [18-12](18-12-performance-and-validation.md), plus compact state reasons with [18-11](18-11-command-interface-and-feedback.md).
+  - [x] M0 existing-executor cancellation, pressure handling and failure backoff; digging/throwing adapters remain future work.
+- [x] 6. Separate assigned strength and equipment identity from healing capacity/member array indices; provide the handover interface without automatically completing a transfer.
+- [x] 7. Add event invalidation and bounded work scheduling with [18-12](18-12-performance-and-validation.md), plus compact state reasons with [18-11](18-11-command-interface-and-feedback.md).
 - [ ] 8. Adapt one action at a time, proving old mission, collision, casualty and campaign invariants before broad adoption.
 
 ## Integration slices

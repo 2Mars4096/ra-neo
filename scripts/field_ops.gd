@@ -159,7 +159,12 @@ static func continue_queue(sim,engineer:Dictionary)->void:
 	for site in sim.units:
 		if not sim.alive(site) or site.get("queued_for",-1)!=engineer.id or site.get("build_left",0.0)<=0:continue
 		if best.is_empty() or site.pos.distance_squared_to(engineer.pos)<best.pos.distance_squared_to(engineer.pos):best=site
-	if best.is_empty():return
+	if best.is_empty():
+		sim.terrain.planning.cancel_request("routes",int(engineer.id),"engineer_continue")
+		return
+	# A queued line segment is already paid for. Admit its finite work-point
+	# search before touching the queue; planning denial is not a failed site.
+	if not sim.terrain.planning.request("routes",int(engineer.id),"engineer_continue",1):return
 	best.erase("queued_for")
 	if not resume(sim,best.id,engineer.id,false):best["queued_for"]=engineer.id
 
@@ -457,7 +462,12 @@ static func enemy_offensive(sim)->void:
 	if not state.get("warned",false) and sim.time>=state.next-20.0 and state.index<int(plan.get("max_wave",8)) and enemy_logistics_alive(sim):
 		state.warned=true
 		sim.events.append({"type":"warning","text":"Enemy assault forming • ~20 s","notice":"alert"})
-	if sim.time<state.next or state.index>=int(plan.get("max_wave",8)) or not enemy_logistics_alive(sim):return
+	if sim.time<state.next or state.index>=int(plan.get("max_wave",8)) or not enemy_logistics_alive(sim):
+		sim.terrain.planning.cancel_request("formation",-2,"enemy_wave")
+		return
+	# Admit the authored batch before advancing its schedule or consuming its
+	# composition. Crowded spawn placement is a finite bundle, not one A*.
+	if not sim.terrain.planning.request("formation",-2,"enemy_wave",1):return
 	state.warned=false
 	state.next=sim.time+float(plan.get("interval",120.0))
 	var target:=wave_target(sim)
@@ -697,6 +707,7 @@ static func cancel_queued(sim,kind:String)->bool:
 	for i in range(items.size()-1,-1,-1):
 		if items[i]==kind:
 			items.remove_at(i)
+			if i==0:sim.terrain.planning.cancel_request("routes",-1,"forward_entry")
 			sim.credits+=float(sim.definitions[kind].cost)
 			return true
 	return false
@@ -704,7 +715,10 @@ static func cancel_queued(sim,kind:String)->bool:
 # Deploy the head of the queue when the interval has elapsed and its entry is clear.
 static func process_queue(sim)->void:
 	var items:=queue(sim)
-	if items.is_empty() or sim.recruit_clock>0 or sim.result!="":return
+	if items.is_empty() or sim.result!="":
+		sim.terrain.planning.cancel_request("routes",-1,"forward_entry")
+		return
+	if sim.recruit_clock>0:return
 	var kind:String=items[0]
 	if deploy(sim,kind):
 		items.remove_at(0)
@@ -717,9 +731,14 @@ static func deploy(sim,kind:String)->bool:
 	var pos:=entry_position(sim,kind,origin,forward)
 	# A forward depot shortens deployment, but cannot bypass a disconnected route.
 	if forward:
+		# Deferred connectivity keeps the paid queue intact. It is not evidence
+		# of a disconnected depot and must not silently deploy at the rear.
+		if pos.x>=0 and not sim.terrain.planning.request("routes",-1,"forward_entry",1):return false
 		if pos.x<0 or sim.terrain.path(sim.field_ops.insertion,pos,"land",float(sim.definitions[kind].radius),[],sim.terrain.mobility_profile(kind)).is_empty():
+			sim.terrain.planning.cancel_request("routes",-1,"forward_entry")
 			pos=entry_position(sim,kind,sim.field_ops.insertion)
 			forward=false
+	else:sim.terrain.planning.cancel_request("routes",-1,"forward_entry")
 	if pos.x<0:return purchase_fail(sim,"Sea lane crowded" if sim.definitions[kind].domain=="sea" else "Landing zone crowded")
 	var unit:Dictionary=sim.spawn(kind,0,pos)
 	if unit.is_empty() or unit.pos.distance_to(pos)>0.01:
@@ -890,6 +909,8 @@ static func assign_builder(sim,site:Dictionary,engineer:Dictionary,plan:Dictiona
 		sim.stop([previous.id])
 		previous.erase("building_id")
 	sim.Director.cancel(engineer)
+	sim.cancel_preparation(engineer)
+	sim.terrain.planning.cancel_owner(int(engineer.id))
 	var task:={"mode":"build","target":site.id,"pos":plan.work_point}
 	if replace_intent:sim.actions.accept_order(engineer,task,sim.time)
 	else:sim.actions.activate_order(engineer,task,sim.time,"executor")
@@ -964,6 +985,8 @@ static func clear_site(sim,site_id:int,engineer_id:int)->bool:
 	if plan.reason!="":return fail(sim,"No route to the obstacle")
 	pause_builder(sim,engineer.id)
 	sim.Director.cancel(engineer)
+	sim.cancel_preparation(engineer)
+	sim.terrain.planning.cancel_owner(int(engineer.id))
 	sim.actions.accept_order(engineer,{"mode":"clear","target":site.id,"pos":plan.work_point},sim.time)
 	engineer.erase("provisional_before");engineer.erase("route_pending")
 	for member in engineer.members:sim.Infantry.Cover.clear(member)
@@ -993,6 +1016,8 @@ static func clear_wreck(sim,hull_id:int,engineer_id:int)->bool:
 	if plan.reason!="":return fail(sim,"No route to the wreck")
 	pause_builder(sim,engineer.id)
 	sim.Director.cancel(engineer)
+	sim.cancel_preparation(engineer)
+	sim.terrain.planning.cancel_owner(int(engineer.id))
 	sim.actions.accept_order(engineer,{"mode":"clear","target":hull_id,"pos":plan.work_point},sim.time)
 	engineer.erase("provisional_before");engineer.erase("route_pending")
 	for member in engineer.members:sim.Infantry.Cover.clear(member)
@@ -1032,15 +1057,22 @@ static func progress_wreck_clearing(sim,dt:float)->void:
 static func enemy_breach(sim)->void:
 	if int(sim.time*2.0)%2!=0:return
 	for u in sim.units:
-		if not sim.alive(u) or u.team!=1 or u.orders.is_empty() or float(u.get("blocked_time",0.0))<2.5:continue
-		if u.orders[0].mode=="attack":continue
+		if not sim.alive(u) or u.team!=1 or u.orders.is_empty() or float(u.get("blocked_time",0.0))<2.5:
+			sim.terrain.planning.cancel_request("routes",int(u.id),"enemy_breach")
+			continue
+		if u.orders[0].mode=="attack":
+			sim.terrain.planning.cancel_request("routes",int(u.id),"enemy_breach")
+			continue
 		var best:Dictionary={};var distance:=8.0
 		for site in sim.units:
 			if not sim.alive(site) or site.team!=0 or not can_clear(sim,site):continue
 			var d:float=site.pos.distance_to(u.pos)
 			if d<distance and sim.effective_unit(u,site.kind):distance=d;best=site
-		if best.is_empty():continue
-		u.orders.push_front({"mode":"attack","pos":best.pos,"target":best.id})
+		if best.is_empty():
+			sim.terrain.planning.cancel_request("routes",int(u.id),"enemy_breach")
+			continue
+		if not sim.terrain.planning.request("routes",int(u.id),"enemy_breach",1):continue
+		u.orders.push_front({"mode":"attack","pos":best.pos,"target":best.id,"internal_child":true})
 		u.path=sim.terrain.path(u.pos,best.pos,sim.definitions[u.kind].domain,float(sim.definitions[u.kind].radius),[],sim.terrain.mobility_profile(u.kind))
 		if u.path.is_empty():u.path=[best.pos]
 		u.blocked_time=0.0
@@ -1095,7 +1127,7 @@ static func switch_builder(sim,site:Dictionary)->int:
 # Engineers left idle (no orders, not building) pick up their queued segments.
 static func idle_engineers_continue(sim)->void:
 	for engineer in sim.units:
-		if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or engineer.has("building_id") or engineer.has("clearing_id") or not engineer.orders.is_empty() or engineer.get("combat_ineffective",false):continue
+		if not sim.alive(engineer) or engineer.team!=0 or engineer.kind!="engineer" or engineer.has("building_id") or engineer.has("clearing_id") or not engineer.orders.is_empty() or engineer.get("combat_ineffective",false) or engineer.get("hold_command",false):continue
 		if sim.units.any(func(s):return sim.alive(s) and s.get("queued_for",-1)==engineer.id and s.get("build_left",0.0)>0):
 			continue_queue(sim,engineer)
 
@@ -1201,15 +1233,17 @@ static func tick(sim,dt:float)->void:
 	if sim.field_ops.started:
 		if sim.counterattack_at<0 and sim.objectives.any(func(objective):return objective.owner==0):sim.counterattack_at=sim.time+OperationRules.reserve_delay(sim)
 		if sim.counterattack_at>=0 and sim.time>=sim.counterattack_at and not sim.counterattack_sent and enemy_logistics_alive(sim):
-			sim.counterattack_sent=true
-			var force:Array=[]
-			var sea_force:Array=[]
-			for record in reserve_records(sim):
-				var enemy:Dictionary=sim.spawn(record.kind,1,record.pos)
-				if not enemy.is_empty():
-					if sim.definitions[record.kind].domain=="sea":sea_force.append(enemy.id)
-					else:force.append(enemy.id)
-					sim.counterattack_ids.append(enemy.id)
-			sim.issue(force,reserve_target(sim),"attack_move")
-			if not sea_force.is_empty():sim.issue(sea_force,reserve_target(sim,"sea"),"attack_move")
+			if sim.terrain.planning.request("formation",-3,"reserve_spawn",1):
+				sim.counterattack_sent=true
+				var force:Array=[]
+				var sea_force:Array=[]
+				for record in reserve_records(sim):
+					var enemy:Dictionary=sim.spawn(record.kind,1,record.pos)
+					if not enemy.is_empty():
+						if sim.definitions[record.kind].domain=="sea":sea_force.append(enemy.id)
+						else:force.append(enemy.id)
+						sim.counterattack_ids.append(enemy.id)
+				sim.issue(force,reserve_target(sim),"attack_move")
+				if not sea_force.is_empty():sim.issue(sea_force,reserve_target(sim,"sea"),"attack_move")
+		else:sim.terrain.planning.cancel_request("formation",-3,"reserve_spawn")
 		if sim.living(0).filter(func(u):return not u.get("structure",false)).is_empty():sim.result="DEFEAT"

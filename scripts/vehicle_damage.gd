@@ -515,6 +515,9 @@ static func _route_round_wrecks(sim,u:Dictionary)->void:
 			if Geometry2D.get_closest_point_to_segment(wreck.pos,legs[k-1],legs[k]).distance_to(wreck.pos)<clearance:crossing=true;break
 		if crossing:break
 	if not crossing:return
+	# A denied detour keeps the current physical route and retries next tick;
+	# it is neither an unreachable goal nor a reason to start a failure delay.
+	if not sim.terrain.planning.request("routes",int(u.id),"wreck_detour",1):return
 	u["wreck_route_at"]=sim.time+0.5
 	var bodies:Array=[]
 	for wreck in sim.get_meta(WRECKS):
@@ -983,6 +986,7 @@ static func tick_recrew(sim,dt:float)->void:
 		job.done=float(job.done)+dt
 		section.reason="Re-crewing %d%%" % int(100.0*minf(1.0,float(job.done)/RECREW_SECONDS))
 		if float(job.done)>=RECREW_SECONDS:
+			if not sim.terrain.planning.request("formation",int(section.id),"recrew_spawn"):continue
 			jobs.remove_at(i)
 			var fresh:=_board(sim,section,hull)
 			# AI jobs: the vehicle and what is left of the section carry on.

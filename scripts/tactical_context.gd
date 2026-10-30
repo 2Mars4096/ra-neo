@@ -13,7 +13,7 @@ var observers:Dictionary={}
 
 func observe(team:int,target_id:int,kind:String,pos:Vector2,now:float,observer_id:int=-1,upload:bool=true)->void:
 	if team<0 or target_id<0 or not is_finite(now) or not pos.is_finite():return
-	var fact:Dictionary={"id":target_id,"kind":kind,"pos":pos,"observed_at":now,"observer_id":observer_id}
+	var fact:Dictionary={"id":target_id,"kind":kind,"pos":pos,"observed_at":now,"observer_id":observer_id,"source":"sensor"}
 	if observer_id>=0:
 		if not observers.has(observer_id) or int(observers[observer_id].team)!=team:
 			observers[observer_id]={"team":team,"contacts":{}}

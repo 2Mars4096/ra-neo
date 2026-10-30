@@ -1,11 +1,12 @@
 # Todo
 
-## Planned tactical expansion — 2026-10-27
+## Tactical expansion — M0 delivered, 2026-10-30
 
-Planning documents are prepared; implementation is not started. The user requested plans only. The [action catalogue](tactical-action-catalogue.md) distinguishes existing primitives, partial systems and new actions, with Core/Expansion/Optional delivery scope.
+The user authorized implementation starting with M0 on `codex/unit-tactics-implementation`. Readiness, targeting, strength, action ownership, observation memory and bounded planning are implemented and verified: 58/58 integration suites and three native captures pass. [18-1-1](plans/18-1-1-m0-foundation.md) records completion; [validation](validation.md) also records the remaining CPU hitch risk. The [action catalogue](tactical-action-catalogue.md) retains its planning-baseline classifications; M1 and later actions remain planned.
 
 - [ ] [18: Tactical actions and capable individual units](plans/18-unit-tactical-autonomy.md) — master milestones, shared contracts and acceptance gates.
   - [ ] [18-1: Action framework and readiness](plans/18-1-action-framework-and-readiness.md).
+    - [x] [18-1-1: M0 tactical foundation](plans/18-1-1-m0-foundation.md) — implemented; 58/58 integration suites, native review and current-build CPU evidence recorded.
   - [ ] [18-2: Infantry fire and movement](plans/18-2-infantry-fire-and-movement.md).
   - [ ] [18-3: Grenades and urban actions](plans/18-3-infantry-grenades-and-urban-actions.md).
   - [ ] [18-4: Coordination and support requests](plans/18-4-coordination-and-support-requests.md).
@@ -81,7 +82,7 @@ Planning documents are prepared; implementation is not started. The user request
 ## Open player requests (2026-10-15)
 
 - [x] Hitch reduction: spread nav-grid re-weighting (wetness change, 140-220 ms stalls) over frames and incrementally process queued path smoothing.
-- [ ] Pathfinding execution: initial A* still runs synchronously; complete the shared work budget and measure remaining spikes before choosing isolated workers ([18-12](plans/18-12-performance-and-validation.md)). The earlier combined checkbox overstated background pathfinding.
+- [ ] Pathfinding execution: M0 adds shared planning admission and incremental placement searches; initial A* still runs synchronously. The current Harbor sample reaches a 354.828 ms CPU tick, with 328.504 ms in field operations. Attribute and split the expensive work before adding load; evaluate isolated workers only with versioned navigation ownership ([18-12](plans/18-12-performance-and-validation.md)). The earlier combined checkbox overstated background pathfinding.
 - [ ] Renderer: Metal/Mobile measured 2026-10-15: engine process p95 18.6 -> 10.9 ms, frame p95 unchanged (~26 ms, sim-bound); harbor looks identical but Canal Watch and effect colours wash out (linear vs sRGB colour pipeline). Stayed on GL Compatibility; recalibrate colours before switching.
 - [x] Explosion VFX: ~3x larger, layered flash/fireball/shockwave/debris/dust column, camera shake; native screenshot review loop.
 - [x] World damage: buildings (damaged -> breached -> collapsed rubble, garrison casualties), field works degrade under HE, boats (flooding/engine/fire), helicopters (forced landing/crash), drones fragile, HE destroys nearby props/trees.

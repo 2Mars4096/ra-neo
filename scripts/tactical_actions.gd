@@ -58,12 +58,13 @@ func active(u:Dictionary,channel:String="unit")->Dictionary:
 
 func begin(u:Dictionary,kind:String,now:float,options:Dictionary={})->Dictionary:
 	ensure_unit(u)
+	if not is_finite(now):return {}
 	expire(u,now)
 	var channel:String=options.get("channel","unit")
 	var requested:Array=options.get("claims",[])
 	if kind.is_empty() or channel.is_empty() or requested.size()>MAX_CLAIMS:
 		_block(u,now,"invalid_action");return {}
-	if float(u.get("hp",1.0))<=0 or not options.get("available",true):
+	if not _available(u) or not options.get("available",true):
 		_block(u,now,"unavailable");return {}
 	if now<float(retry_after.get(_retry_key(u,kind,channel),-INF)):
 		_block(u,now,"backoff");return {}
@@ -95,14 +96,17 @@ func begin(u:Dictionary,kind:String,now:float,options:Dictionary={})->Dictionary
 
 func valid(u:Dictionary,action:Dictionary,now:float)->bool:
 	if not _owned(u,action):return false
-	return float(u.get("hp",1.0))>0 and int(action.version)==int(u.get("order_version",0)) \
+	return is_finite(now) and _available(u) and int(action.version)==int(u.get("order_version",0)) \
 		and int(action.assignment)==int(u.get("assignment",{}).get("id",0)) and now<float(action.deadline)
 
 func transition(u:Dictionary,action:Dictionary,phase:String,now:float,reason:String="")->bool:
-	if not _owned(u,action):return false
+	if not is_finite(now) or not _owned(u,action):return false
 	if not valid(u,action,now):
 		_cancel_invalid(u,action,now);return false
 	if phase=="failed":return fail(u,action,now,reason if not reason.is_empty() else phase)
+	# A reservation or preparation is not delivered work. An executor must enter
+	# execution before it can report completion; cancellation/failure remain legal.
+	if phase=="completed" and action.phase not in ["executing","recovering"]:return false
 	if phase in TERMINAL:return _finish(u,action,phase,now,reason if not reason.is_empty() else phase)
 	if phase==action.phase:return true
 	if phase not in NEXT.get(action.phase,[]):return false
@@ -112,6 +116,7 @@ func transition(u:Dictionary,action:Dictionary,phase:String,now:float,reason:Str
 	return true
 
 func commit(u:Dictionary,action:Dictionary,key:String,now:float)->bool:
+	if not is_finite(now):return false
 	if not valid(u,action,now):
 		if _owned(u,action):_cancel_invalid(u,action,now)
 		return false
@@ -124,14 +129,17 @@ func complete(u:Dictionary,action:Dictionary,now:float,reason:String="completed"
 	return transition(u,action,"completed",now,reason)
 
 func cancel(u:Dictionary,action:Dictionary,now:float,reason:String="cancelled")->bool:
-	if not _owned(u,action):return false
+	if not is_finite(now) or not _owned(u,action):return false
 	return _finish(u,action,"cancelled",now,reason)
 
 func fail(u:Dictionary,action:Dictionary,now:float,reason:String="blocked",retry_delay:float=1.0)->bool:
-	if not _owned(u,action):return false
+	if not is_finite(now) or not _owned(u,action):return false
+	if not _available(u):return cancel(u,action,now,"owner_lost")
+	if action.version!=u.get("order_version",0) or action.assignment!=u.get("assignment",{}).get("id",0):
+		return cancel(u,action,now,"stale_order")
 	var key:=_retry_key(u,action.kind,action.channel)
 	if not retry_after.has(key) and retry_after.size()>=MAX_BACKOFF:retry_after.erase(retry_after.keys()[0])
-	retry_after[key]=now+clampf(retry_delay,0.25,5.0)
+	retry_after[key]=now+clampf(retry_delay if is_finite(retry_delay) else 1.0,0.25,5.0)
 	return _finish(u,action,"failed",now,reason)
 
 func cancel_unit(u:Dictionary,now:float,reason:String="cancelled")->void:
@@ -140,14 +148,18 @@ func cancel_unit(u:Dictionary,now:float,reason:String="cancelled")->void:
 		if actions.has(id):cancel(u,actions[id],now,reason)
 
 func expire(u:Dictionary,now:float)->void:
+	if not is_finite(now):return
 	var channels:Dictionary=owners.get(int(u.id),{})
 	for id in channels.values().duplicate():
 		if actions.has(id) and not valid(u,actions[id],now):_cancel_invalid(u,actions[id],now)
 
 # Leases observe real legacy executor state, without spending resources twice.
 func observe_existing(u:Dictionary,channel:String,kind:String,now:float,target:Dictionary={},reason:String="",phase:String="executing")->Dictionary:
+	if not is_finite(now) or phase not in ["reserved","preparing","executing","recovering"]:return {}
 	var current:Dictionary=active(u,channel)
-	if not current.is_empty() and (not valid(u,current,now) or current.kind!=kind or current.target!=target):
+	if not current.is_empty() and not valid(u,current,now):
+		_cancel_invalid(u,current,now);current={}
+	if not current.is_empty() and (current.kind!=kind or current.target!=target):
 		cancel(u,current,now,"executor_changed");current={}
 	if current.is_empty():
 		current=begin(u,kind,now,{"channel":channel,"target":target,"deadline":now+OBSERVATION_LEASE,"reason":reason if not reason.is_empty() else kind})
@@ -182,7 +194,7 @@ static func engagement_allowed(u:Dictionary,target_id:int=-1,action_kind:String=
 	if assignment.get("version",-1)!=u.get("order_version",0):return false
 	if assignment.get("permission_revoked",false):return false
 	if assignment.get("mode","")!=action_kind:return false
-	if action_kind=="attack":
+	if action_kind in ["attack","bombard"]:
 		return target_id>=0 and target_id==int(assignment.get("target",-1))
 	if action_kind=="throw" and not assignment.get("permission_used",false):
 		if int(assignment.get("target",-1))>=0:return target_id==int(assignment.target)
@@ -219,11 +231,15 @@ func _owned(u:Dictionary,action:Dictionary)->bool:
 func _retry_key(u:Dictionary,kind:String,channel:String)->String:
 	return "%d:%s:%s"%[u.id,channel,kind]
 
+static func _available(u:Dictionary)->bool:
+	return float(u.get("hp",1.0))>0.0 and not u.get("combat_ineffective",false)
+
 func _cancel_invalid(u:Dictionary,action:Dictionary,now:float)->void:
 	var reason:="deadline"
-	if float(u.get("hp",1.0))<=0:reason="owner_lost"
+	if not _available(u):reason="owner_lost"
 	elif action.version!=u.get("order_version",0) or action.assignment!=u.get("assignment",{}).get("id",0):reason="stale_order"
-	cancel(u,action,now,reason)
+	if reason=="deadline":fail(u,action,now,reason)
+	else:cancel(u,action,now,reason)
 
 func _finish(u:Dictionary,action:Dictionary,phase:String,now:float,reason:String)->bool:
 	action.phase=phase

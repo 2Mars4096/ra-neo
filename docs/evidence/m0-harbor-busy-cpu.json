@@ -1,0 +1,2755 @@
+{
+  "admission": {
+    "minimum_active_contacts": 4,
+    "minimum_recent_shooters_per_team": 2,
+    "minimum_shots_last_10s": 20,
+    "minimum_warmup_seconds": 60.0,
+    "observed": {
+      "active_contacts": [
+        [
+          2,
+          4,
+          6,
+          8,
+          63,
+          64
+        ],
+        [
+          14,
+          53
+        ]
+      ],
+      "contact_count": 8,
+      "recent_shooters": [
+        [
+          2,
+          4,
+          6,
+          8,
+          63,
+          64
+        ],
+        [
+          15,
+          53
+        ]
+      ],
+      "shots_last_10s": 48
+    }
+  },
+  "after": {
+    "contact": {
+      "active_contacts": [
+        [
+          76
+        ],
+        [
+          13
+        ]
+      ],
+      "contact_count": 2,
+      "recent_shooters": [
+        [
+          8,
+          63,
+          65,
+          66,
+          68,
+          74
+        ],
+        [
+          13
+        ]
+      ],
+      "shots_last_10s": 22
+    },
+    "kills": 5,
+    "living_soldiers": [
+      20,
+      49
+    ],
+    "losses": 2,
+    "objectives": [
+      {
+        "contested": false,
+        "enemy_present": true,
+        "name": "HARBOR APPROACH",
+        "owner": 1,
+        "pos": "(340.0, 342.0)",
+        "progress": 0.0
+      },
+      {
+        "contested": false,
+        "enemy_present": false,
+        "name": "OLD TOWN",
+        "owner": 1,
+        "pos": "(345.0, 455.0)",
+        "progress": 5.46666666666666
+      },
+      {
+        "contested": false,
+        "enemy_present": true,
+        "name": "FREIGHT YARD",
+        "owner": 1,
+        "pos": "(715.0, 365.0)",
+        "progress": 0.0
+      }
+    ],
+    "player_orders": [
+      {
+        "id": 1,
+        "kind": "engineer",
+        "orders": [],
+        "pos": "(280.0, 680.0)",
+        "state": "READY"
+      },
+      {
+        "id": 3,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(339.7704, 465.2368)",
+        "state": "MOVING"
+      },
+      {
+        "id": 4,
+        "kind": "atgm",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(352.6, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(317.8378, 474.634)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 5,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(339.4, 460.6)",
+            "target": -1
+          }
+        ],
+        "pos": "(321.8756, 492.9625)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 6,
+        "kind": "aa",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(345.0, 460.6)",
+            "target": -1
+          }
+        ],
+        "pos": "(321.4539, 481.4937)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 8,
+        "kind": "helo",
+        "orders": [],
+        "pos": "(341.6695, 466.5286)",
+        "state": "READY"
+      },
+      {
+        "id": 9,
+        "kind": "boat",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(650.0, 285.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(350.8084, 291.4017)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 63,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(338.3321, 457.1497)",
+            "target": -1
+          }
+        ],
+        "pos": "(327.0793, 480.7531)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 64,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(343.5034, 452.4)",
+            "target": -1
+          }
+        ],
+        "pos": "(342.2792, 457.2254)",
+        "state": "REPOSITIONING"
+      },
+      {
+        "id": 65,
+        "kind": "atgm",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(336.9126, 450.6626)",
+            "target": -1
+          }
+        ],
+        "pos": "(330.043, 458.1621)",
+        "state": "YIELDING"
+      },
+      {
+        "id": 66,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(334.5593, 468.6477)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 67,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(343.4314, 457.9577)",
+            "target": -1
+          }
+        ],
+        "pos": "(310.2738, 464.7075)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 68,
+        "kind": "aa",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(320.6107, 460.6036)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 69,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(337.4621, 456.5688)",
+            "target": -1
+          }
+        ],
+        "pos": "(315.4989, 474.4667)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 70,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(347.5231, 459.3167)",
+            "target": -1
+          }
+        ],
+        "pos": "(328.8454, 461.8966)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 71,
+        "kind": "atgm",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(334.458, 455.7592)",
+            "target": -1
+          }
+        ],
+        "pos": "(322.416, 465.0735)",
+        "state": "ENGAGING"
+      },
+      {
+        "id": 72,
+        "kind": "tank",
+        "orders": [
+          {
+            "give_way": true,
+            "mode": "move",
+            "pos": "(320.5681, 501.3843)",
+            "target": -1
+          },
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(305.9642, 503.1882)",
+        "state": "MOVING"
+      },
+      {
+        "id": 73,
+        "kind": "rifle",
+        "orders": [],
+        "pos": "(322.6087, 459.7285)",
+        "state": "READY"
+      },
+      {
+        "id": 74,
+        "kind": "aa",
+        "orders": [
+          {
+            "give_way": true,
+            "mode": "move",
+            "pos": "(320.491, 457.14)",
+            "target": -1
+          },
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(321.3804, 466.486)",
+        "state": "YIELDING"
+      },
+      {
+        "id": 75,
+        "kind": "tank",
+        "orders": [
+          {
+            "give_way": true,
+            "mode": "move",
+            "pos": "(322.8802, 475.0637)",
+            "target": -1
+          },
+          {
+            "mode": "attack_move",
+            "pos": "(337.6053, 456.6825)",
+            "target": -1
+          }
+        ],
+        "pos": "(322.7751, 474.9269)",
+        "state": "MOVING"
+      },
+      {
+        "id": 76,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.627, 450.2204)",
+            "target": -1
+          }
+        ],
+        "pos": "(332.5939, 446.0067)",
+        "state": "ENGAGING"
+      },
+      {
+        "id": 77,
+        "kind": "atgm",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(341.2314, 448.2438)",
+            "target": -1
+          }
+        ],
+        "pos": "(315.456, 464.1685)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 78,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(326.6158, 485.7902)",
+        "state": "YIELDING"
+      },
+      {
+        "id": 79,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(342.9195, 462.7247)",
+            "target": -1
+          }
+        ],
+        "pos": "(319.0397, 463.7878)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 80,
+        "kind": "aa",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(282.0776, 618.0812)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 87,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(342.0862, 457.6044)",
+            "target": -1
+          }
+        ],
+        "pos": "(285.4777, 673.9926)",
+        "state": "ADVANCING"
+      }
+    ],
+    "seconds": 103.999999999997,
+    "supply": 724.000000000133,
+    "units_by_team_kind": [
+      {
+        "aa": 4,
+        "atgm": 4,
+        "boat": 1,
+        "engineer": 1,
+        "helo": 1,
+        "rifle": 7,
+        "tank": 8
+      },
+      {
+        "aa": 1,
+        "ammo_depot": 2,
+        "at_gun": 1,
+        "atgm": 6,
+        "boat": 2,
+        "bunker": 2,
+        "command_post": 2,
+        "concertina_wire": 4,
+        "drone": 2,
+        "fighting_trench": 5,
+        "helo": 1,
+        "rifle": 17,
+        "tank": 6,
+        "tank_obstacles": 1
+      }
+    ],
+    "visible_enemies": 7
+  },
+  "before": {
+    "contact": {
+      "active_contacts": [
+        [
+          2,
+          4,
+          6,
+          8,
+          63,
+          64
+        ],
+        [
+          14,
+          53
+        ]
+      ],
+      "contact_count": 8,
+      "recent_shooters": [
+        [
+          2,
+          4,
+          6,
+          8,
+          63,
+          64
+        ],
+        [
+          15,
+          53
+        ]
+      ],
+      "shots_last_10s": 48
+    },
+    "kills": 1,
+    "living_soldiers": [
+      32,
+      42
+    ],
+    "losses": 1,
+    "objectives": [
+      {
+        "contested": false,
+        "enemy_present": true,
+        "name": "HARBOR APPROACH",
+        "owner": 1,
+        "pos": "(340.0, 342.0)",
+        "progress": 0.0
+      },
+      {
+        "contested": false,
+        "enemy_present": true,
+        "name": "OLD TOWN",
+        "owner": 1,
+        "pos": "(345.0, 455.0)",
+        "progress": 0.0
+      },
+      {
+        "contested": false,
+        "enemy_present": true,
+        "name": "FREIGHT YARD",
+        "owner": 1,
+        "pos": "(715.0, 365.0)",
+        "progress": 0.0
+      }
+    ],
+    "player_orders": [
+      {
+        "id": 1,
+        "kind": "engineer",
+        "orders": [],
+        "pos": "(280.0, 680.0)",
+        "state": "READY"
+      },
+      {
+        "id": 2,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(339.4, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(317.1412, 457.3474)",
+        "state": "ENGAGING"
+      },
+      {
+        "id": 3,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(294.075, 475.2437)",
+        "state": "RETREATING"
+      },
+      {
+        "id": 4,
+        "kind": "atgm",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(352.6, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(307.9269, 471.4667)",
+        "state": "ENGAGING"
+      },
+      {
+        "id": 5,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(339.4, 460.6)",
+            "target": -1
+          }
+        ],
+        "pos": "(320.2955, 500.142)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 6,
+        "kind": "aa",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(345.0, 460.6)",
+            "target": -1
+          }
+        ],
+        "pos": "(320.9794, 489.8868)",
+        "state": "ENGAGING"
+      },
+      {
+        "id": 8,
+        "kind": "helo",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(341.6695, 466.5286)",
+            "target": -1
+          }
+        ],
+        "pos": "(338.3158, 489.1338)",
+        "state": "ENGAGING"
+      },
+      {
+        "id": 9,
+        "kind": "boat",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(330.0, 290.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(195.5173, 304.876)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 63,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(339.4, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(326.0006, 490.2475)",
+        "state": "ENGAGING"
+      },
+      {
+        "id": 64,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(343.5034, 452.4)",
+            "target": -1
+          }
+        ],
+        "pos": "(312.1086, 464.1859)",
+        "state": "ENGAGING"
+      },
+      {
+        "id": 65,
+        "kind": "atgm",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(336.9126, 450.6626)",
+            "target": -1
+          }
+        ],
+        "pos": "(305.2899, 465.5626)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 66,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(309.6257, 503.3971)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 67,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(343.4314, 457.9577)",
+            "target": -1
+          }
+        ],
+        "pos": "(310.8804, 466.3682)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 68,
+        "kind": "aa",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(316.54, 494.2855)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 69,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(339.4, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(313.7208, 499.5218)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 70,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(347.5231, 459.3167)",
+            "target": -1
+          }
+        ],
+        "pos": "(294.2563, 484.7792)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 71,
+        "kind": "atgm",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(334.458, 455.7592)",
+            "target": -1
+          }
+        ],
+        "pos": "(291.2905, 512.0705)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 72,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(288.8964, 530.1583)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 73,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(338.0918, 459.8258)",
+            "target": -1
+          }
+        ],
+        "pos": "(294.1144, 512.629)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 74,
+        "kind": "aa",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(296.1057, 523.5387)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 75,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(339.4, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(294.4911, 531.7469)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 76,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.627, 450.2204)",
+            "target": -1
+          }
+        ],
+        "pos": "(293.9941, 526.5039)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 77,
+        "kind": "atgm",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(341.2314, 448.2438)",
+            "target": -1
+          }
+        ],
+        "pos": "(284.5035, 574.7019)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 78,
+        "kind": "tank",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(348.0, 455.0)",
+            "target": -1
+          }
+        ],
+        "pos": "(287.4952, 571.2171)",
+        "state": "ADVANCING"
+      },
+      {
+        "id": 79,
+        "kind": "rifle",
+        "orders": [
+          {
+            "mode": "attack_move",
+            "pos": "(342.9195, 462.7247)",
+            "target": -1
+          }
+        ],
+        "pos": "(282.0, 586.3151)",
+        "state": "ADVANCING"
+      }
+    ],
+    "seconds": 73.9999999999984,
+    "supply": 944.000000000092,
+    "units_by_team_kind": [
+      {
+        "aa": 3,
+        "atgm": 4,
+        "boat": 1,
+        "engineer": 1,
+        "helo": 1,
+        "rifle": 8,
+        "tank": 7
+      },
+      {
+        "aa": 2,
+        "ammo_depot": 2,
+        "at_gun": 2,
+        "atgm": 5,
+        "boat": 2,
+        "bunker": 3,
+        "command_post": 2,
+        "concertina_wire": 6,
+        "drone": 1,
+        "fighting_trench": 5,
+        "helo": 1,
+        "rifle": 14,
+        "tank": 6,
+        "tank_obstacles": 1
+      }
+    ],
+    "visible_enemies": 10
+  },
+  "command_api_costs": [
+    {
+      "ms": 1.137,
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.012,
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.008,
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.008,
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.007,
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.007,
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.008,
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "ms": 25.197,
+      "seconds": 0.0,
+      "sections": 5,
+      "type": "order"
+    },
+    {
+      "ms": 0.126,
+      "seconds": 0.0,
+      "sections": 1,
+      "type": "order"
+    },
+    {
+      "ms": 0.109,
+      "seconds": 0.0,
+      "sections": 1,
+      "type": "order"
+    },
+    {
+      "ms": 0.562,
+      "seconds": 0.0,
+      "sections": 1,
+      "type": "order"
+    },
+    {
+      "ms": 0.029,
+      "seconds": 5.99999999999999,
+      "type": "purchase"
+    },
+    {
+      "ms": 36.109,
+      "seconds": 5.99999999999999,
+      "sections": 2,
+      "type": "order"
+    },
+    {
+      "ms": 0.026,
+      "seconds": 12.0,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.009,
+      "seconds": 12.0,
+      "type": "purchase"
+    },
+    {
+      "ms": 36.815,
+      "seconds": 12.0,
+      "sections": 2,
+      "type": "order"
+    },
+    {
+      "ms": 0.026,
+      "seconds": 18.0000000000001,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.009,
+      "seconds": 18.0000000000001,
+      "type": "purchase"
+    },
+    {
+      "ms": 36.906,
+      "seconds": 18.0000000000001,
+      "sections": 2,
+      "type": "order"
+    },
+    {
+      "ms": 0.026,
+      "seconds": 24.0000000000004,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.009,
+      "seconds": 24.0000000000004,
+      "type": "purchase"
+    },
+    {
+      "ms": 35.11,
+      "seconds": 24.0000000000004,
+      "sections": 2,
+      "type": "order"
+    },
+    {
+      "ms": 0.023,
+      "seconds": 30.0000000000007,
+      "type": "purchase"
+    },
+    {
+      "ms": 0.008,
+      "seconds": 30.0000000000007,
+      "type": "purchase"
+    },
+    {
+      "ms": 31.916,
+      "seconds": 30.0000000000007,
+      "sections": 2,
+      "type": "order"
+    },
+    {
+      "ms": 0.033,
+      "seconds": 36.0000000000005,
+      "type": "purchase"
+    },
+    {
+      "ms": 36.84,
+      "seconds": 36.0000000000005,
+      "sections": 2,
+      "type": "order"
+    },
+    {
+      "ms": 45.795,
+      "seconds": 42.0000000000002,
+      "sections": 2,
+      "type": "order"
+    },
+    {
+      "ms": 43.07,
+      "seconds": 47.9999999999998,
+      "sections": 2,
+      "type": "order"
+    },
+    {
+      "ms": 18.548,
+      "seconds": 53.9999999999995,
+      "sections": 1,
+      "type": "order"
+    },
+    {
+      "ms": 0.674,
+      "seconds": 65.9999999999988,
+      "sections": 1,
+      "type": "order"
+    },
+    {
+      "ms": 0.962,
+      "seconds": 83.9999999999978,
+      "type": "purchase"
+    },
+    {
+      "ms": 22.791,
+      "seconds": 89.9999999999975,
+      "sections": 1,
+      "type": "order"
+    },
+    {
+      "ms": 1.438,
+      "seconds": 95.9999999999971,
+      "type": "purchase"
+    },
+    {
+      "ms": 1.699,
+      "seconds": 95.9999999999971,
+      "sections": 1,
+      "type": "order"
+    },
+    {
+      "ms": 22.733,
+      "seconds": 101.999999999997,
+      "sections": 1,
+      "type": "order"
+    }
+  ],
+  "commands": [
+    {
+      "cost": 220.0,
+      "kind": "tank",
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "cost": 100.0,
+      "kind": "rifle",
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "cost": 140.0,
+      "kind": "atgm",
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "cost": 220.0,
+      "kind": "tank",
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "cost": 100.0,
+      "kind": "rifle",
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "cost": 180.0,
+      "kind": "aa",
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "cost": 220.0,
+      "kind": "tank",
+      "seconds": 0.0,
+      "type": "purchase"
+    },
+    {
+      "accepted": 5,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "mode": "attack_move",
+      "seconds": 0.0,
+      "type": "order"
+    },
+    {
+      "accepted": 1,
+      "goal": [
+        337.783966064453,
+        479.978576660156
+      ],
+      "ids": [
+        7
+      ],
+      "mode": "move",
+      "seconds": 0.0,
+      "type": "order"
+    },
+    {
+      "accepted": 1,
+      "goal": [
+        341.669525146484,
+        466.528564453125
+      ],
+      "ids": [
+        8
+      ],
+      "mode": "attack_move",
+      "seconds": 0.0,
+      "type": "order"
+    },
+    {
+      "accepted": 1,
+      "goal": [
+        160.0,
+        295.0
+      ],
+      "ids": [
+        9
+      ],
+      "mode": "attack_move",
+      "seconds": 0.0,
+      "type": "order"
+    },
+    {
+      "cost": 100.0,
+      "kind": "rifle",
+      "seconds": 5.99999999999999,
+      "type": "purchase"
+    },
+    {
+      "accepted": 2,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        63,
+        64
+      ],
+      "mode": "attack_move",
+      "seconds": 5.99999999999999,
+      "type": "order"
+    },
+    {
+      "cost": 140.0,
+      "kind": "atgm",
+      "seconds": 12.0,
+      "type": "purchase"
+    },
+    {
+      "cost": 220.0,
+      "kind": "tank",
+      "seconds": 12.0,
+      "type": "purchase"
+    },
+    {
+      "accepted": 2,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        65,
+        66
+      ],
+      "mode": "attack_move",
+      "seconds": 12.0,
+      "type": "order"
+    },
+    {
+      "cost": 100.0,
+      "kind": "rifle",
+      "seconds": 18.0000000000001,
+      "type": "purchase"
+    },
+    {
+      "cost": 180.0,
+      "kind": "aa",
+      "seconds": 18.0000000000001,
+      "type": "purchase"
+    },
+    {
+      "accepted": 2,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        67,
+        68
+      ],
+      "mode": "attack_move",
+      "seconds": 18.0000000000001,
+      "type": "order"
+    },
+    {
+      "cost": 220.0,
+      "kind": "tank",
+      "seconds": 24.0000000000004,
+      "type": "purchase"
+    },
+    {
+      "cost": 100.0,
+      "kind": "rifle",
+      "seconds": 24.0000000000004,
+      "type": "purchase"
+    },
+    {
+      "accepted": 2,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        69,
+        70
+      ],
+      "mode": "attack_move",
+      "seconds": 24.0000000000004,
+      "type": "order"
+    },
+    {
+      "cost": 140.0,
+      "kind": "atgm",
+      "seconds": 30.0000000000007,
+      "type": "purchase"
+    },
+    {
+      "cost": 220.0,
+      "kind": "tank",
+      "seconds": 30.0000000000007,
+      "type": "purchase"
+    },
+    {
+      "accepted": 2,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        71,
+        72
+      ],
+      "mode": "attack_move",
+      "seconds": 30.0000000000007,
+      "type": "order"
+    },
+    {
+      "cost": 100.0,
+      "kind": "rifle",
+      "seconds": 36.0000000000005,
+      "type": "purchase"
+    },
+    {
+      "accepted": 2,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        73,
+        74
+      ],
+      "mode": "attack_move",
+      "seconds": 36.0000000000005,
+      "type": "order"
+    },
+    {
+      "accepted": 2,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        75,
+        76
+      ],
+      "mode": "attack_move",
+      "seconds": 42.0000000000002,
+      "type": "order"
+    },
+    {
+      "accepted": 2,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        77,
+        78
+      ],
+      "mode": "attack_move",
+      "seconds": 47.9999999999998,
+      "type": "order"
+    },
+    {
+      "accepted": 1,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        79
+      ],
+      "mode": "attack_move",
+      "seconds": 53.9999999999995,
+      "type": "order"
+    },
+    {
+      "accepted": 1,
+      "goal": [
+        330.0,
+        290.0
+      ],
+      "ids": [
+        9
+      ],
+      "mode": "attack_move",
+      "seconds": 65.9999999999988,
+      "type": "order"
+    },
+    {
+      "cost": 180.0,
+      "kind": "aa",
+      "seconds": 83.9999999999978,
+      "type": "purchase"
+    },
+    {
+      "accepted": 1,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        80
+      ],
+      "mode": "attack_move",
+      "seconds": 89.9999999999975,
+      "type": "order"
+    },
+    {
+      "cost": 220.0,
+      "kind": "tank",
+      "seconds": 95.9999999999971,
+      "type": "purchase"
+    },
+    {
+      "accepted": 1,
+      "goal": [
+        650.0,
+        285.0
+      ],
+      "ids": [
+        9
+      ],
+      "mode": "attack_move",
+      "seconds": 95.9999999999971,
+      "type": "order"
+    },
+    {
+      "accepted": 1,
+      "goal": [
+        345.0,
+        455.0
+      ],
+      "ids": [
+        87
+      ],
+      "mode": "attack_move",
+      "seconds": 101.999999999997,
+      "type": "order"
+    }
+  ],
+  "cpu": "AMD EPYC 9V74 80-Core Processor",
+  "engine": {
+    "build": "official",
+    "hash": "f62fdbde15035c5576dad93e586201f4d41ef0cb",
+    "hex": 263425,
+    "major": 4,
+    "minor": 5,
+    "patch": 1,
+    "status": "stable",
+    "string": "4.5.1-stable (official)",
+    "timestamp": 0
+  },
+  "events": {
+    "building_damage": 13,
+    "crushed": 18,
+    "decision": 82,
+    "destroyed": 7,
+    "missile_impact": 5,
+    "reinforcement": 19,
+    "shot": 242,
+    "vehicle_damage": 10,
+    "warning": 6,
+    "world_blast": 4
+  },
+  "failures": [],
+  "fingerprints": [
+    {
+      "sha256": "7f06928332a2f3641ad62c6f9f6871b8eefdc730f188730ca26ae0a14286f4de",
+      "tick": 30
+    },
+    {
+      "sha256": "9d3b1bf4b8831d79d4e10275fa45ce2a68051f8ecd228b79069ba7c7b9552404",
+      "tick": 60
+    },
+    {
+      "sha256": "e4904c825b831295f34180bfad2e6dde256f8cb996fc9df1c5e54d534f764f58",
+      "tick": 90
+    },
+    {
+      "sha256": "fa586e5ae6c8bb48e69066a877c2a78143a00b99c524dea33bdec3b239f0606e",
+      "tick": 120
+    },
+    {
+      "sha256": "a7eadb1424ce13687fce21c2938a50d3fdcaec78f3573ab38a86b6890f08b09d",
+      "tick": 150
+    },
+    {
+      "sha256": "4d5996b1a96f2832f3a33cccc2bf644e192c4308d2508f1be7370e7eed802a64",
+      "tick": 180
+    },
+    {
+      "sha256": "b0a707275bd6b895633d3140b259e12a1ac9610efa26a3adc0d53577336b06e6",
+      "tick": 210
+    },
+    {
+      "sha256": "3baf6f81f7cc4f6c2f67a9f6660cbff24fe6b4814372344d440608cbf9d49c29",
+      "tick": 240
+    },
+    {
+      "sha256": "12a7ffc56993c9b1f5f7432bdee0fdcf4fe619cbeb47fd327057c1488323802b",
+      "tick": 270
+    },
+    {
+      "sha256": "90411a9f3631676ecbb903746532d18cf339ccb8e3947e7577682d945dc3513c",
+      "tick": 300
+    },
+    {
+      "sha256": "63af7e2a758fc1294896e0fd9415b3a82e4d8d1d03228908f62e71624ea18c49",
+      "tick": 330
+    },
+    {
+      "sha256": "35d9c47dbf05b936cf4651ec16985b2d4d8cdc3c02bbdd4312358c18dc8ec9b1",
+      "tick": 360
+    },
+    {
+      "sha256": "bdc68aa581acffa1161565a9753baed93ba7afae2f1b58a1cd0efe8df92cff28",
+      "tick": 390
+    },
+    {
+      "sha256": "e69d238230b9b97189021e7c7e009f51ff37c5cca353e5e2beb969c490d8cc89",
+      "tick": 420
+    },
+    {
+      "sha256": "82af217b9ee29dcab8ee32c9556a18571c6fbaf45942dea5f6451042fe677d68",
+      "tick": 450
+    },
+    {
+      "sha256": "b7e061521490c4d7ef726cf7257b1cc25344098f8d6429094542eed9cb55ec84",
+      "tick": 480
+    },
+    {
+      "sha256": "458304d4e76afb9047660460e356a6ae74c308cf0d3d9c4f1e1f4ef5f3604c89",
+      "tick": 510
+    },
+    {
+      "sha256": "d05e77b6555888de5e4e16f481151ccf2cc5337df5b840f35455677d9074f796",
+      "tick": 540
+    },
+    {
+      "sha256": "6f07d61296d32154356b7bb6ebabb78b052051d9d1f24db0f40e74aa1cda6c63",
+      "tick": 570
+    },
+    {
+      "sha256": "97b659638c999d875ec77412bd24bbad6ef892bebf7f9f2657bca8d25b9e41fa",
+      "tick": 600
+    },
+    {
+      "sha256": "99b6565ef02d96d5034759557dc4574bd5349a770522653f86afeb0614ffbd0f",
+      "tick": 630
+    },
+    {
+      "sha256": "35b62ef7019982e92c227c3c88497fad08ef111d0220961ea6181dd031dd859f",
+      "tick": 660
+    },
+    {
+      "sha256": "47ad7f0e8ed527804d3ac08e3e960bcc245a2c62a25466280070de0ddd56551f",
+      "tick": 690
+    },
+    {
+      "sha256": "50df02e38a6426c6d369dbaf696fcf221d66afc5ec1abe310a994370e07b42ce",
+      "tick": 720
+    },
+    {
+      "sha256": "0f4abfc640c6df82b8bbc160b3ed411f13a1d161ba1fe8790b828d3e50af0548",
+      "tick": 750
+    },
+    {
+      "sha256": "da57a7907c849a99497c820386265e233129bad6cc281d74927748b4aa4b48d0",
+      "tick": 780
+    },
+    {
+      "sha256": "6bd9072c0266861e490d2a1b3c2cc46259c73da09527443698eb39df73d853a0",
+      "tick": 810
+    },
+    {
+      "sha256": "8161ea3aec4946f08b45f625026139ce53c7c452d1b77d856a132d77029a28ea",
+      "tick": 840
+    },
+    {
+      "sha256": "6f05379a1bbfe9a730d3ebbbdda38af6af77ffee84adf3967664c9a47f1ef67f",
+      "tick": 870
+    },
+    {
+      "sha256": "8ecfd76e0cb8d61144d61f4d7fd057640f5f18fcc4940cc867f5ef5b64056bec",
+      "tick": 900
+    },
+    {
+      "sha256": "82af92e155d81475ce1505071686677003ff03700e547f561447f3c846caad59",
+      "tick": 930
+    },
+    {
+      "sha256": "3d9fd661a6837c9e71e3f3f47ccd0a0f4b6e7ff2e416cb94b43e9ab1d10fe794",
+      "tick": 960
+    },
+    {
+      "sha256": "8052cf935d6e704b58843b0ed0160a194eab44c1cb91796b91062055b267b446",
+      "tick": 990
+    },
+    {
+      "sha256": "82321f57a0b818121b0721c026aea5463d7cff7b8e2c92ace286062ed803fdfa",
+      "tick": 1020
+    },
+    {
+      "sha256": "84615215ebdfa0f5d6a845efc66d3165554e7c29c7474251db49916bd2a7ccbe",
+      "tick": 1050
+    },
+    {
+      "sha256": "c350de4b677e0f56dbb208b577ba630278600d085ddf5775c12de9927bf9d1f0",
+      "tick": 1080
+    },
+    {
+      "sha256": "6c085be930bffd44a5a796122e323619d747970c062d459190946a167652f35d",
+      "tick": 1110
+    },
+    {
+      "sha256": "2d710809d867a6c3385b7c889a69f8bdc4fdacff4b32e4b19b02d2175957a423",
+      "tick": 1140
+    },
+    {
+      "sha256": "440b9baea8393f75c60f493b4f6e19705609475d664f83f8f06c42f4a7d6ebee",
+      "tick": 1170
+    },
+    {
+      "sha256": "49e5f073cab6c02eb7373dba032df3156fa13592af74cc7d30f8925a80b51fee",
+      "tick": 1200
+    },
+    {
+      "sha256": "a05d16c8b44af8854211a258f7af66a5957f4b199f954c09d159451617cdf284",
+      "tick": 1230
+    },
+    {
+      "sha256": "8c626c84bbbf8669d878658db69266eb73e7de65cce3f428054b0cb33f865a3a",
+      "tick": 1260
+    },
+    {
+      "sha256": "a6e7f5d133cac7f1f1a7d3d442716416631a247d9035d1d088343ec5433a511d",
+      "tick": 1290
+    },
+    {
+      "sha256": "83c3f30998b2038f554d9dce21906a82e4899136cfb6e13fc9d4446473c05e80",
+      "tick": 1320
+    },
+    {
+      "sha256": "da3a543f29daedb1e44311174f3f490548b62b7cbba7838e25ae66b1612078b0",
+      "tick": 1350
+    },
+    {
+      "sha256": "04d85bba9770f92169309daddcdb3607d7b857a13031050d0e0c3ab4256eecf6",
+      "tick": 1380
+    },
+    {
+      "sha256": "935852eef649fb2d2b108c9c3ddb6a7976a3c45cd4e847437d9e5b57c60197b6",
+      "tick": 1410
+    },
+    {
+      "sha256": "6dc8dc6852b362ef47f29914c1f0b2ab7b1ae14cf193f0d46f28022c46643bf7",
+      "tick": 1440
+    },
+    {
+      "sha256": "a706408a7720f2148d24a4da705e4dda19c59ab0636f1e7c5de131610953ed94",
+      "tick": 1470
+    },
+    {
+      "sha256": "05ee99c563b792826a2605eec49a80d2fd7c9725a338266ff6438b093d64be29",
+      "tick": 1500
+    },
+    {
+      "sha256": "38117d4e0949f1ce067078a5b461596ce15b6fbd6011d86964c8a3c19427bac9",
+      "tick": 1530
+    },
+    {
+      "sha256": "f10987565fb84df0bbd1a590bc96f5658056b4f9f162e4debbdbf8a6f5e3c193",
+      "tick": 1560
+    },
+    {
+      "sha256": "afbbf0af7af92c2c74d115121c8c1bd9b4c3864bef41fff8a14b44b69b621f89",
+      "tick": 1590
+    },
+    {
+      "sha256": "381ef81cecc7e431cf5a9ed91d40a26a8a6ee0cf3fdd3af966c0d8f361fe086f",
+      "tick": 1620
+    },
+    {
+      "sha256": "3e4c1a2608ce39f70a0dfb17b9062092ccbdf4cac46dcf6cb725a54c31fc7996",
+      "tick": 1650
+    },
+    {
+      "sha256": "1e8fc636b507830654d0edb551cdd14bb7f2bf5dbff453cd5bc8e969825ced63",
+      "tick": 1680
+    },
+    {
+      "sha256": "c928de82b40fde189dee3c85bd2340113cd7448ab5dc95e227602d0f4562cb79",
+      "tick": 1710
+    },
+    {
+      "sha256": "9ac18bf1752261a8a8ef09d5caa614ea1436cfb7270974574ac89eca650f1180",
+      "tick": 1740
+    },
+    {
+      "sha256": "9a640f44b7da9eec0d092f1f33b10080b3e578e6b1302d214e836e0adc38cc32",
+      "tick": 1770
+    },
+    {
+      "sha256": "1901cc459535decae253a32f296caa23b241925629e5cf09b349678464448977",
+      "tick": 1800
+    },
+    {
+      "sha256": "7900b6d5efe024f4d2cdb4935d6a6e75d7ac4924c11bffaf515a95ff449c46f5",
+      "tick": 1830
+    },
+    {
+      "sha256": "0eacd459f5b6a06beafe02c07089f0df27bda710be38654609076233d88505c8",
+      "tick": 1860
+    },
+    {
+      "sha256": "704dc566a8a2332544a86cf531949244ef6455f4f641e4de7b1b39be9bd607bc",
+      "tick": 1890
+    },
+    {
+      "sha256": "7f8bf890957bc81a596e72c4e827b99f9e18f27b793dda4b7438913e79c9e4c1",
+      "tick": 1920
+    },
+    {
+      "sha256": "732149c1aad90884c0338836607bfc848f04ff0a960c30ee46dd502996985d00",
+      "tick": 1950
+    },
+    {
+      "sha256": "c60eefc2e2c4d35fe88d8dd2da4d1792d576d289421c1765679a2b21912e9f23",
+      "tick": 1980
+    },
+    {
+      "sha256": "4b52b32ef91e01f09b59583d4e926e40a2a26f047232f9e5b49c83e065fc18c5",
+      "tick": 2010
+    },
+    {
+      "sha256": "56f61355cf22a58e2421861f6f5a439deea456337375b04a48235cf6cf301ef8",
+      "tick": 2040
+    },
+    {
+      "sha256": "870ec72e02cd157026cdc94e42ce40cc9faace95a2ccdf2ed8aabc76f5edbb08",
+      "tick": 2070
+    },
+    {
+      "sha256": "a758e117dba73c4600990668c59806c3e9a3cfc5765e721ec0b14896ceb621ef",
+      "tick": 2100
+    },
+    {
+      "sha256": "046fc4f96a2b5f6d1ee56b2673cbb9610ab3dd0a128c3fcc77b4f4c5142b4d16",
+      "tick": 2130
+    },
+    {
+      "sha256": "cbd59e147125454522bfd4d55bc5eb07c17514106cce7ab42421edf3d472a806",
+      "tick": 2160
+    },
+    {
+      "sha256": "ef52ca3066b4e70c68932cda94056bacbd1c5c65d39df571c9648170d4c58ff6",
+      "tick": 2190
+    },
+    {
+      "sha256": "d5bd4f4f1a15d7524f36df4194ddd9fb7f12b1263ebe6cb4f2554c2d692d1a1c",
+      "tick": 2220
+    },
+    {
+      "sha256": "0779d20fdcc5e86e825cdc970691111fdb436867cb75d048ce73f8ef5fb7cbde",
+      "tick": 2250
+    },
+    {
+      "sha256": "5f66ea7a9186f6a97a7013cdd20a11b55f70119e26660a0795355db5d8f7c7d8",
+      "tick": 2280
+    },
+    {
+      "sha256": "f420b3cadfcb9e27abc9e370fdd16126ec42e78ad76bc68e880b0c316c39f2e5",
+      "tick": 2310
+    },
+    {
+      "sha256": "39e28ed88eab21daddfea11bc4155eb226c1f08a43f1805024d5caa780bf978c",
+      "tick": 2340
+    },
+    {
+      "sha256": "72d358de5c338bffaf9601bf5ad0b6ffa27400a960c4b301d97964e5e7aec2f6",
+      "tick": 2370
+    },
+    {
+      "sha256": "e7336c1b7f71b8234374d8769d3e993836ee751d33aad698c7475020b29096bc",
+      "tick": 2400
+    },
+    {
+      "sha256": "aff4ff29553d434ca8ead82b9de48d0add06cbef36287b21f477e1091460dcbc",
+      "tick": 2430
+    },
+    {
+      "sha256": "edcd201cd0f11b8f1932086d99f6ea9149188b062c446c4aadeb037f94437740",
+      "tick": 2460
+    },
+    {
+      "sha256": "ad078721d39896f8042df86a6f4e02dba9022ea270a7c3eb478e2071919999ef",
+      "tick": 2490
+    },
+    {
+      "sha256": "1ecf107352a27a2506e96a4332b758d43471b04caa04d3e9c87d732c44569f8d",
+      "tick": 2520
+    },
+    {
+      "sha256": "930f96427b2de3df9526606efc259221b1631d83c7f3d803ae08b85c7174c1c6",
+      "tick": 2550
+    },
+    {
+      "sha256": "694a9b746aa13e13093b4d5a1cf7758a0b0df725ba8916dcf0dc14f15a043331",
+      "tick": 2580
+    },
+    {
+      "sha256": "30e4a982fe390f7c4636753919bf1587683f5be00a22c05d9fc595046789a65d",
+      "tick": 2610
+    },
+    {
+      "sha256": "13d1539f07a620c775bb086cc18a7c1950cc73f0c58a2e7c2463aa88533fe694",
+      "tick": 2640
+    },
+    {
+      "sha256": "8d2c313c7afa699ed0c20b8d1a039ddfebf6c68b5bca79c11b09ab3bbfb781be",
+      "tick": 2670
+    },
+    {
+      "sha256": "cc9f7b35bbc043efdedef2361a8002cabca43f39042adae7637e54a0352aca21",
+      "tick": 2700
+    },
+    {
+      "sha256": "400fb84918257e020fbf7f815a7503b1a7164c69e21fd7c33d7e74696d49579b",
+      "tick": 2730
+    },
+    {
+      "sha256": "cd329e4e2e9c751453dc465500fd4bab6db5af26808ca34e2e423ad9a60d4836",
+      "tick": 2760
+    },
+    {
+      "sha256": "5d0e115acdfc66c1f424e76b27a7e02a1ea32f33f5cc6590ae507db7e94ecf05",
+      "tick": 2790
+    },
+    {
+      "sha256": "aa064021573ac16b8b56e100d7957e3ece577e7e170605dcd1bc045858e84455",
+      "tick": 2820
+    },
+    {
+      "sha256": "57b91ffcc00607b4ad857ab6a77825b8b3bf2692bc625ef8e4bc40ac1b15136c",
+      "tick": 2850
+    },
+    {
+      "sha256": "1ac5cf83dd7ed47ce954f251655345a77f0d03a96f34fb6712074776958eded5",
+      "tick": 2880
+    },
+    {
+      "sha256": "22a37990fc0fa54b92d6b27b9cb3557527e184fecdf46440f63be3fb7cc8f573",
+      "tick": 2910
+    },
+    {
+      "sha256": "8f6143ba7aa4ee2c8dbf9202ab68219214b8a209a5e868cd449a642d39468cec",
+      "tick": 2940
+    },
+    {
+      "sha256": "37f4d50d870b60ae67a0673efc44fc363afa35d486d3ad293714b873402a2acb",
+      "tick": 2970
+    },
+    {
+      "sha256": "165be8ddd5f0d194712f11e270d1a65d722fb07d74ee87cf5d32ff4e4d4cc30e",
+      "tick": 3000
+    },
+    {
+      "sha256": "2191520e3a0ed6c44a3ad9886ed5e059bb6d5949d49ef7588873105b5afd354e",
+      "tick": 3030
+    },
+    {
+      "sha256": "31e156cbf731335b9a6d84baafe780eeaac86c05f998eeecfb9547de8895ac92",
+      "tick": 3060
+    },
+    {
+      "sha256": "69c6169c19ab6a6a20954962350d2829a8eb5b6941b7bb34e131dd240dc0d127",
+      "tick": 3090
+    },
+    {
+      "sha256": "46f3530817e0f52513838eb2df67a9895cbb0078f91848d34538bad4fce8ac90",
+      "tick": 3120
+    }
+  ],
+  "first_shot_seconds": 19.4000000000001,
+  "fixed_dt": 0.0333333333333333,
+  "gpu_frame_ms": null,
+  "measurement": {
+    "astar_searches": 293,
+    "cpu_tick": {
+      "max_ms": 354.828,
+      "mean_ms": 20.7454066666667,
+      "p50_ms": 18.673,
+      "p95_ms": 29.816,
+      "p99_ms": 93.668,
+      "samples": 900,
+      "ticks_over_33_333ms": 29
+    },
+    "grids_added": [],
+    "nested_cpu_phases": {
+      "cover_find_slot": {
+        "max_ms": 2.755,
+        "mean_ms": 0.0659555555555556,
+        "p50_ms": 0.0,
+        "p95_ms": 0.549,
+        "p99_ms": 0.976,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "cover_points_filter": {
+        "max_ms": 1.082,
+        "mean_ms": 0.0424211111111111,
+        "p50_ms": 0.0,
+        "p95_ms": 0.365,
+        "p99_ms": 0.506,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "cover_points_generate": {
+        "max_ms": 0.177,
+        "mean_ms": 0.00612,
+        "p50_ms": 0.0,
+        "p95_ms": 0.049,
+        "p99_ms": 0.083,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "cover_ratings": {
+        "max_ms": 0.475,
+        "mean_ms": 0.00239222222222222,
+        "p50_ms": 0.0,
+        "p95_ms": 0.006,
+        "p99_ms": 0.038,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "cover_reservations": {
+        "max_ms": 2.248,
+        "mean_ms": 0.00964777777777778,
+        "p50_ms": 0.0,
+        "p95_ms": 0.064,
+        "p99_ms": 0.135,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "cover_routes": {
+        "max_ms": 1.016,
+        "mean_ms": 0.00417111111111111,
+        "p50_ms": 0.0,
+        "p95_ms": 0.002,
+        "p99_ms": 0.003,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "cover_update": {
+        "max_ms": 3.584,
+        "mean_ms": 0.294956666666667,
+        "p50_ms": 0.117,
+        "p95_ms": 1.164,
+        "p99_ms": 2.147,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "director": {
+        "max_ms": 112.376,
+        "mean_ms": 2.71793111111111,
+        "p50_ms": 1.194,
+        "p95_ms": 4.524,
+        "p99_ms": 57.99,
+        "samples": 900,
+        "ticks_over_33_333ms": 11
+      },
+      "director_path": {
+        "max_ms": 54.255,
+        "mean_ms": 0.166362222222222,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 1.967,
+        "samples": 900,
+        "ticks_over_33_333ms": 2
+      },
+      "field_ops": {
+        "max_ms": 328.504,
+        "mean_ms": 1.37509777777778,
+        "p50_ms": 0.868,
+        "p95_ms": 1.51,
+        "p99_ms": 2.924,
+        "samples": 900,
+        "ticks_over_33_333ms": 1
+      },
+      "infantry_combat": {
+        "max_ms": 6.473,
+        "mean_ms": 2.31926222222222,
+        "p50_ms": 2.212,
+        "p95_ms": 3.211,
+        "p99_ms": 4.826,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "infantry_move": {
+        "max_ms": 53.391,
+        "mean_ms": 3.94573,
+        "p50_ms": 3.526,
+        "p95_ms": 5.931,
+        "p99_ms": 10.92,
+        "samples": 900,
+        "ticks_over_33_333ms": 3
+      },
+      "mission": {
+        "max_ms": 3.398,
+        "mean_ms": 0.289807777777777,
+        "p50_ms": 0.237,
+        "p95_ms": 0.461,
+        "p99_ms": 0.886,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "move_unit": {
+        "max_ms": 67.078,
+        "mean_ms": 2.60018333333333,
+        "p50_ms": 2.185,
+        "p95_ms": 4.604,
+        "p99_ms": 7.03,
+        "samples": 900,
+        "ticks_over_33_333ms": 1
+      },
+      "route_queue": {
+        "max_ms": 2.332,
+        "mean_ms": 0.237983333333333,
+        "p50_ms": 0.008,
+        "p95_ms": 0.696,
+        "p99_ms": 1.027,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "setup+spatial": {
+        "max_ms": 3.058,
+        "mean_ms": 0.567087777777778,
+        "p50_ms": 0.511,
+        "p95_ms": 0.897,
+        "p99_ms": 1.264,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "tactics": {
+        "max_ms": 2.064,
+        "mean_ms": 0.0743933333333332,
+        "p50_ms": 0.026,
+        "p95_ms": 0.333,
+        "p99_ms": 0.714,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "unit_loop": {
+        "max_ms": 78.106,
+        "mean_ms": 13.93739,
+        "p50_ms": 13.393,
+        "p95_ms": 19.839,
+        "p99_ms": 26.006,
+        "samples": 900,
+        "ticks_over_33_333ms": 5
+      },
+      "unit_targeting": {
+        "max_ms": 9.806,
+        "mean_ms": 3.93472666666666,
+        "p50_ms": 3.897,
+        "p95_ms": 5.327,
+        "p99_ms": 6.801,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      },
+      "visibility": {
+        "max_ms": 7.294,
+        "mean_ms": 0.455362222222222,
+        "p50_ms": 0.001,
+        "p95_ms": 4.379,
+        "p99_ms": 5.97,
+        "samples": 900,
+        "ticks_over_33_333ms": 0
+      }
+    },
+    "path_calls": 239,
+    "path_cpu_ms": 1882.796,
+    "phase_note": "Phases are nested: cover_find_slot is inside cover_update, inside infantry_move, inside unit_loop. Do not add all phase totals.",
+    "planning": {
+      "after": {
+        "admitted": 5836,
+        "cancelled": 2,
+        "deferred": 122,
+        "expired": 1,
+        "limits": {
+          "cover": 2,
+          "decisions": 32,
+          "formation": 8,
+          "regroup": 1,
+          "routes": 8
+        },
+        "max_wait_ticks": 4,
+        "oldest_ticks": 0,
+        "pending": 0,
+        "rejected": 0,
+        "tick": 3120,
+        "used": {
+          "decisions": 6,
+          "formation": 1,
+          "routes": 2
+        },
+        "waiting": {}
+      },
+      "before": {
+        "admitted": 3568,
+        "cancelled": 1,
+        "deferred": 99,
+        "expired": 1,
+        "limits": {
+          "cover": 2,
+          "decisions": 32,
+          "formation": 8,
+          "regroup": 1,
+          "routes": 8
+        },
+        "max_wait_ticks": 4,
+        "oldest_ticks": 0,
+        "pending": 0,
+        "rejected": 0,
+        "tick": 2220,
+        "used": {},
+        "waiting": {}
+      },
+      "maximum_pending": 3,
+      "maximum_queue_age_ticks": 1
+    },
+    "requested_seconds": 30.0,
+    "shots": 113,
+    "ticks_with_four_contacts": 782
+  },
+  "os": "Linux",
+  "policy": "combined-public-objectives",
+  "policy_stats": {
+    "orders": 17,
+    "purchase_rejections": {},
+    "purchases": {
+      "aa": 3,
+      "atgm": 3,
+      "rifle": 6,
+      "tank": 7
+    },
+    "sections_ordered": 29,
+    "sections_rejected": 0,
+    "spent": 3100
+  },
+  "processor_count": 9,
+  "rendered_frame_ms": null,
+  "rendered_frames_measured": 0,
+  "scenario_sha256": "49f850989dd52b72176cb629a7c88ed674736ac3222d4d3d794a75707a0d8bcd",
+  "schema": 1,
+  "scope": "Instrumented headless simulation CPU only; no renderer, GPU or input-device measurement.",
+  "seed": 47291,
+  "setup_ms": 5152.168,
+  "source_sha256": {
+    "classic": "4bf60e6587aa46a44d1727aed74d2905fa19cd34fcc83eed0541d8e9d0d9b7f0",
+    "cover_behavior": "6c6a69835e255eaf7ad64e9f8d5ae0a8db692564e92c42fa84841d8f600dafda",
+    "field_ops": "c0197e67d01dd54ed24efc1e91b9074a585bd16919fab48a7ff020ddc99b37f7",
+    "infantry": "8e0c4a1abb273af3e7031acb505dbd0e5283c2f75e0702c032a893314865d6e8",
+    "policy": "64c8c073cad78117eefd251576eccbc924b996303abdf76784a9bff7675c81bc",
+    "simulation": "cb75831053fab9596559aa4ac896ed029c6f18400696061a8d56fd16be1fdfc8",
+    "structure_damage": "72e27efd185b081cffc4c3cc4705893b61d042b9771213ed649ddcd82e454d3d",
+    "tactical_actions": "101cdec1195a07747adaff76fc52aae3e9bd820da50f7a6d6a4e1403f2dc288a",
+    "tactical_context": "48a1149456104097fe29218374ecdaa7c0e0fdebd733e753ced69a7751b34071",
+    "tactical_director": "b9009e2f813a21da9a9c617deea8627a6219e9779ecd6f92a6e71986a59386d7",
+    "tactical_navigation": "2cc0b7325aed3efc03445a05fecd847bbabc80010dfe27468e43218915a92781",
+    "tactical_work_budget": "cb647ecc1212ff44f173c1a96235fd032e9469e213aff09aa29c7d93494cf59e",
+    "terrain": "003f111634ce6aca0b4052f5365e94ea3dc3a2c483117f9d85968f170c7a3b3d",
+    "vehicle_damage": "efd198884a6e41a6f4dc720c1aa03fa3b5441900c1f0b9f4951724708c15eb51"
+  },
+  "spikes": [
+    {
+      "cpu_ms": 49.116,
+      "phases_ms": {
+        "director": 24.771,
+        "field_ops": 0.905,
+        "infantry_combat": 4.475,
+        "infantry_move": 7.849,
+        "mission": 0.223,
+        "move_unit": 1.807,
+        "route_queue": 0.006,
+        "setup+spatial": 0.675,
+        "tactics": 0.03,
+        "unit_loop": 21.265,
+        "unit_targeting": 4.549,
+        "visibility": 0.0
+      },
+      "seconds": 75.066666666665,
+      "tick": 2252
+    },
+    {
+      "cpu_ms": 33.581,
+      "phases_ms": {
+        "director": 14.803,
+        "field_ops": 1.779,
+        "infantry_combat": 2.819,
+        "infantry_move": 3.186,
+        "mission": 0.278,
+        "move_unit": 1.647,
+        "route_queue": 0.006,
+        "setup+spatial": 0.459,
+        "tactics": 0.708,
+        "unit_loop": 13.189,
+        "unit_targeting": 3.846,
+        "visibility": 0.001
+      },
+      "seconds": 76.7333333333315,
+      "tick": 2302
+    },
+    {
+      "cpu_ms": 106.681,
+      "phases_ms": {
+        "director": 91.491,
+        "field_ops": 0.95,
+        "infantry_combat": 2.122,
+        "infantry_move": 3.005,
+        "mission": 0.222,
+        "move_unit": 1.827,
+        "route_queue": 0.006,
+        "setup+spatial": 0.493,
+        "tactics": 0.031,
+        "unit_loop": 12.367,
+        "unit_targeting": 3.965,
+        "visibility": 0.001
+      },
+      "seconds": 77.3999999999982,
+      "tick": 2322
+    },
+    {
+      "cpu_ms": 98.801,
+      "phases_ms": {
+        "director": 84.974,
+        "field_ops": 1.032,
+        "infantry_combat": 1.84,
+        "infantry_move": 2.907,
+        "mission": 0.255,
+        "move_unit": 1.672,
+        "route_queue": 0.005,
+        "setup+spatial": 0.484,
+        "tactics": 0.03,
+        "unit_loop": 10.781,
+        "unit_targeting": 3.262,
+        "visibility": 0.0
+      },
+      "seconds": 79.4666666666647,
+      "tick": 2384
+    },
+    {
+      "cpu_ms": 96.638,
+      "phases_ms": {
+        "director": 83.844,
+        "field_ops": 0.754,
+        "infantry_combat": 1.862,
+        "infantry_move": 2.67,
+        "mission": 0.222,
+        "move_unit": 1.697,
+        "route_queue": 0.007,
+        "setup+spatial": 0.436,
+        "tactics": 0.032,
+        "unit_loop": 10.43,
+        "unit_targeting": 3.125,
+        "visibility": 0.0
+      },
+      "seconds": 79.999999999998,
+      "tick": 2400
+    },
+    {
+      "cpu_ms": 106.938,
+      "phases_ms": {
+        "cover_update": 0.07,
+        "director": 91.162,
+        "field_ops": 0.936,
+        "infantry_combat": 2.065,
+        "infantry_move": 3.412,
+        "mission": 0.222,
+        "move_unit": 2.267,
+        "route_queue": 0.007,
+        "setup+spatial": 0.444,
+        "tactics": 0.211,
+        "unit_loop": 13.019,
+        "unit_targeting": 4.202,
+        "visibility": 0.0
+      },
+      "seconds": 82.0666666666646,
+      "tick": 2462
+    },
+    {
+      "cpu_ms": 109.811,
+      "phases_ms": {
+        "director": 95.599,
+        "field_ops": 0.789,
+        "infantry_combat": 2.162,
+        "infantry_move": 3.073,
+        "mission": 0.216,
+        "move_unit": 1.808,
+        "route_queue": 0.008,
+        "setup+spatial": 0.516,
+        "tactics": 0.027,
+        "unit_loop": 11.785,
+        "unit_targeting": 3.379,
+        "visibility": 0.001
+      },
+      "seconds": 82.7666666666645,
+      "tick": 2483
+    },
+    {
+      "cpu_ms": 42.235,
+      "phases_ms": {
+        "director": 0.981,
+        "field_ops": 28.776,
+        "infantry_combat": 2.112,
+        "infantry_move": 3.067,
+        "mission": 0.361,
+        "move_unit": 1.24,
+        "route_queue": 0.006,
+        "setup+spatial": 0.48,
+        "tactics": 0.027,
+        "unit_loop": 10.245,
+        "unit_targeting": 2.992,
+        "visibility": 0.0
+      },
+      "seconds": 83.3333333333312,
+      "tick": 2500
+    },
+    {
+      "cpu_ms": 99.839,
+      "phases_ms": {
+        "cover_update": 0.516,
+        "director": 87.286,
+        "field_ops": 0.683,
+        "infantry_combat": 1.879,
+        "infantry_move": 2.704,
+        "mission": 0.219,
+        "move_unit": 1.427,
+        "route_queue": 0.007,
+        "setup+spatial": 0.449,
+        "tactics": 0.026,
+        "unit_loop": 10.243,
+        "unit_targeting": 3.163,
+        "visibility": 0.001
+      },
+      "seconds": 83.7333333333311,
+      "tick": 2512
+    },
+    {
+      "cpu_ms": 93.668,
+      "phases_ms": {
+        "cover_update": 0.061,
+        "director": 80.42,
+        "field_ops": 0.789,
+        "infantry_combat": 1.975,
+        "infantry_move": 2.562,
+        "mission": 0.226,
+        "move_unit": 1.634,
+        "route_queue": 0.006,
+        "setup+spatial": 0.418,
+        "tactics": 0.094,
+        "unit_loop": 10.768,
+        "unit_targeting": 3.5,
+        "visibility": 0.0
+      },
+      "seconds": 84.4333333333311,
+      "tick": 2533
+    },
+    {
+      "cpu_ms": 36.478,
+      "phases_ms": {
+        "director": 18.65,
+        "field_ops": 0.683,
+        "infantry_combat": 1.71,
+        "infantry_move": 7.954,
+        "mission": 0.268,
+        "move_unit": 1.638,
+        "route_queue": 0.006,
+        "setup+spatial": 0.449,
+        "tactics": 0.026,
+        "unit_loop": 15.417,
+        "unit_targeting": 3.099,
+        "visibility": 0.0
+      },
+      "seconds": 86.7999999999976,
+      "tick": 2604
+    },
+    {
+      "cpu_ms": 47.524,
+      "phases_ms": {
+        "cover_update": 0.797,
+        "director": 13.991,
+        "director_path": 2.108,
+        "field_ops": 1.27,
+        "infantry_combat": 2.643,
+        "infantry_move": 13.812,
+        "mission": 0.271,
+        "move_unit": 2.628,
+        "route_queue": 0.005,
+        "setup+spatial": 0.652,
+        "tactics": 0.03,
+        "unit_loop": 26.006,
+        "unit_targeting": 5.081,
+        "visibility": 3.883
+      },
+      "seconds": 89.6999999999975,
+      "tick": 2691
+    },
+    {
+      "cpu_ms": 354.828,
+      "phases_ms": {
+        "cover_update": 1.191,
+        "director": 2.714,
+        "field_ops": 328.504,
+        "infantry_combat": 2.619,
+        "infantry_move": 5.788,
+        "mission": 0.285,
+        "move_unit": 2.329,
+        "route_queue": 0.006,
+        "setup+spatial": 0.712,
+        "tactics": 0.027,
+        "unit_loop": 16.799,
+        "unit_targeting": 4.855,
+        "visibility": 4.591
+      },
+      "seconds": 90.0333333333308,
+      "tick": 2701
+    },
+    {
+      "cpu_ms": 41.044,
+      "phases_ms": {
+        "cover_update": 0.504,
+        "director": 20.139,
+        "field_ops": 1.047,
+        "infantry_combat": 2.632,
+        "infantry_move": 4.808,
+        "mission": 0.296,
+        "move_unit": 3.284,
+        "route_queue": 0.596,
+        "setup+spatial": 0.49,
+        "tactics": 0.029,
+        "unit_loop": 17.24,
+        "unit_targeting": 4.542,
+        "visibility": 0.001
+      },
+      "seconds": 92.266666666664,
+      "tick": 2768
+    },
+    {
+      "cpu_ms": 40.02,
+      "phases_ms": {
+        "cover_find_slot": 1.739,
+        "cover_points_filter": 0.448,
+        "cover_points_generate": 0.049,
+        "cover_ratings": 0.285,
+        "cover_reservations": 0.1,
+        "cover_routes": 0.798,
+        "cover_update": 2.397,
+        "director": 3.258,
+        "field_ops": 1.618,
+        "infantry_combat": 2.458,
+        "infantry_move": 11.38,
+        "mission": 0.28,
+        "move_unit": 2.72,
+        "route_queue": 0.697,
+        "setup+spatial": 0.854,
+        "tactics": 0.035,
+        "unit_loop": 25.823,
+        "unit_targeting": 8.14,
+        "visibility": 5.281
+      },
+      "seconds": 92.6999999999973,
+      "tick": 2781
+    },
+    {
+      "cpu_ms": 64.353,
+      "phases_ms": {
+        "cover_update": 0.34,
+        "director": 3.666,
+        "director_path": 2.04,
+        "field_ops": 0.752,
+        "infantry_combat": 2.735,
+        "infantry_move": 45.758,
+        "mission": 0.239,
+        "move_unit": 2.735,
+        "route_queue": 0.314,
+        "setup+spatial": 0.456,
+        "tactics": 0.033,
+        "unit_loop": 57.709,
+        "unit_targeting": 4.921,
+        "visibility": 0.0
+      },
+      "seconds": 92.866666666664,
+      "tick": 2786
+    },
+    {
+      "cpu_ms": 55.603,
+      "phases_ms": {
+        "cover_update": 0.312,
+        "director": 1.405,
+        "field_ops": 1.273,
+        "infantry_combat": 2.466,
+        "infantry_move": 32.177,
+        "mission": 0.381,
+        "move_unit": 2.534,
+        "route_queue": 0.439,
+        "setup+spatial": 0.897,
+        "tactics": 0.031,
+        "unit_loop": 44.388,
+        "unit_targeting": 5.284,
+        "visibility": 5.34
+      },
+      "seconds": 93.0333333333306,
+      "tick": 2791
+    },
+    {
+      "cpu_ms": 78.051,
+      "phases_ms": {
+        "cover_update": 0.473,
+        "director": 57.99,
+        "director_path": 53.285,
+        "field_ops": 1.141,
+        "infantry_combat": 2.385,
+        "infantry_move": 4.473,
+        "mission": 0.308,
+        "move_unit": 3.452,
+        "route_queue": 0.383,
+        "setup+spatial": 0.457,
+        "tactics": 0.025,
+        "unit_loop": 16.482,
+        "unit_targeting": 4.834,
+        "visibility": 0.001
+      },
+      "seconds": 95.7333333333305,
+      "tick": 2872
+    },
+    {
+      "cpu_ms": 82.669,
+      "phases_ms": {
+        "cover_update": 0.034,
+        "director": 1.624,
+        "field_ops": 26.894,
+        "infantry_combat": 2.777,
+        "infantry_move": 37.282,
+        "mission": 0.33,
+        "move_unit": 3.997,
+        "route_queue": 0.446,
+        "setup+spatial": 0.546,
+        "tactics": 0.025,
+        "unit_loop": 51.396,
+        "unit_targeting": 5.153,
+        "visibility": 0.0
+      },
+      "seconds": 95.8333333333305,
+      "tick": 2875
+    },
+    {
+      "cpu_ms": 75.689,
+      "phases_ms": {
+        "director": 1.285,
+        "field_ops": 1.547,
+        "infantry_combat": 4.053,
+        "infantry_move": 53.391,
+        "mission": 0.251,
+        "move_unit": 3.414,
+        "route_queue": 0.564,
+        "setup+spatial": 0.632,
+        "tactics": 0.026,
+        "unit_loop": 70.271,
+        "unit_targeting": 7.596,
+        "visibility": 0.001
+      },
+      "seconds": 96.1666666666638,
+      "tick": 2885
+    },
+    {
+      "cpu_ms": 84.83,
+      "phases_ms": {
+        "director": 57.732,
+        "director_path": 54.255,
+        "field_ops": 0.957,
+        "infantry_combat": 2.438,
+        "infantry_move": 4.016,
+        "mission": 0.398,
+        "move_unit": 3.36,
+        "route_queue": 0.508,
+        "setup+spatial": 1.059,
+        "tactics": 0.027,
+        "unit_loop": 15.548,
+        "unit_targeting": 4.42,
+        "visibility": 7.294
+      },
+      "seconds": 96.6999999999971,
+      "tick": 2901
+    },
+    {
+      "cpu_ms": 118.625,
+      "phases_ms": {
+        "cover_update": 0.072,
+        "director": 94.887,
+        "field_ops": 1.017,
+        "infantry_combat": 3.604,
+        "infantry_move": 5.166,
+        "mission": 0.286,
+        "move_unit": 4.336,
+        "route_queue": 0.416,
+        "setup+spatial": 0.741,
+        "tactics": 0.032,
+        "unit_loop": 20.176,
+        "unit_targeting": 5.739,
+        "visibility": 0.001
+      },
+      "seconds": 97.2666666666637,
+      "tick": 2918
+    },
+    {
+      "cpu_ms": 87.441,
+      "phases_ms": {
+        "cover_update": 0.126,
+        "director": 1.062,
+        "field_ops": 1.165,
+        "infantry_combat": 2.093,
+        "infantry_move": 3.588,
+        "mission": 0.262,
+        "move_unit": 67.078,
+        "route_queue": 0.418,
+        "setup+spatial": 0.675,
+        "tactics": 0.029,
+        "unit_loop": 78.106,
+        "unit_targeting": 3.944,
+        "visibility": 4.611
+      },
+      "seconds": 97.3666666666637,
+      "tick": 2921
+    },
+    {
+      "cpu_ms": 50.182,
+      "phases_ms": {
+        "cover_update": 0.098,
+        "director": 22.555,
+        "field_ops": 4.15,
+        "infantry_combat": 2.387,
+        "infantry_move": 3.786,
+        "mission": 0.331,
+        "move_unit": 7.37,
+        "route_queue": 0.643,
+        "setup+spatial": 0.6,
+        "tactics": 0.708,
+        "unit_loop": 20.019,
+        "unit_targeting": 4.729,
+        "visibility": 0.0
+      },
+      "seconds": 98.5666666666636,
+      "tick": 2957
+    },
+    {
+      "cpu_ms": 38.365,
+      "phases_ms": {
+        "cover_update": 0.939,
+        "director": 1.887,
+        "field_ops": 2.752,
+        "infantry_combat": 5.226,
+        "infantry_move": 8.335,
+        "mission": 0.271,
+        "move_unit": 4.49,
+        "route_queue": 0.76,
+        "setup+spatial": 0.96,
+        "tactics": 0.031,
+        "unit_loop": 24.573,
+        "unit_targeting": 4.76,
+        "visibility": 5.773
+      },
+      "seconds": 99.0333333333303,
+      "tick": 2971
+    },
+    {
+      "cpu_ms": 33.526,
+      "phases_ms": {
+        "director": 1.453,
+        "field_ops": 0.951,
+        "infantry_combat": 3.188,
+        "infantry_move": 5.535,
+        "mission": 0.384,
+        "move_unit": 8.935,
+        "route_queue": 2.139,
+        "setup+spatial": 0.669,
+        "tactics": 0.029,
+        "unit_loop": 26.77,
+        "unit_targeting": 6.897,
+        "visibility": 0.001
+      },
+      "seconds": 99.8999999999969,
+      "tick": 2997
+    },
+    {
+      "cpu_ms": 36.04,
+      "phases_ms": {
+        "cover_update": 0.21,
+        "director": 1.419,
+        "field_ops": 1.145,
+        "infantry_combat": 3.538,
+        "infantry_move": 5.727,
+        "mission": 0.31,
+        "move_unit": 7.788,
+        "route_queue": 0.71,
+        "setup+spatial": 1.113,
+        "tactics": 0.03,
+        "unit_loop": 24.007,
+        "unit_targeting": 5.55,
+        "visibility": 5.686
+      },
+      "seconds": 100.03333333333,
+      "tick": 3001
+    },
+    {
+      "cpu_ms": 128.601,
+      "phases_ms": {
+        "cover_update": 0.388,
+        "director": 112.376,
+        "field_ops": 0.981,
+        "infantry_combat": 1.821,
+        "infantry_move": 3.58,
+        "mission": 0.236,
+        "move_unit": 2.656,
+        "route_queue": 0.569,
+        "setup+spatial": 0.721,
+        "tactics": 0.028,
+        "unit_loop": 12.538,
+        "unit_targeting": 3.458,
+        "visibility": 0.001
+      },
+      "seconds": 100.33333333333,
+      "tick": 3010
+    },
+    {
+      "cpu_ms": 39.115,
+      "phases_ms": {
+        "cover_update": 2.606,
+        "director": 1.36,
+        "field_ops": 0.701,
+        "infantry_combat": 2.023,
+        "infantry_move": 12.542,
+        "mission": 0.29,
+        "move_unit": 5.109,
+        "route_queue": 0.497,
+        "setup+spatial": 0.542,
+        "tactics": 2.064,
+        "unit_loop": 26.709,
+        "unit_targeting": 3.797,
+        "visibility": 6.084
+      },
+      "seconds": 101.699999999997,
+      "tick": 3051
+    }
+  ],
+  "timing_note": "Elapsed time around synchronous CPU work includes OS scheduling. Run paired serial comparisons without competing workloads; setup, reporting and command APIs are outside tick timing.",
+  "valid_busy_window": true,
+  "warmup_wall_ms": 33586.828,
+  "recorded_date": "2026-10-30",
+  "branch": "codex/unit-tactics-implementation",
+  "run_note": "One serial current-build sample, after all functional suites and agent Godot runs finished. No paired baseline, renderer or hardware acceptance. Queue snapshots are taken outside the timed simulation tick."
+}

@@ -52,20 +52,29 @@ static func assigned_capacity(u:Dictionary) -> float:
 	ensure_roster(u)
 	return float(u.get("assigned_hp",u.get("max_hp",0.0)))
 
-static func strength(u:Dictionary) -> Dictionary:
+static func strength(u:Dictionary,now:float=0.0) -> Dictionary:
 	ensure_roster(u)
 	var effective:=0
 	var recoverable:=0
+	var available:=0
+	var ready:=0
 	var hp:=0.0
 	for member in u.get("members",[]):
-		if float(member.hp)>0:effective+=1;hp+=float(member.hp)
+		if float(member.hp)>0 and member.get("wound",HEALTHY) not in [SEVERE,KIA,"CREW"]:
+			effective+=1;hp+=float(member.hp)
+		if readiness_available(u,member) and float(member.get("reload_until",0.0))<=0.0:available+=1
+		if ready_to_cover(u,member,now):ready+=1
 		if member.get("wound",HEALTHY) not in [KIA,"CREW"]:recoverable+=1
 	if u.get("members",[]).is_empty():
 		hp=maxf(0.0,float(u.get("hp",0.0)))
 		effective=1 if hp>0 else 0
 		recoverable=effective
+		available=effective if not u.get("abandoned",false) else 0
+		ready=available if not u.get("firepower_kill",false) else 0
 	var assigned:=assigned_capacity(u)
-	return {"assigned_hp":assigned,"assigned_members":int(u.get("assigned_members",1)),"effective_hp":hp,"effective_members":effective,"recoverable_members":recoverable,"fraction":hp/assigned if assigned>0 else 0.0}
+	var launcher:=member_by_id(u,str(u.get("equipment",{}).get("launcher",{}).get("holder","")))
+	var specialist:bool=not launcher.is_empty() and float(launcher.hp)>0 and launcher.get("wound",HEALTHY) not in [SEVERE,KIA,"CREW"]
+	return {"assigned_hp":assigned,"assigned_members":int(u.get("assigned_members",1)),"effective_hp":hp,"effective_members":effective,"recoverable_members":recoverable,"available_members":available,"ready_members":ready,"launcher_available":specialist,"fraction":clampf(hp/assigned,0.0,1.0) if assigned>0 else 0.0}
 
 # rounds remains the active-weapon adapter used by existing firing code.
 static func magazine_rounds(member:Dictionary,weapon:String) -> int:
@@ -74,7 +83,42 @@ static func magazine_rounds(member:Dictionary,weapon:String) -> int:
 
 static func cancel_readiness(member:Dictionary) -> void:
 	member["reload_until"]=0.0
+	member["reload_weapon"]=""
 	member["aim"]=0.0
+	if member.get("state","")=="RELOADING":member.state="HOLDING"
+
+const RIFLE_MAGAZINE:=6
+const RIFLE_RELOAD_SECONDS:=1.8
+const LAUNCHER_RELOAD_SECONDS:=3.0
+const TOPOFF_ROUNDS:=2
+const RELOAD_QUIET_SECONDS:=3.0
+
+# Readiness cannot compete with physical movement, casualty assistance or a
+# withdrawal. A garrison uses the same rule; inside is not itself an exclusion.
+static func readiness_available(u:Dictionary,member:Dictionary) -> bool:
+	if member.is_empty() or float(member.get("hp",0.0))<=0:return false
+	if member.get("wound",HEALTHY) in [SEVERE,KIA,"CREW"] or int(member.get("aiding",-1))>=0:return false
+	if float(member.get("travel",0.0))>0.01 or member.get("cover_phase","") in ["SEEKING","SETTLING"]:return false
+	return u.get("maneuver",{}).get("phase","")!="WITHDRAW" and (u.get("orders",[]).is_empty() or u.orders[0].mode!="retreat")
+
+static func ready_to_cover(u:Dictionary,member:Dictionary,now:float) -> bool:
+	if not readiness_available(u,member) or float(member.get("reload_until",0.0))>0.0:return false
+	if maxf(float(member.get("suppression",0.0)),float(u.get("suppression",0.0)))>0.65:return false
+	if member.get("posture","")=="RISING" and now<float(member.get("posture_until",0.0)):return false
+	var weapon:String=member.get("readiness_weapon","rifle")
+	if weapon=="atgm" and (not has_equipment(u,member,"launcher") or int(u.get("missiles",1))<=0):return false
+	return magazine_rounds(member,weapon)>0
+
+static func can_topoff(u:Dictionary,member:Dictionary,now:float) -> bool:
+	if int(member.get("target",-1))>=0 or int(u.get("target",-1))>=0:return false
+	if in_contact(u,now) or now-float(member.get("last_shot",-100.0))<RELOAD_QUIET_SECONDS or now-float(u.get("last_shot",-100.0))<RELOAD_QUIET_SECONDS:return false
+	if now-float(u.get("last_hit",-100.0))<RELOAD_QUIET_SECONDS or maxf(float(member.get("suppression",0.0)),float(u.get("suppression",0.0)))>0.3:return false
+	# Read left-to-right: each start immediately removes its member from this
+	# eligibility check, preserving at least one loaded observer. Empty weapons
+	# do not require this guard: an all-empty section must be able to recover.
+	for peer in u.get("members",[]):
+		if peer.get("member_id","")!=member.get("member_id","") and ready_to_cover(u,peer,now):return true
+	return false
 
 # Readiness is allowed in a quiet interval without a selected target. It never
 # grants rounds at the start, and switching weapons preserves spent magazines.
@@ -87,19 +131,28 @@ static func update_readiness(u:Dictionary,member:Dictionary,now:float,weapon:Str
 		cancel_readiness(member)
 		member.readiness_weapon=weapon
 		member.rounds=int(member.magazines.get(weapon,0))
-	var withdrawing:bool=u.get("maneuver",{}).get("phase","")=="WITHDRAW" or (not u.get("orders",[]).is_empty() and u.orders[0].mode=="retreat")
-	if float(member.hp)<=0 or member.get("wound",HEALTHY) in [SEVERE,KIA,"CREW"] or float(member.get("travel",0.0))>0.01 or int(member.get("aiding",-1))>=0 or member.get("cover_phase","") in ["SEEKING","SETTLING"] or withdrawing:
+	if not readiness_available(u,member):
 		cancel_readiness(member);return false
 	if weapon=="atgm" and (not has_equipment(u,member,"launcher") or int(u.get("missiles",1))<=0):
 		cancel_readiness(member);return false
 	if float(member.get("reload_until",0.0))>0.0:
+		# A voluntary topoff can yield its remaining rounds to a new contact.
+		# An empty weapon must finish reloading even while its section is firing.
+		if int(member.rounds)>0 and not can_topoff(u,member,now):
+			cancel_readiness(member);return false
 		if now<float(member.reload_until):member.state="RELOADING";member.aim=0.0;return true
-		member.rounds=1 if weapon=="atgm" else 6
+		member.rounds=1 if weapon=="atgm" else RIFLE_MAGAZINE
 		member.magazines[weapon]=member.rounds
 		member.reload_until=0.0
+		member["reload_completed_at"]=now
+		member["reload_completed_weapon"]=weapon
+		member["reload_weapon"]=""
+		member.state="HOLDING"
 		return false
-	if int(member.rounds)>0:return false
-	member.reload_until=now+(3.0 if weapon=="atgm" else 1.8)
+	if int(member.rounds)>0 and (weapon!="rifle" or int(member.rounds)>TOPOFF_ROUNDS or not can_topoff(u,member,now)):return false
+	member["reload_weapon"]=weapon
+	member["reload_started_at"]=now
+	member.reload_until=now+(LAUNCHER_RELOAD_SECONDS if weapon=="atgm" else RIFLE_RELOAD_SECONDS)
 	member.state="RELOADING";member.aim=0.0
 	return true
 
@@ -590,6 +643,7 @@ static func update_regroup(u:Dictionary,sim) -> void:
 		for member in u.members:
 			member["regroup_path"]=[]
 			member["regroup_after"]=0.0
+			member.erase("regroup_slot")
 	if u.hold_command:return
 	if u.pos.distance_to(u.get("regroup_progress_pos",u.pos))>1.0 or not u.has("regroup_progress_at"):
 		u["regroup_progress_pos"]=u.pos
@@ -619,6 +673,7 @@ static func update_regroup(u:Dictionary,sim) -> void:
 			Cover.clear(member)
 			member["regroup_path"]=[]
 			member["regroup_after"]=0.0
+			member.erase("regroup_slot")
 
 static func held_shelter(u:Dictionary,member:Dictionary) -> bool:
 	return member.get("occupying",false) or (member.get("cover_phase","") in ["SETTLING","SHELTERED"] and member.cover_goal.distance_to(u.pos)<=Cover.LEASH)
@@ -626,6 +681,7 @@ static func held_shelter(u:Dictionary,member:Dictionary) -> bool:
 static func regroup_destination(u:Dictionary,member:Dictionary,sim,goal:Vector2) -> Vector2:
 	var stalled:=regroup_stalled(member,sim) and not hull_beside(member,sim).is_empty()
 	goal=clear_of_hulls(u,member,sim,goal,stalled)
+	goal=clear_regroup_slot(u,member,sim,goal)
 	var route:Array=member.get("regroup_path",[])
 	if goal.distance_to(member.get("regroup_goal",goal))>1.0:
 		route=[];member["regroup_after"]=0.0
@@ -635,6 +691,8 @@ static func regroup_destination(u:Dictionary,member:Dictionary,sim,goal:Vector2)
 	# A stall (no headway, e.g. dithering against a hull parked on the old
 	# route) or walking round a hull also re-plans.
 	if sim.time>=member.get("regroup_after",0.0) and (member.get("regroup_blocked",0.0)>0.5 or stalled or sim.time<float(member.get("hull_round_until",0.0)) or not sim.terrain.segment_clear(member.pos,goal,"land",radius)):
+		if sim.ticking and not sim.terrain.planning.request("regroup",int(u.id),"member:%d"%member.index,1):
+			return route[0] if not route.is_empty() else goal
 		member["regroup_after"]=sim.time+1.0
 		member["regroup_best_at"]=sim.time
 		member["regroup_goal"]=goal
@@ -752,16 +810,59 @@ static func return_slot_free(u:Dictionary,member:Dictionary,spot:Vector2) -> boo
 		var reserved:Vector2=u.pos+peer.offset*(1.5 if peer.get("spread",false) else 1.0)
 		if peer.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"]:reserved=peer.cover_goal
 		if not peer.get("hull_slot",{}).is_empty():reserved=peer.hull_slot.spot
+		if u.get("regroup_active",false) and not peer.get("regroup_slot",{}).is_empty():reserved=peer.regroup_slot.spot
 		if spot.distance_to(reserved)<clearance:return false
+	return true
+
+# A medic may legitimately occupy another soldier's exact formation slot.
+# Recover to a nearby clear point instead of failing every route until aid
+# ends. Keep that point stable while it is usable; route admission and the
+# existing bounded path shortlist remain in regroup_destination.
+static func clear_regroup_slot(u:Dictionary,member:Dictionary,sim,goal:Vector2) -> Vector2:
+	if not u.get("regroup_active",false):
+		member.erase("regroup_slot")
+		return goal
+	var held:Dictionary=member.get("regroup_slot",{})
+	if not held.is_empty():
+		if goal.distance_to(held.goal)<0.05 and held.spot.distance_to(u.pos)<2.75 and regroup_slot_clear(u,member,sim,held.spot):return held.spot
+		member.erase("regroup_slot")
+	if return_slot_free(u,member,goal):return goal
+	var toward:Vector2=member.pos-u.pos
+	if toward.length_squared()<0.001:toward=member.offset
+	# Three rings, twelve points each: fixed geometry work, with the near side
+	# first so a return around a wall need not cross the section to reunite.
+	for ring in [1.4,2.0,2.65]:
+		for i in 12:
+			var angle:float=toward.angle()+ceili(i/2.0)*(1.0 if i%2==1 else -1.0)*TAU/12.0
+			var spot:Vector2=u.pos+Vector2.from_angle(angle)*float(ring)
+			if not regroup_slot_clear(u,member,sim,spot):continue
+			member["regroup_slot"]={"goal":goal,"spot":spot}
+			return spot
+	return goal
+
+static func regroup_slot_clear(u:Dictionary,member:Dictionary,sim,spot:Vector2) -> bool:
+	var radius:float=member.get("body_radius",0.8)
+	if not return_slot_free(u,member,spot) or not sim.terrain.traversable(spot,"land",radius):return false
+	for entry in sim.actor_candidates(spot,spot,radius):
+		var other:Dictionary=entry.unit
+		var peer:Dictionary=entry.actor
+		if other.id==u.id or not sim.alive(other) or peer.hp<=0 or other.get("structure",false):continue
+		var clearance:float=radius+(float(sim.definitions[other.kind].radius) if other.members.is_empty() else float(peer.get("body_radius",0.8)))-0.04
+		if not other.members.is_empty():clearance*=0.7
+		if spot.distance_to(peer.pos)<clearance:return false
 	return true
 
 static func clear_of_hulls(u:Dictionary,member:Dictionary,sim,goal:Vector2,stalled:bool=false) -> Vector2:
 	var held:Dictionary=member.get("hull_slot",{})
+	# A regroup cannot finish until every returning soldier is within 2.8 u.
+	# A hull-clear slot farther out is safe but can deadlock that completion
+	# forever, even when another point on the same hull is inside the radius.
+	var leash:float=2.75 if u.get("regroup_active",false) else Cover.LEASH
 	if held.is_empty():
 		if not stalled and member.get("regroup_blocked",0.0)<=0.5:return goal
 	else:
 		var parked:Dictionary=sim.get_unit(int(held.id))
-		if sim.alive(parked) and parked.pos==held.hull and goal.distance_to(held.goal)<0.05 and return_slot_free(u,member,held.spot) and sim.terrain.traversable(held.spot,"land",float(member.get("body_radius",0.8))):return held.spot
+		if sim.alive(parked) and parked.pos==held.hull and goal.distance_to(held.goal)<0.05 and held.spot.distance_to(u.pos)<=leash and return_slot_free(u,member,held.spot) and sim.terrain.traversable(held.spot,"land",float(member.get("body_radius",0.8))):return held.spot
 		member.erase("hull_slot")
 	var radius:float=member.get("body_radius",0.8)
 	var hulls:Array=[]
@@ -777,7 +878,7 @@ static func clear_of_hulls(u:Dictionary,member:Dictionary,sim,goal:Vector2,stall
 		# Nearest point of the hull's ring first, then alternately further round.
 		for i in 13:
 			var spot:Vector2=at+away.rotated(0.3*ceili(i/2.0)*(1.0 if i%2==1 else -1.0))*hull.reach
-			if spot.distance_to(u.pos)>Cover.LEASH or not sim.terrain.traversable(spot,"land",radius):continue
+			if spot.distance_to(u.pos)>leash or not sim.terrain.traversable(spot,"land",radius):continue
 			if hulls.any(func(other):return spot.distance_to(other.unit.pos)<other.reach-0.01):continue
 			if not return_slot_free(u,member,spot):continue
 			member["hull_slot"]={"id":hull.unit.id,"goal":goal,"hull":at,"spot":spot}

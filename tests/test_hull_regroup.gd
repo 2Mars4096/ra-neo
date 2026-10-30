@@ -17,6 +17,8 @@ func check(ok:bool,label:String)->void:
 func _init()->void:
 	# Held hull (cannot be asked to move) and an idle parked hull.
 	for held in [true,false]:run_case(held)
+	run_reunion_slot()
+	run_occupied_slot()
 	print("HULL REGROUP: ",checks," checks, ",failures," failures")
 	quit(0 if failures==0 else 1)
 
@@ -63,3 +65,66 @@ func run_case(held:bool)->void:
 	check(reunion_gap<2.8,"section together when the regroup ends: "+label)
 	check(u.get("regroup_count",0)>=1,"regroup completed: "+label)
 	print("HULL CASE ",label," regroup ",snappedf(started,0.01)," -> ",snappedf(ended,0.01)," gap=",snappedf(reunion_gap,0.01)," tank moved=",snappedf(tank.pos.distance_to(tank_start),0.01))
+
+# Reproduced village corner: the first terrain-clear point around the tank
+# lies beyond reunion distance; a later point on that same ring is usable.
+# A cached slot from before regroup must be reconsidered by the same rule.
+func run_reunion_slot()->void:
+	var sim=Sim.new(false,3)
+	var u:Dictionary=sim.spawn("rifle",0,Vector2(35,18))
+	u.pos=Vector2(39.83962,15.36709)
+	var actor:Dictionary=u.members[0]
+	actor.pos=Vector2(41.7261,16.85319)
+	u.members[1].hp=0
+	u.members[2].pos=Vector2(35.97403,17.46456)
+	var tank:Dictionary=sim.spawn("tank",0,Vector2(10,35))
+	tank.pos=Vector2(39.59725,14.39142)
+	sim.rebuild_spatial()
+	var goal:Vector2=u.pos+actor.offset
+	actor.regroup_blocked=0.6
+	var outside:Vector2=Actors.clear_of_hulls(u,actor,sim,goal)
+	check(outside.distance_to(u.pos)>2.8,"fixture's ordinary hull slot is outside reunion radius")
+	check(actor.has("hull_slot"),"fixture retains the previous hull slot")
+	u.regroup_active=true
+	var inside:Vector2=Actors.clear_of_hulls(u,actor,sim,goal)
+	check(inside.distance_to(u.pos)<2.8,"active regroup replaces an outlying cached hull slot")
+	check(inside.distance_to(tank.pos)>=float(sim.definitions[tank.kind].radius)+actor.body_radius,"regroup slot retains physical hull clearance")
+	check(sim.terrain.traversable(inside,"land",actor.body_radius) and Actors.return_slot_free(u,actor,inside),"regroup slot remains clear of terrain and teammates")
+	check(not sim.terrain.path(actor.pos,inside,"land",actor.body_radius).is_empty(),"regroup slot has a physical route from the soldier")
+	check(Actors.clear_of_hulls(u,actor,sim,goal)==inside,"valid regroup hull slot remains stable")
+
+func run_occupied_slot()->void:
+	var sim=Sim.new(false,3)
+	var u:Dictionary=sim.spawn("rifle",0,Vector2(35,18))
+	u.pos=Vector2(39.83962,15.36709)
+	var medic:Dictionary=u.members[0]
+	var casualty:Dictionary=u.members[1]
+	var actor:Dictionary=u.members[2]
+	medic.pos=Vector2(41.08576,15.7496)
+	casualty.pos=Vector2(39.91472,15.90617)
+	casualty.hp=0.0
+	casualty.wound=Actors.SEVERE
+	casualty.bleed_at=INF
+	casualty.medic=medic.index
+	medic.aiding=casualty.index
+	actor.pos=Vector2(31.43554,15.94582)
+	Actors.publish(u)
+	sim.rebuild_spatial()
+	check(not Actors.return_slot_free(u,actor,u.pos+actor.offset),"medic occupies the straggler's ordinary return slot")
+	check(sim.issue([u.id],Vector2(39,22),"attack_move")==1,"occupied-slot fixture receives a single order")
+	var group:int=u.command_group
+	var intent:Dictionary=u.intent.duplicate(true)
+	var started:=-1.0
+	var ended:=-1.0
+	for frame in int(REGROUP_BOUND*30.0):
+		var old:Vector2=actor.pos
+		sim.tick(1.0/30.0);sim.events.clear()
+		check(actor.pos.distance_to(old)<0.3,"occupied-slot return moves continuously")
+		check(sim.terrain.segment_clear(old,actor.pos,"land",actor.body_radius),"occupied-slot return keeps swept terrain clearance")
+		check(actor.pos.distance_to(medic.pos)>=1.54,"occupied-slot return never enters the medic's body")
+		if u.get("regroup_active",false) and started<0:started=sim.time
+		if started>=0 and not u.get("regroup_active",false):ended=sim.time;break
+	check(started>=0 and ended>=0 and ended-started<=REGROUP_BOUND,"occupied-slot regroup completes within the unchanged reunion bound")
+	check(ended>=0 and casualty.aid<Actors.AID_SECONDS,"straggler rejoins before the medic vacates the occupied slot")
+	check(u.members.all(func(m):return m.hp<=0 or m.pos.distance_to(u.pos)<2.8),"occupied-slot regroup ends with every live member within2.8")
+	check(u.command_group==group and u.intent==intent,"alternate regroup slot preserves the original objective")

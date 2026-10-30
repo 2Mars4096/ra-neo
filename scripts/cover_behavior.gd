@@ -26,7 +26,7 @@ const FOOTPRINT:=2.0
 # consolidating after casualties, and a cover bound once it has arrived.
 static func holds_cover(maneuver:Dictionary) -> bool:
 	var phase:String=maneuver.get("phase","")
-	return phase=="SUPPORT" or phase=="CONSOLIDATE" or (phase=="BOUND" and maneuver.get("arrived",false))
+	return phase in ["SUPPORT","CONSOLIDATE","PRESSURE_WAIT"] or (phase=="BOUND" and maneuver.get("arrived",false))
 
 static func clear(member:Dictionary) -> void:
 	member["occupying"]=false
@@ -63,7 +63,9 @@ static func _update(u:Dictionary,sim) -> void:
 		if fired-float(u.get("drill_seen",-100.0))>8.0 and not constrained:u["drill_until"]=sim.time+DRILL
 		u["drill_seen"]=fired
 	if constrained:
-		for member in u.members:clear(member)
+		for member in u.members:
+			clear(member)
+			_cancel_search(u,member,sim)
 		u["crossfire"]=false
 		return
 	_revalidate_shelters(u,sim)
@@ -98,6 +100,8 @@ static func _update(u:Dictionary,sim) -> void:
 		# walking off to man works (aid would only call the soldier back).
 		var bleeding:bool=u.members.any(func(m):return m.get("wound","")=="SEVERE" and not m.get("stable",false))
 		if u.orders.is_empty() and not building and not bleeding:occupy_works(u,sim,threat)
+		else:
+			for member in u.members:_cancel_search(u,member,sim)
 		return
 	var moving:=0
 	for member in u.members:
@@ -114,7 +118,9 @@ static func _update(u:Dictionary,sim) -> void:
 	for other in neighbors:
 		if other.team==u.team and other.id!=u.id and not other.members.is_empty() and other.pos.distance_squared_to(u.pos)<(LEASH+FOOTPRINT)*(LEASH+FOOTPRINT) and sim.fight_halted(other):footprints.append(other.pos)
 	for member in u.members:
-		if member.hp<=0:continue
+		if member.hp<=0:
+			_cancel_search(u,member,sim)
+			continue
 		var phase:String=member.get("cover_phase","")
 		# Inside one, or still to pass through one on the way to its own slot.
 		var intruding:=false
@@ -140,8 +146,9 @@ static func _update(u:Dictionary,sim) -> void:
 			# pinned: every couple of seconds look for a firing slot a short rush
 			# away; a long run in the open is worse than holding the shelter.
 			elif not exposed and phase=="SHELTERED" and member.has("cover_from") and member.target<0 and sim.time>=member.cover_until and moving<limit and sim.time>=u.get("drill_until",0.0) and sim.time-float(u.get("fired_on",-100.0))<2.0 and maxf(u.suppression,member.suppression)<=0.65:
-				member.cover_until=sim.time+2.0+member.index*0.15
 				var result:=find_slot(u,member,sim,threat,threats)
+				if result.get("pending",false):continue
+				member.cover_until=sim.time+2.0+member.index*0.15
 				if result.get("fire",false) and route_length(member.pos,result.path)<=6.0:
 					clear(member)
 					assign(u,member,sim,result,bearing)
@@ -150,14 +157,19 @@ static func _update(u:Dictionary,sim) -> void:
 					continue
 			if exposed:
 				clear(member);member.cover_until=sim.time+(0.0 if stale and exposed else 1.0)
-			else:continue
-		if intruding:continue
-		if sim.time<member.cover_until:continue
+			else:
+				_cancel_search(u,member,sim)
+				continue
+		if intruding or sim.time<member.cover_until:
+			_cancel_search(u,member,sim)
+			continue
 		# Contact drill, then bounding: one soldier rushes while the rest fire.
 		if moving>=limit or sim.time<u.get("drill_until",0.0):
+			_cancel_search(u,member,sim)
 			member.cover_phase="OVERWATCH"
 			continue
 		var result:=find_slot(u,member,sim,threat,threats)
+		if result.get("pending",false):continue
 		member.cover_until=sim.time+2.0+member.index*0.15
 		if result.is_empty():member.cover_phase="EXPOSED";continue
 		assign(u,member,sim,result,bearing)
@@ -211,10 +223,22 @@ static func _shelter_route(u:Dictionary,member:Dictionary,sim,goal:Vector2) -> A
 	return route
 
 static func find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threats:Array=[]) -> Dictionary:
+	if not _search_admitted(u,member,sim,1 if threat.has("id") else 0):return {"pending":true}
 	var t0:int=Time.get_ticks_usec() if sim.profiling else 0
 	var slot:=_find_slot(u,member,sim,threat,threats)
 	if sim.profiling:sim._lap("cover_find_slot",t0)
 	return slot
+
+# A complete search rates <=24 slots and tries <=6 routes. Reserve a bounded
+# bundle before evaluating any candidates; existing shelter and retry times
+# survive denial. Deferred owners retry on the next simulation tick.
+static func _search_admitted(u:Dictionary,member:Dictionary,sim,priority:int=0) -> bool:
+	if sim.terrain.planning.request("cover",int(u.id),"member:%d"%member.index,priority):return true
+	u["cover_next"]=sim.time
+	return false
+
+static func _cancel_search(u:Dictionary,member:Dictionary,sim) -> void:
+	sim.terrain.planning.cancel_request("cover",int(u.id),"member:%d"%member.index)
 
 static func _find_slot(u:Dictionary,member:Dictionary,sim,threat:Dictionary,threats:Array=[]) -> Dictionary:
 	if threats.is_empty() and not threat.is_empty():threats=[threat]
@@ -379,7 +403,13 @@ static func answers(sim,weapon:String,point:Vector2,contact:Dictionary) -> bool:
 	return point.distance_squared_to(contact.pos)<=reach*reach
 
 static func member_weapon(u:Dictionary,member:Dictionary) -> String:
-	return "atgm" if u.kind=="atgm" and member.index==0 else "rifle"
+	if u.kind!="atgm" or float(member.get("hp",0.0))<=0 or int(u.get("missiles",1))<=0:return "rifle"
+	# Explicit empty equipment means the specialist capability has been lost.
+	# Array position is only a migration fallback for old fieldless fixtures.
+	if not u.has("equipment"):return "atgm" if member.index==0 else "rifle"
+	var launcher:Dictionary=u.equipment.get("launcher",{})
+	var holder:String=launcher.get("holder","")
+	return "atgm" if not holder.is_empty() and holder==str(member.get("member_id","")) else "rifle"
 
 # Threat weight: a vehicle or emplacement outweighs a single rifle.
 static func power(other:Dictionary) -> float:
@@ -466,18 +496,6 @@ static func work_slots(u:Dictionary,sim,threat_dir:Vector2) -> Array:
 # costly searches of a freshly deployed force over the first ticks.
 const REACT_SLOTS:=20
 const REACT_STEP:=1.0/30.0
-# Halt searches per tick across all sections, in planned routes (a soldier's
-# search plans up to six, ~1.5 ms each): one starts while at most HALT_ROUTES
-# were planned this tick; the other soldiers take cover on following ticks.
-const HALT_ROUTES:=2
-
-# Routes planned by halt searches this tick (sim meta: [tick serial, routes]).
-static func _halt_routes(sim) -> int:
-	var spent:Vector2i=sim.get_meta("cover_halt_routes",Vector2i(-1,0))
-	return spent.y if spent.x==sim.spatial_serial else 0
-
-static func _halt_budget(sim) -> bool:
-	return not sim.ticking or _halt_routes(sim)<=HALT_ROUTES
 
 static func occupy_works(u:Dictionary,sim,threat:Dictionary) -> bool:
 	if not u.has("occupy_check"):
@@ -518,6 +536,9 @@ static func occupy_works(u:Dictionary,sim,threat:Dictionary) -> bool:
 			if taken.any(func(goal):return slot.distance_to(goal)<WORK_SPACING-0.001) or not sim.terrain.traversable(slot,"land",STRIDE):continue
 			if slot.distance_squared_to(member.pos)<distance:distance=slot.distance_squared_to(member.pos);best=slot
 		if best.x<0:continue
+		if not _search_admitted(u,member,sim):
+			u["occupy_check"]=sim.time
+			return u.members.any(func(m):return m.hp>0 and m.get("occupying",false))
 		var route:=_shelter_route(u,member,sim,best)
 		if route.is_empty():continue
 		taken.append(best)
@@ -538,14 +559,13 @@ static func halt_in_cover(u:Dictionary,sim,threat_dir:Vector2,first:int=0) -> bo
 	for i in range(first,u.members.size()):
 		var member:Dictionary=u.members[i]
 		if member.hp<=0 or member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] or sim.time<member.cover_until:continue
-		if not _halt_budget(sim):
-			# Out of searches this tick: the others look at the next threat scan.
+		var result:=find_slot(u,member,sim,phantom,[phantom])
+		if result.get("pending",false):
+			# Deferral is not a failed search and never starts the long no-cover
+			# backoff; resume this exact member on the next authoritative tick.
 			u["halt_resume"]=[sim.time,threat_dir,u.occupy_check,i]
 			u["occupy_check"]=sim.time
 			break
-		var planned:int=sim.terrain.path_calls
-		var result:=find_slot(u,member,sim,phantom,[phantom])
-		if sim.ticking:sim.set_meta("cover_halt_routes",Vector2i(sim.spatial_serial,_halt_routes(sim)+sim.terrain.path_calls-planned))
 		if result.is_empty() or result.pos.distance_to(member.pos)>8.0:continue
 		member.cover_goal=result.pos;member.cover_path=result.path;member.cover_phase="SEEKING";member.cover_blocked=0.0
 		member["cover_screened"]=false;member["occupying"]=true;member["hold_facing"]=threat_dir
@@ -571,7 +591,7 @@ static func in_weapon_range(threat:Dictionary,u:Dictionary,sim) -> bool:
 	# not line of fire through the shelter, determines this threat envelope.
 	for source in ([threat] if threat.members.is_empty() else threat.members):
 		if source.hp<=0:continue
-		var weapon:String=threat.kind if threat.members.is_empty() else ("atgm" if threat.kind=="atgm" and source.index==0 else "rifle")
+		var weapon:String=threat.kind if threat.members.is_empty() else member_weapon(threat,source)
 		if not sim.effective_weapon(weapon,u.kind):continue
 		var definition:Dictionary=sim.definitions[weapon]
 		var height:float=float(definition.altitude)-float(sim.definitions[u.kind].altitude)
