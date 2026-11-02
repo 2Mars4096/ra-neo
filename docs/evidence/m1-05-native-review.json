@@ -1,0 +1,404 @@
+{
+  "checkpoint": "M1 section 5 controls and feedback",
+  "base_commit": "40b5f6db6a6f402eb5e521e4c5a9a9d809fac9df",
+  "branch": "codex/m1-section-5",
+  "engine": "4.5.1-stable (official)",
+  "adapter": "llvmpipe (LLVM 20.1.2, 256 bits)",
+  "renderer": "OpenGL Compatibility",
+  "execution": {
+    "display": ":115",
+    "XDG_DATA_HOME": "/tmp/ra-m1-section5-native-verified/data",
+    "XDG_CONFIG_HOME": "/tmp/ra-m1-section5-native-verified/config",
+    "XDG_CACHE_HOME": "/tmp/ra-m1-section5-native-verified/cache",
+    "command": "/tmp/ra-neo-m1-runtime/Godot_v4.5.1-stable_linux.x86_64 --path . --rendering-method gl_compatibility --audio-driver Dummy --script tests/m1_section5_native_review.gd -- --output=res://artifacts/m1-section5-native-verified",
+    "exit_code": 0,
+    "completion": "M1 SECTION 5 NATIVE: 11 captures, 399 checks, 0 failures",
+    "warnings": [
+      "Virtual display driver cannot change V-Sync mode."
+    ],
+    "log_created_utc": "2026-11-02T19:39:48.360573+00:00",
+    "log_sha256": "bbee393a4c0b233d59b86a37efc753359bffdce98ca9aaaae8960f41e22dd7d7"
+  },
+  "checks": 399,
+  "failures": 0,
+  "captures_inspected": 11,
+  "minimum_label_margin_after_16px_padding": 12.0,
+  "scope": [
+    "Actual Harbor scene with campaign persistence disabled; deterministic InputEvents enter the ordinary battle input handler.",
+    "Smoke targeting, exactly one accepted preparation, retained stock and Hold cancellation; rejected frag preview and confirmation preserve inventory.",
+    "Native Reserve strip click and Hold fire policy; eight-action mixed infantry/engineer strip above active Field Guide and group roster.",
+    "Physical 1280x800 and 1600x900 windows at requested UI scales 1.0 and 1.5, including the existing minimum-logical-area cap.",
+    "All command rectangles stay inside the viewport and clear the guide/roster; actual bold-font label width plus 16 pixels padding fits every checked button.",
+    "Engineer reaches soil by ordinary right-click movement, D creates free work, actual digging completes hasty cover, U pays 50 supply once, and reinforcement status reflects real remaining work."
+  ],
+  "visual_findings": [
+    "All eleven verified captures inspected: stock labels, policy highlights, target arc/radius, ground footprints and one-line reasons remain legible.",
+    "Initial 03 capture showed a stale Stop acknowledgement underneath the next frag preview. Verified 03 shows only preview feedback; verified 03b shows the rejected-order acknowledgement without overlapping preview text.",
+    "Single-engineer status shows Digging · 17s remaining and Reinforcing · 9s remaining at the largest compact UI; the existing shallow cover remains visible during reinforcement."
+  ],
+  "initial_visual_control": {
+    "local_metadata_path": "artifacts/m1-section5-native-initial/review.json",
+    "metadata_sha256": "389ebf84b7d57d41ee4e7ab3f22b19caefc3003548da3f17535236c247e0d690",
+    "local_capture_path": "artifacts/m1-section5-native-initial/03-rejected-frag.jpg",
+    "image_sha256": "6994c67a213cf1cd826d74a40042e7e4f30b993aec835efc28fcc1f94fad0228",
+    "note": "Historical six-capture fixture before expanded work/font checks; visual overlap comparison only, not an identical-test negative control."
+  },
+  "source_sha256": {
+    "scripts/battle.gd": "14f7ecc7a0ae1993f87b1c7053144373fc3147c4ccc36bc0c62fd9da396c86dd",
+    "scripts/battlefield_interface.gd": "f14fbbfd6748efd86f50d91e2d9ac2cb521bdca348e0660112a9bd556fdc9a65",
+    "scripts/field_positions.gd": "4b6237afd188795e4a55521894d21b6fad17ad7d269d3233ab42cf1735aed51a",
+    "scripts/hud.gd": "63efbd89eed30219708d15e964a454658e66f87c2bed12f54463b85d089dc40e",
+    "scripts/support_requests.gd": "816439bdbb5fd1f3640707db3798f663b3cca03119c34e0209efa59a04c3b7a9",
+    "scripts/tactical_interface.gd": "556fa0b2a1148f2c8942d1c4548e671ad3308845bfb19165bc097c0a6e69ee53",
+    "scripts/throwables.gd": "1d6299afea0751dbf55f900c2df97a9da2558b6dc49ae826b133449a2b55e373",
+    "tests/m1_section5_native_review.gd": "8e846410ce33cb3d28d9324cb718fde1790a5a4780f7e3e730cfa13abe278acb"
+  },
+  "raw_metadata_sha256": "f358713fef37b88e46faf204ffb1b5df20cad4546c4c6179f1f17018ab2c821a",
+  "captures": [
+    {
+      "name": "01-minimum-strip",
+      "local_path": "artifacts/m1-section5-native-verified/01-minimum-strip.jpg",
+      "image_sha256": "0d880d4dfb1157f920203808375713e0243c9291257436b840cc13d499288d44",
+      "image_bytes": 239632,
+      "published": false,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1280.0, 800.0)",
+      "hud_points": "(1280.0, 800.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 0.0,
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "target_mode": "",
+      "preview_accepted": null,
+      "preview_reason": "",
+      "cursor_notice": "",
+      "selected_activity": [
+        {
+          "kind": "rifle",
+          "status": "",
+          "reason": "Following orders"
+        },
+        {
+          "kind": "engineer",
+          "status": "",
+          "reason": "Following orders"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "02-smoke-preview",
+      "local_path": "artifacts/m1-section5-native-verified/02-smoke-preview.jpg",
+      "image_sha256": "8adfb9f906daf721dca3091696a94bd817e53b1b62bda6c15bd2640effc249a9",
+      "image_bytes": 243086,
+      "published": false,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1280.0, 800.0)",
+      "hud_points": "(1280.0, 800.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 0.0,
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "target_mode": "smoke",
+      "preview_accepted": true,
+      "preview_reason": "Ready to throw",
+      "cursor_notice": "",
+      "selected_activity": [
+        {
+          "kind": "rifle",
+          "status": "",
+          "reason": "Following orders"
+        },
+        {
+          "kind": "engineer",
+          "status": "",
+          "reason": "Following orders"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "03-rejected-frag",
+      "local_path": "artifacts/m1-section5-native-verified/03-rejected-frag.jpg",
+      "image_sha256": "3171c3e1d27e119d370ad8278136771f05bd21bb9948d51550f0be669f4d807f",
+      "image_bytes": 239568,
+      "published": false,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1280.0, 800.0)",
+      "hud_points": "(1280.0, 800.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 0.0333333333333333,
+      "command_count": 7,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "target_mode": "frag",
+      "preview_accepted": false,
+      "preview_reason": "Out of throwing range",
+      "cursor_notice": "",
+      "selected_activity": [
+        {
+          "kind": "rifle",
+          "status": "",
+          "reason": "Following orders"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "03b-rejected-frag-feedback",
+      "local_path": "artifacts/m1-section5-native-verified/03b-rejected-frag-feedback.jpg",
+      "image_sha256": "ebf158cf0fa9aad359dd72b6bce311f759d9db05410b5d2b3e4349a29a2c3466",
+      "image_bytes": 238754,
+      "published": false,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1280.0, 800.0)",
+      "hud_points": "(1280.0, 800.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 0.0333333333333333,
+      "command_count": 7,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "target_mode": "frag",
+      "preview_accepted": false,
+      "preview_reason": "Out of throwing range",
+      "cursor_notice": "Out of throwing range",
+      "selected_activity": [
+        {
+          "kind": "rifle",
+          "status": "",
+          "reason": "Following orders"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "04-wide-policy-state",
+      "local_path": "artifacts/m1-section5-native-verified/04-wide-policy-state.jpg",
+      "image_sha256": "69780b62688c4202ec4b72750e0281859a04e1fce214ca85b44fd14544093e6a",
+      "image_bytes": 331131,
+      "published": false,
+      "window_pixels": "(1600, 900)",
+      "render_pixels": "(1600.0, 900.0)",
+      "hud_points": "(1600.0, 900.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 0.0333333333333333,
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 17.0,
+      "target_mode": "",
+      "preview_accepted": null,
+      "preview_reason": "",
+      "cursor_notice": "Holding fire",
+      "selected_activity": [
+        {
+          "kind": "rifle",
+          "status": "Reserve delegated",
+          "reason": "Following orders"
+        },
+        {
+          "kind": "engineer",
+          "status": "Reserve delegated",
+          "reason": "Following orders"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "05-wide-largest-ui",
+      "local_path": "artifacts/m1-section5-native-verified/05-wide-largest-ui.jpg",
+      "image_sha256": "227df4fecbcdb9676ab1d8268185a3422eba44726ba354c83745e03a720e25d1",
+      "image_bytes": 319476,
+      "published": false,
+      "window_pixels": "(1600, 900)",
+      "render_pixels": "(2000.0, 1125.0)",
+      "hud_points": "(1280.0, 720.0)",
+      "requested_ui_scale": 1.5,
+      "simulation_seconds": 0.0333333333333333,
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 17.0,
+      "target_mode": "",
+      "preview_accepted": null,
+      "preview_reason": "",
+      "cursor_notice": "Holding fire",
+      "selected_activity": [
+        {
+          "kind": "rifle",
+          "status": "Reserve delegated",
+          "reason": "Following orders"
+        },
+        {
+          "kind": "engineer",
+          "status": "Reserve delegated",
+          "reason": "Following orders"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "06-minimum-largest-ui",
+      "local_path": "artifacts/m1-section5-native-verified/06-minimum-largest-ui.jpg",
+      "image_sha256": "11d4a2abe574413e5f5e976d5d70549a2ba355686a2baaf97311da3ac0dfd6cd",
+      "image_bytes": 236464,
+      "published": false,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1423.0, 889.0)",
+      "hud_points": "(1152.0, 720.0)",
+      "requested_ui_scale": 1.5,
+      "simulation_seconds": 0.0333333333333333,
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 17.0,
+      "target_mode": "",
+      "preview_accepted": null,
+      "preview_reason": "",
+      "cursor_notice": "Holding fire",
+      "selected_activity": [
+        {
+          "kind": "rifle",
+          "status": "Reserve delegated",
+          "reason": "Following orders"
+        },
+        {
+          "kind": "engineer",
+          "status": "Reserve delegated",
+          "reason": "Following orders"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "07-dig-preview",
+      "local_path": "artifacts/m1-section5-native-verified/07-dig-preview.jpg",
+      "image_sha256": "ccd41f9b700517906423e45c982cbdd6360f4889228823a55ad868e9f382f596",
+      "image_bytes": 261893,
+      "published": false,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1423.0, 889.0)",
+      "hud_points": "(1152.0, 720.0)",
+      "requested_ui_scale": 1.5,
+      "simulation_seconds": 3.73333333333333,
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 17.0,
+      "target_mode": "dig",
+      "preview_accepted": true,
+      "preview_reason": "Prepare shallow cover · no supply cost",
+      "cursor_notice": "",
+      "selected_activity": [
+        {
+          "kind": "engineer",
+          "status": "",
+          "reason": "Following orders"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "08-digging-status",
+      "local_path": "artifacts/m1-section5-native-verified/08-digging-status.jpg",
+      "image_sha256": "6e879cdbba317e66696c8b474e6e7610bfb6366898fe3d1439417bba9180c80a",
+      "image_bytes": 259804,
+      "published": false,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1423.0, 889.0)",
+      "hud_points": "(1152.0, 720.0)",
+      "requested_ui_scale": 1.5,
+      "simulation_seconds": 4.93333333333333,
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 17.0,
+      "target_mode": "",
+      "preview_accepted": null,
+      "preview_reason": "",
+      "cursor_notice": "Preparing position",
+      "selected_activity": [
+        {
+          "kind": "engineer",
+          "status": "Digging · 17s remaining",
+          "reason": "Preparing position"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "09-upgrade-preview",
+      "local_path": "artifacts/m1-section5-native-verified/09-upgrade-preview.jpg",
+      "image_sha256": "48e851619d6f65caad10aac35934f04c114c465b57fc6de323aa1641c8193ee4",
+      "image_bytes": 261937,
+      "published": false,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1423.0, 889.0)",
+      "hud_points": "(1152.0, 720.0)",
+      "requested_ui_scale": 1.5,
+      "simulation_seconds": 21.9333333333336,
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 17.0,
+      "target_mode": "upgrade",
+      "preview_accepted": true,
+      "preview_reason": "Reinforce position · 50 supply",
+      "cursor_notice": "",
+      "selected_activity": [
+        {
+          "kind": "engineer",
+          "status": "",
+          "reason": "Position prepared"
+        }
+      ],
+      "visually_inspected": true
+    },
+    {
+      "name": "10-reinforcing-status",
+      "local_path": "artifacts/m1-section5-native-verified/10-reinforcing-status.jpg",
+      "image_sha256": "6d2931d2521a150ef27e60514d9ba8435ba04f35aa1a9a0b307d4162c5aa01cf",
+      "image_bytes": 258903,
+      "published": false,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1423.0, 889.0)",
+      "hud_points": "(1152.0, 720.0)",
+      "requested_ui_scale": 1.5,
+      "simulation_seconds": 22.966666666667,
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 17.0,
+      "target_mode": "",
+      "preview_accepted": null,
+      "preview_reason": "",
+      "cursor_notice": "Reinforcing position",
+      "selected_activity": [
+        {
+          "kind": "engineer",
+          "status": "Reinforcing · 9s remaining",
+          "reason": "Reinforcing position"
+        }
+      ],
+      "visually_inspected": true
+    }
+  ],
+  "publication": "Metadata only. Native screenshots remain local and unpublished; no image data is included.",
+  "limitations": "Functional and visual review on software-rendered llvmpipe. No supported-hardware frame rate, latency, human playtest, balance, campaign inventory persistence or full integrated mission acceptance is claimed.",
+  "provenance": {
+    "prelaunch_snapshot_local_path": "artifacts/m1-section5-native-verified/prelaunch-sources.json",
+    "prelaunch_snapshot_sha256": "6f8b2ee07141d20d5d9e1a06a85caa9b115952f43148b360c988b0d73391fca7",
+    "prelaunch_recorded_at_utc": "2026-11-02T19:39:48.337007+00:00",
+    "prelaunch_source_sha256": {
+      "scripts/battle.gd": "14f7ecc7a0ae1993f87b1c7053144373fc3147c4ccc36bc0c62fd9da396c86dd",
+      "scripts/battlefield_interface.gd": "f14fbbfd6748efd86f50d91e2d9ac2cb521bdca348e0660112a9bd556fdc9a65",
+      "scripts/field_positions.gd": "4b6237afd188795e4a55521894d21b6fad17ad7d269d3233ab42cf1735aed51a",
+      "scripts/hud.gd": "63efbd89eed30219708d15e964a454658e66f87c2bed12f54463b85d089dc40e",
+      "scripts/support_requests.gd": "816439bdbb5fd1f3640707db3798f663b3cca03119c34e0209efa59a04c3b7a9",
+      "scripts/tactical_interface.gd": "556fa0b2a1148f2c8942d1c4548e671ad3308845bfb19165bc097c0a6e69ee53",
+      "scripts/throwables.gd": "1d6299afea0751dbf55f900c2df97a9da2558b6dc49ae826b133449a2b55e373",
+      "tests/m1_section5_native_review.gd": "8e846410ce33cb3d28d9324cb718fde1790a5a4780f7e3e730cfa13abe278acb"
+    },
+    "prelaunch_source_mtime_utc": {
+      "scripts/battle.gd": "2026-11-02T19:32:37.597260+00:00",
+      "scripts/battlefield_interface.gd": "2026-11-02T19:28:45.290937+00:00",
+      "scripts/field_positions.gd": "2026-11-02T18:47:24.411563+00:00",
+      "scripts/hud.gd": "2026-11-02T19:33:28.554808+00:00",
+      "scripts/support_requests.gd": "2026-11-02T18:36:57.849605+00:00",
+      "scripts/tactical_interface.gd": "2026-11-02T19:34:17.136472+00:00",
+      "scripts/throwables.gd": "2026-11-02T18:36:57.853605+00:00",
+      "tests/m1_section5_native_review.gd": "2026-11-02T19:34:03.193142+00:00"
+    },
+    "process_log_created_utc": "2026-11-02T19:39:48.360573+00:00",
+    "latest_source_modification_utc": "2026-11-02T19:34:17.136472+00:00",
+    "all_sources_precede_process_launch": true,
+    "prelaunch_run_end_and_current_hashes_match": true,
+    "note": "Exact eleven-capture fixture rerun after all source edits. This verified run supplies every current result and capture below; the earlier final-named run had ambiguous load timing and is retained only as local history."
+  },
+  "published_equivalent_base_commit": "8b6adb8bc43739295a4bd051b3d772e485412ad0",
+  "base_tree_sha": "df983c69733d4c37c294746c70ae3083232d2c38"
+}

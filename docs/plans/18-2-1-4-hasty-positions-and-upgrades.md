@@ -1,7 +1,7 @@
 # 18-2-1-4: Hasty positions and engineer upgrades
 
 **Parent:** [18-2-1-m1-infantry-defense](18-2-1-m1-infantry-defense.md)
-**Status:** in-progress (implementation complete; publication pending)
+**Status:** completed
 **Goal:** Let one infantry member prepare local cover and an engineer reinforce the same site, preserving work and payment through interruptions.
 
 ## Delivery boundary
@@ -16,7 +16,7 @@ Continue from completed section 3 (`57f7fa8`) on `codex/m1-section-4`. Recover t
 - [x] 4. Verify the paid engineer upgrade, damage retention, cancellation/salvage and exclusive site ownership.
 - [x] 5. Run focused M1 and affected field-work/order regressions; inspect native stage presentation.
 - [x] 6. Update tracking/evidence and commit the reviewed checkpoint locally.
-- [ ] 7. Publish the prepared `codex/m1-section-4` branch. Remote publication is pending; no branch exists on GitHub yet.
+- [x] 7. Publish `codex/m1-section-4` at `8b6adb8`. Its code-only tree exactly matches tested local checkpoint `40b5f6d`; native screenshots remain local and unpublished.
 
 ## Behavior contract
 

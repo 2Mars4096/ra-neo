@@ -45,9 +45,9 @@ The current increment deepens distinct battlefield decisions, carries expedition
 
 ## Current delivery focus
 
-### M1 infantry defense — section 4 checkpoint
+### M1 infantry defense — section 5 checkpoint
 
-M0 is complete at `5850504`. [M1](plans/18-2-1-m1-infantry-defense.md) divides delivery into coordinated cover/movement, finite grenades/smoke, reserve backup, hasty positions/upgrades, compact controls, and persistence/integration. Sections 1–3 are published at `d10682e`, `e180a118` and `57f7fa8`. The current delivery completes [section 4](plans/18-2-1-4-hasty-positions-and-upgrades.md) on `codex/m1-section-4`, recovering the isolated `3ce3b99` candidate while retaining those fixes. Its components are ground/access validation, one-member physical work, retained progress and paid upgrades, command/safety integration, and current functional/native evidence. Controls remain section 5; campaign inventory persistence and the combined Harbor encounter remain section 6.
+M0 is complete at `5850504`. [M1](plans/18-2-1-m1-infantry-defense.md) divides delivery into coordinated cover/movement, finite grenades/smoke, reserve backup, hasty positions/upgrades, compact controls, and persistence/integration. Sections 1–3 are published at `d10682e`, `e180a118` and `57f7fa8`; section 4 is published at `8b6adb8`. The current delivery completes [section 5](plans/18-2-1-5-controls-and-feedback.md) on `codex/m1-section-5`, recovering the isolated `1f42d24` candidate while retaining the earlier executor corrections. Its three parts cover commands/cancellation, accurate previews/status, and input/native verification. Campaign inventory persistence and the combined Harbor encounter remain section 6.
 
 The broader [Plan 18](plans/18-unit-tactical-autonomy.md) remains the roadmap. M2 domain roles and M3 urban/sustainment expansion follow this slice. Shared physical rules, player order authority and measured responsiveness remain requirements. Human balance and supported-hardware performance acceptance remain separate from functional checks.
 

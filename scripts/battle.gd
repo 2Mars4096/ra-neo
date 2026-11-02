@@ -52,6 +52,8 @@ var attack_mode := false
 # FPV strike targeting: armed from the reinforcement panel, the next map click aims it.
 var strike_mode := false
 var build_mode:=""
+var tactical_mode:=""
+const TacticalInterface=preload("res://scripts/tactical_interface.gd")
 var tactical_effects=preload("res://scripts/tactical_effects.gd").new()
 var build_rotated:=false
 # Drag-to-install for linear works and net areas: world-space anchor while held.
@@ -263,14 +265,16 @@ func set_targeting(mode:String,kind:String="") -> void:
 	attack_mode=mode=="attack"
 	strike_mode=mode=="strike"
 	build_mode=kind if mode=="build" else ""
+	tactical_mode=kind if mode=="tactical" else ""
 	build_drag=false
 	dragging=false
 	cursor_hint=""
+	if mode!="":notices.cursor_left=0.0
 	hint_dirty=true
 
 func cancel_targeting(announce:bool=true) -> bool:
-	var message:="Placement cancelled" if build_mode!="" else ("FPV strike cancelled" if strike_mode else "Attack order cancelled")
-	var active:bool=build_mode!="" or strike_mode or attack_mode or build_drag
+	var message:="Action cancelled" if tactical_mode!="" else ("Placement cancelled" if build_mode!="" else ("FPV strike cancelled" if strike_mode else "Attack order cancelled"))
+	var active:bool=tactical_mode!="" or build_mode!="" or strike_mode or attack_mode or build_drag
 	set_targeting("")
 	if active and announce:notify(message,Notice.CURSOR)
 	return active
@@ -1221,13 +1225,14 @@ func refresh_cursor_hint() -> void:
 	hint_dirty=false
 	hint_msec=Time.get_ticks_msec()
 	cursor_hint=""
-	if selected.is_empty() or show_help or sim.result!="" or build_mode!="" or strike_mode or dragging or pointer.x<0 or hud.action_at(pointer)!="":return
+	if selected.is_empty() or show_help or sim.result!="" or build_mode!="" or tactical_mode!="" or strike_mode or dragging or pointer.x<0 or hud.action_at(pointer)!="":return
 	# Downed sections (survivors all down) take no actions.
 	var ids:=orderable().filter(func(id):return not sim.get_unit(id).get("combat_ineffective",false))
 	if ids.is_empty():return
 	cursor_hint=str(special_plan(pointer,pick(pointer,true),attack_mode,ids).get("label",""))
 
 func ui_action(action: String, p: Vector2) -> void:
+	if TacticalInterface.handle(self,action):return
 	if hud.has_method("handle_action") and hud.handle_action(action,p):return
 	match action:
 		"begin":
@@ -1298,7 +1303,8 @@ func ui_action(action: String, p: Vector2) -> void:
 			elif action=="resume_build" and selected.size()==1:
 				var site:Dictionary=sim.get_unit(selected[0])
 				if sim.FieldOps.resume(sim,selected[0]):
-					notify("%s resumed • engineers en route • no charge" % HUD.FIELD_LABELS.get(site.kind,"Site"),Notice.CURSOR)
+					var resume_worker:="infantry assigned" if site.get("field_position",false) and int(site.get("position_stage",0))==0 else "engineers en route"
+					notify("%s resumed • %s • no charge" % [HUD.FIELD_LABELS.get(site.kind,"Site"),resume_worker],Notice.CURSOR)
 					ping()
 				else:notify(build_error("Unable to resume construction"))
 			elif action=="cancel_queue" and selected.size()==1:
@@ -1476,6 +1482,9 @@ func _input(event: InputEvent) -> void:
 			elif event.button_index==MOUSE_BUTTON_WHEEL_DOWN:
 				if not show_help and sim.result=="":user_zoom(pow(1.0/0.90,maxf(event.factor,0.1)))
 			elif event.button_index==MOUSE_BUTTON_LEFT:
+				if tactical_mode!="":
+					if not show_help and not menu_open() and sim.result=="":TacticalInterface.confirm(self,world_pos(p))
+					return
 				if strike_mode:
 					launch_strike(p)
 					return
@@ -1530,6 +1539,12 @@ func _input(event: InputEvent) -> void:
 			if event.keycode==KEY_ENTER: ui_action("begin",Vector2.ZERO)
 			return
 		match event.keycode:
+			KEY_G:ui_action("tactical:frag",Vector2.ZERO)
+			KEY_V:ui_action("tactical:smoke",Vector2.ZERO)
+			KEY_D:ui_action("tactical:dig",Vector2.ZERO)
+			KEY_U:ui_action("tactical:upgrade",Vector2.ZERO)
+			KEY_B:ui_action("tactical:backup",Vector2.ZERO)
+			KEY_H:ui_action("tactical:fire",Vector2.ZERO)
 			KEY_T:
 				if build_mode in sim.FieldOps.ROTATABLE and not sim.field_ops.is_empty():
 					build_rotated=not build_rotated

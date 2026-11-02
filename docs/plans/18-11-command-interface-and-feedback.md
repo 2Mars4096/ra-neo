@@ -6,7 +6,7 @@
 
 ## Baseline and evidence
 
-M0 protects existing replacement, queued, provisional, Hold and internal-approach ownership. The HUD adds reloading/ready counts and pressure/fire-policy reasons; the local diagnostic report adds bounded own-team action traces, strength and planner counters. [18-1-1](18-1-1-m0-foundation.md) tracks verification. New initiative, fire-policy, throw, backup and digging controls remain future work; internal permission support is not a shipped button.
+M0 protects existing replacement, queued, provisional, Hold and internal-approach ownership. The HUD adds reloading/ready counts and pressure/fire-policy reasons; the local diagnostic report adds bounded own-team action traces, strength and planner counters. [18-1-1](18-1-1-m0-foundation.md) tracks verification. [M1.5](18-2-1-5-controls-and-feedback.md) now exposes G/V throws, D/U work, B backup, H Hold fire and explicit Reserve/Auto Frag toggles. Broader initiative profiles and later domain controls remain future work.
 
 [Battle](../../scripts/battle.gd) handles contextual right-click, queued commands, selection, targeting and tactical pause. [HUD](../../scripts/hud.gd) already shows selected-unit state/reasons, movement routes, engineer placement and purchase queues. [NoticeFeed](../../scripts/notice_feed.gd) limits and merges notifications. Extend these surfaces rather than adding a separate panel for every soldier action.
 
@@ -27,7 +27,7 @@ Hold fire is a separate authoritative engagement permission, so observing or wai
 
 ## Key interaction flows
 
-**Grenade/smoke:** select a capable section, choose the payload, point at a valid area and confirm. Preview remaining charges, uncertain throw/impact area, obstruction and known allied risk. One eligible soldier reserves the action; the rest preserve useful roles. Escape cancels preparation, while a released projectile remains in the world. A request for another unit's smoke is shown as support, not as a grenade magically appearing in this section.
+**Grenade/smoke:** select a capable section, choose the payload, point at a valid area and confirm. Preview remaining charges, throw/impact area, obstruction and known allied risk. One eligible soldier reserves the action; the rest preserve useful roles. Escape/right-click cancels the pending targeting gesture. Accepted Hold/Move/Retreat cancels unreleased preparation; a released projectile remains in the world. A request for another unit's smoke remains later support scope.
 
 **Backup:** select Request support or let a delegated unit raise its own need. Show the responding unit and brief status. Clicking the indicator focuses that responder; cancelling releases its temporary task. Buying a new unit remains a separate purchase interaction unless an explicit automated spending allowance exists.
 
@@ -40,13 +40,13 @@ Hold fire is a separate authoritative engagement permission, so observing or wai
 ## Tasks
 
 - [x] 1. Document current command semantics and protect them with focused input/replacement tests.
-- [ ] 2. Add the minimal initiative/engagement permission view with [18-1](18-1-action-framework-and-readiness.md); show scope in hover text and selection overlays.
-- [ ] 3. Add a capability-filtered context strip for the M1 grenade, smoke, backup and digging slice; use concise labels and recognizable icons.
-- [ ] 4. Make previews and commit validation share current geometry, inventory, knowledge and authorization checks. A stale preview may fail clearly without consuming resources.
-- [ ] 5. Add activity, support lifecycle and optional service-return cues using existing notice merging.
-- [ ] 6. Show mixed-selection eligibility: how many units can act, which one is assigned, and what stays pending. Do not duplicate throws or paid work accidentally.
-- [ ] 7. Preserve queued orders, control groups, pause, minimap commands and keyboard access; define conflict behavior for targeting modes.
-- [ ] 8. Inspect native visuals and run the usability/latency scenarios below before enabling the new controls broadly.
+- [ ] 2. Complete the initiative/engagement permission view with [18-1](18-1-action-framework-and-readiness.md). M1 exposes Hold fire with scope in hover text; initiative profiles remain later work.
+- [x] 3. Add the M1 capability-filtered strip with concise action labels, hotkeys, stock and policy states.
+- [x] 4. Share executor validation and structured preview data for M1; stale/rejected commitment preserves resources and explains failure.
+- [ ] 5. Complete broader activity/service-return cues. M1 reports retained work, remaining time, covering and current backup state; later services remain open.
+- [x] 6. Make M1 mixed-selection commands truthful: one throw/worker, no duplicate spending, partial radio receipts and reversible connected-section toggles.
+- [x] 7. Preserve existing orders, groups, pause and minimap commands; targeted modes remain exclusive and cancellation consumes the gesture.
+- [ ] 8. Complete native/human usability and measured latency acceptance. M1.5 has a reproducible native review; no hardware latency or human-playtest claim is implied.
 
 ## Feedback and presentation contract
 

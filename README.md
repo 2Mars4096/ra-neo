@@ -87,6 +87,11 @@ See the [regional guide](docs/regional-map.md) for campaign rules, editor contro
 | A, then click | Attack-move |
 | Shift + order | Queue orders |
 | S | Stop and hold |
+| G / V, then click | Throw one frag / smoke grenade from the selected infantry |
+| D / U, then click | Dig a nearby hasty position / reinforce it with an engineer |
+| B | Request an existing nearby reserve |
+| H | Toggle Hold fire for selected infantry |
+| RESERVE / AUTO FRAG buttons | Delegate nearby backup / opt into defensive frag use |
 | R | Retreat to staging area; safe recovery costs supply |
 | Ctrl or Cmd + 1–9 / 1–9 | Assign / recall group |
 | Tab | Select all sections |
@@ -103,7 +108,7 @@ The command deck shows supply, reinforcements, selected-unit health/state, and m
 
 ### M1: coordinated infantry defense
 
-The M1 work is divided into [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **Sections 1–4 are implemented on local `codex/m1-section-4`, continuing section 3 at `57f7fa8`; remote publication is pending.** Members taking a short cover route reserve a teammate who can observe and fire on the threat. The covering member holds its position, uses the assigned threat's appropriate weapon and retains loaded ammunition; another member can take over after a reload or casualty. Explicit orders remain authoritative, and switching to an urgent threat releases the previous covering claim.
+The M1 work is divided into [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **Sections 1–5 are implemented on `codex/m1-section-5`, continuing published section 4 at `8b6adb8`.** Members taking a short cover route reserve a teammate who can observe and fire on the threat. The covering member holds its position, uses the assigned threat's appropriate weapon and retains loaded ammunition; another member can take over after a reload or casualty. Explicit orders remain authoritative, and switching to an urgent threat releases the previous covering claim.
 
 [Section 2](docs/plans/18-2-1-2-grenades-and-smoke.md) adds finite frag and smoke inventory, interruptible throw preparation, swept projectile flight and physical blast exposure. Cancellation preserves unspent stock; release spends one charge and the projectile continues independently. Smoke blocks optical observation and fire for both factions within its volume, while high rays can pass above it. Visibility follows exposed living soldiers, including when the squad's center is screened. The initial grenade meshes, throw pose and smoke puffs are placeholders.
 
@@ -111,13 +116,15 @@ The M1 work is divided into [six implementation sections](docs/plans/18-2-1-m1-i
 
 [Section 4](docs/plans/18-2-1-4-hasty-positions-and-upgrades.md) adds local field positions. One rifle, AT or engineer member spends 18 seconds digging clear, level soil while the others remain available. Digging costs no supply; the unfinished marker gives no protection, and completion grants ordinary cover with 120 integrity. An engineer can reinforce the same site for 50 supply and ten seconds of work, producing dug-in protection with 320 integrity. Interruptions retain progress and paid materials; an interrupted upgrade retains its hasty cover. Repeating a current order does not charge again. Stage meshes and the work pose are procedural placeholders.
 
-Throws, reserve/backup, digging and upgrades currently use the simulation APIs, including `issue_dig(ids, point)` and `upgrade_position(ids, site_id)`. Contextual buttons, hotkeys and aim previews arrive in section 5; campaign throwable inventory and the integrated encounter remain section 6. Optional defensive frag behavior is off by default. Section 2 includes a reproducible [native scene review](docs/evidence/m1-02-native-review.json); section 3's [functional evidence](docs/evidence/m1-03-checks.json) exercises actual movement, firing and order completion. Section 4's scope and verification are tracked in its linked plan.
+[Section 5](docs/plans/18-2-1-5-controls-and-feedback.md) adds a contextual command strip above the Field Guide and group roster. Buttons and shortcuts share capability checks; target previews show the known throw arc, landing/risk area or actual work footprint. The preview shows no additional supply cost for an interrupted paid upgrade. Selection status reports current work, remaining time, covering and backup activity. Hold fire is separate from holding position; an explicit throw permits only that requested release. Defensive frag is off by default.
+
+Escape/right-click cancels the pending targeting gesture. An accepted S/Move/Retreat cancels unreleased preparation through the existing order rules; released payloads remain in the world. Radio-limited selections receive an accepted count and disconnected remainder. Repeating a policy toggle changes the connected sections back, while a mixed-state underline and hover text expose differing policies. Campaign throwable inventory and the integrated encounter remain section 6. Current checks and native review are tracked in [validation](docs/validation.md).
 
 ### M0: readiness and reliable orders
 
 In autonomous tactical modes, stationary soldiers prepare empty weapons during quiet moments. A low rifle magazine can top off while another capable loaded member watches; movement, casualty aid and cover transit take precedence. The selection panel shows how many members are reloading and ready. Explicit targets take priority, ordinary targets stay stable, and AA can switch to a newly observed urgent air threat. Depleted sections assess losses against their originally assigned strength; healing still restores only survivors.
 
-Accepted replacement orders cancel obsolete preparation and plans. Queued commands retain their order, temporary movement preserves the parent task, and pending route work retries without being reported as impossible. **S remains Stop and hold position.** M0's separate fire-permission contract is internal; it adds no new control to learn. M1 builds on this foundation in the sections described above.
+Accepted replacement orders cancel obsolete preparation and plans. Queued commands retain their order, temporary movement preserves the parent task, and pending route work retries without being reported as impossible. **S remains Stop and hold position.** M1's H control exposes the separate standing fire-permission contract introduced by M0.
 
 Campaign checkpoints now preserve partial magazines, specialist equipment ownership and original section strength, with migration from the earlier save format. **Settings → Copy bug report** includes bounded action reasons, assignment versions and planning diagnostics. See [the M0 plan](docs/plans/18-1-1-m0-foundation.md) and [validation evidence](docs/validation.md) for tested behavior and limits.
 

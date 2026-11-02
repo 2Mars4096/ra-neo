@@ -1,5 +1,37 @@
 # Validation evidence
 
+## M1 section 5 — Contextual controls and feedback
+
+Verified with **Godot 4.5.1.stable.official.f62fdbde1**, Linux, on `codex/m1-section-5`, based on section 4 (published as `8b6adb8`, verified locally as `40b5f6d`) plus the isolated section 5 candidate delta (`1f42d24`). The final selected gate passes **22/22 suites in approximately 284 seconds**, with no assertion or script errors. [Current functional evidence](evidence/m1-05-checks.json) retains the exact runner command, all outputs, current source/test/configuration hashes and the matched negative control.
+
+| Focused M1 suite | Checks | Failures |
+|---|---:|---:|
+| Coordinated cover and movement | 79 | 0 |
+| Throwables | 145 | 0 |
+| Optical smoke | 56 | 0 |
+| Nearby reserve requests | 125 | 0 |
+| Reserve lifecycle | 62 | 0 |
+| Field-position behavior | 151 | 0 |
+| Field-position lifecycle | 81 | 0 |
+| Field-position order authority | 16 | 0 |
+| Contextual command input and layout | 62 | 0 |
+| Command lifecycle, rejection and feedback | 59 | 0 |
+| **Total** | **836** | **0** |
+
+The two command suites exercise ordinary Battle input dispatch, one-payload mixed-selection requests, capability and stock rejection, policy toggles with partial radio reception, targeting cancellation, accepted replacement commands and modal boundaries. Lifecycle cases also verify actual digging/upgrading, preserved paid materials, shared target preview geometry, paused-engineer status and Resume eligibility. The other selected suites cover existing field UI, HUD layout/state, battlefield controls, command modes, contextual input, notices, settings, middle-button camera movement and regional campaign UI.
+
+The identical **59-check** lifecycle test produces **14 assertion failures** on an isolated export of section 4 with only `git diff 1f42d24^ 1f42d24 -- scripts tests` applied, and **zero failures** on the corrected source. Both runs have zero script errors and matching test hashes. The report retains the patch hash, construction instructions, complete outputs, failing assertion names and compared production hashes; this is an integrated candidate control, not a whole historical section 5 checkout.
+
+The unchanged `test_input.gd` retains **“ObjectDB instances leaked at exit”**. The known Harbor crowd-spacing failure documented under section 4 remains open and was **not rerun in this selection**. Neither its threshold nor unrelated combat behavior was changed. The existing synchronous navigation hitch, hardware frame time, command latency and long-session cleanup remain separate acceptance work. These 22 passes are the affected selection, not a full-repository regression claim.
+
+### Native controls and work review
+
+`tests/m1_section5_native_review.gd` drives the actual Harbor scene with deterministic InputEvents, ordinary fog, isolated settings and campaign saving disabled. The final run passes **399 checks with eleven captures and zero failures** on **OpenGL Compatibility / llvmpipe**; every capture was visually inspected. Physical windows of **1280 × 800** and **1600 × 900** were exercised at requested UI scales **1.0 and 1.5**, including the existing minimum-logical-area cap. The command strip clears the active Field Guide and retained group roster; actual bold-font label widths plus 16 pixels of padding fit the checked buttons, with a minimum remaining margin of 12 pixels.
+
+The captures cover smoke aiming and one accepted preparation, retained stock and Hold cancellation, rejected frag preview/confirmation, Reserve and Hold fire state, and mixed selection. An engineer moves normally to soil, D starts free digging, real work completes hasty cover, and U spends 50 supply once to begin reinforcement. Selected status shows actual remaining digging/reinforcement time. Starting a new target removes stale cursor feedback; rejected-order acknowledgement and preview text no longer overlap.
+
+[Native metadata](evidence/m1-05-native-review.json) records the command, states, checks, image hashes and a prelaunch source snapshot that matches the run-end and current sources. The exact eleven-capture fixture was rerun after all source edits; an earlier run with ambiguous load timing is not used as current evidence. Screenshot files remain local and unpublished. Software-rendered functional/visual review does not establish supported-hardware performance, human command clarity, balance, campaign throwable persistence or the full integrated encounter; the latter two belong to section 6.
+
 ## M1 section 4 — Hasty positions and engineer upgrades
 
 Verified with **Godot 4.5.1.stable.official.f62fdbde1**, Linux, on `codex/m1-section-4` based on completed section 3 (`57f7fa8`). All **715 M1 checks pass**. The affected selection passes **39/40 suites**; the single inherited failure and its baseline proof are explicit below. [Current evidence](evidence/m1-04-checks.json) includes outputs, exact commands, negative controls and 121 source/test/configuration hashes.

@@ -1,18 +1,19 @@
 # Todo
 
-## Tactical expansion — M1 section 4
+## Tactical expansion — M1 section 5
 
-M0 is complete at `5850504`. [M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) has six sections: coordinated movement, grenades/smoke, reserve backup, field positions, controls, and persistence/integration. Sections 1–3 are published at `d10682e`, `e180a118` and `57f7fa8`. The current local `codex/m1-section-4` checkpoint implements [hasty positions and engineer upgrades](plans/18-2-1-4-hasty-positions-and-upgrades.md): one-member physical work, staged protection, retained progress/materials and safe command/recovery integration. All 715 M1 checks pass, including 248 field-position checks, and three native Harbor captures were inspected. The affected gate passes 39/40 suites; its one crowd-spacing failure is reproduced unchanged on section 3 and remains a documented follow-up. Remote publication of section 4 is pending. M1.5–M1.6 and the existing CPU hitch follow-up remain open.
+M0 is complete at `5850504`. [M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) has six sections: coordinated movement, grenades/smoke, reserve backup, field positions, controls, and persistence/integration. Sections 1–3 are published at `d10682e`, `e180a118` and `57f7fa8`. Section 4 is published at `8b6adb8`; section 5 completes the controls checkpoint on its own branch. The current `codex/m1-section-5` work adds [contextual controls, previews and feedback](plans/18-2-1-5-controls-and-feedback.md) over completed section 4 (`8b6adb8`). The selected gate passes **22/22 suites**, including **836 M1 checks**, and the native review passes **399 checks across eleven inspected captures**. The inherited Harbor crowd-spacing failure recorded in section 4 remains open and was not rerun here. Section 6 persistence/integration and the existing CPU hitch follow-up remain open.
 
 - [ ] [18: Tactical actions and capable individual units](plans/18-unit-tactical-autonomy.md) — master milestones, shared contracts and acceptance gates.
   - [ ] [18-1: Action framework and readiness](plans/18-1-action-framework-and-readiness.md).
     - [x] [18-1-1: M0 tactical foundation](plans/18-1-1-m0-foundation.md) — implemented; 58/58 integration suites, native review and current-build CPU evidence recorded.
   - [ ] [18-2: Infantry fire and movement](plans/18-2-infantry-fire-and-movement.md).
-    - [ ] [18-2-1: M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) — sections 1–4 complete; M1.5–M1.6 pending.
+    - [ ] [18-2-1: M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) — sections 1–5 complete; M1.6 pending.
       - [x] [18-2-1-1: Coordinated cover and movement](plans/18-2-1-1-coordinated-cover-and-movement.md) — reviewed combat integration, physical shelter/role cleanup and player-order authority; 17/17 affected suites pass.
       - [x] [18-2-1-2: Grenades and smoke](plans/18-2-1-2-grenades-and-smoke.md) — finite stock, preparation/release, swept flight, exposed blast and optical smoke; 22/22 suites and three inspected native captures pass.
       - [x] [18-2-1-3: Nearby reserve backup](plans/18-2-1-3-nearby-reserve-backup.md) — delegation, exclusive leases, actual useful support and assignment-safe return; 29/29 affected suites pass, including 125 support-request and 62 lifecycle checks.
       - [x] [18-2-1-4: Hasty positions and engineer upgrades](plans/18-2-1-4-hasty-positions-and-upgrades.md) — 248 field-position checks pass; interrupted work, paid upgrades, ownership and native stage presentation verified.
+      - [x] [18-2-1-5: Controls and feedback](plans/18-2-1-5-controls-and-feedback.md) — contextual commands, shared previews, partial radio acknowledgements and work status; 121 command checks and eleven inspected native captures.
   - [ ] [18-3: Grenades and urban actions](plans/18-3-infantry-grenades-and-urban-actions.md).
   - [ ] [18-4: Coordination and support requests](plans/18-4-coordination-and-support-requests.md).
   - [ ] [18-5: Engineering and field fortifications](plans/18-5-engineering-and-field-fortifications.md).

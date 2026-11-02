@@ -1,5 +1,13 @@
 # Bugs and failed approaches
 
+## M1 section 5 review — 2026-11-02
+
+- **Resolved:** targeting shortcuts bypassed the command strip's capability/stock checks, so rifle-only Upgrade, empty-stock Frag and Dig outside field operations could arm unusable actions. Buttons and shortcuts now share selection-level validation; target-specific readiness and geometry remain executor-owned.
+- **Resolved:** policy toggles derived intent from every selected section, including disconnected peers. After a partial acknowledgement, Hold fire, Reserve and Auto Frag could repeatedly enable the connected section instead of toggling it off. Intent now follows connected applicable sections; acknowledgements report the accepted fraction and radio failures, while the strip marks mixed state.
+- **Resolved:** field-work feedback reconstructed less information than the executor. A click near an unfinished survey outlined the wrong footprint; a paid interrupted upgrade advertised a second 50-supply charge; a pressure-paused engineer appeared ready; and the legacy last-engineer fallback enabled Resume despite lost radio or excessive distance. Structured previews retain snapped geometry/cost, current jobs retain paused status/time, and field-position Resume uses the matching executor checks. The identical final 59-check command lifecycle test has **14 failures before these corrections and zero afterward**, with no script errors. [Evidence](evidence/m1-05-checks.json).
+- **Resolved in native review:** a stale Stop acknowledgement overlapped the next frag preview. Starting new targeting clears old cursor feedback; a current commitment acknowledgement temporarily takes precedence over the preview reason. Target/acknowledgement bounds and opaque-UI checks keep feedback visible and prevent misleading previews through panels. The final eleven-capture run was repeated after all source edits and inspected; an earlier run with ambiguous source-load timing is not current verification evidence.
+- **Open, inherited:** the section 4 Harbor crowd-spacing failure and synchronous navigation hitch remain unchanged follow-ups. Section 5's selected 22-suite gate did not rerun `test_engaged_spacing.gd` or hardware performance. `test_input.gd` retains its ObjectDB shutdown warning; the passing functional result does not resolve shutdown cleanup.
+
 ## M1 section 4 review — 2026-11-02
 
 - **Resolved:** empty movement queues made active one-member digging look idle to ordinary squad spacing. Automatic unstacking replaced work with Move; engagement spacing displaced the anchor. Both systems now respect the live work assignment while explicit commands remain authoritative. The identical 16-check suite produces five failures before the guards and none afterward.

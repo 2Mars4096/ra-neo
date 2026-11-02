@@ -6,9 +6,9 @@
 
 ## Delivery boundary
 
-M0 is complete at `5850504`. M1 is divided into the six sections below. Sections 1–3 are published at `d10682e`, `e180a118` and `57f7fa8`, with their checkpoint evidence retained below. The current delivery completes **section 4** on `codex/m1-section-4`, recovering the isolated candidate `3ce3b99` onto completed section 3. It preserves the earlier covering-fire, optical-smoke, reserve lifecycle and copied-observation corrections. The staged branch also contains section 5; that code is not imported here. Section 4 implementation and verification are complete locally; publication of its separate branch is pending.
+M0 is complete at `5850504`. M1 is divided into the six sections below. Sections 1–4 are published at `d10682e`, `e180a118`, `57f7fa8` and `8b6adb8`, with their checkpoint evidence retained below. Section 4's published tree exactly matches tested local checkpoint `40b5f6d`. The current delivery completes **section 5** on `codex/m1-section-5`, recovering only the isolated `1f42d24` controls candidate onto that reviewed baseline. Earlier covering-fire, optical-smoke, reserve lifecycle, copied-observation and field-work corrections are preserved.
 
-This slice crosses plans 18-2/3/4/5/9/10/11/12. Each section remains a buildable checkpoint with current checks and tracking. This delivery stops after hasty positions and engineer upgrades; contextual controls and campaign inventory/integration remain sections 5–6.
+This slice crosses plans 18-2/3/4/5/9/10/11/12. Each section remains a buildable checkpoint with current checks and tracking. This delivery stops after contextual controls and feedback; campaign inventory and the integrated Harbor encounter remain section 6.
 
 ## Implementation sequence
 
@@ -18,7 +18,7 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Each section remains a buildable
 | **[M1.2 — Fragmentation and smoke](18-2-1-2-grenades-and-smoke.md)** | Finite carried payloads, interruptible preparation, one release charge, swept flight, physical blast and height-aware optical smoke. | M1.1 covering and actor claims. Check cancellation, allies, alternative throwers, actual impact and air/ground visibility. | Complete — 22/22 suites; three native captures |
 | **[M1.3 — Nearby reserve backup](18-2-1-3-nearby-reserve-backup.md)** | Explicitly delegate an existing section, lease one capable responder, deliver useful support and return to its unchanged assignment. | M1.1 readiness and M1.2 optical rays. Check actual support weapons, exclusive leases, radio loss, retasking and deadlines. | Complete — 29/29 affected suites pass |
 | **[M1.4 — Hasty positions and upgrades](18-2-1-4-hasty-positions-and-upgrades.md)** | One infantry member digs shallow cover; an engineer can reinforce the same site with one paid upgrade. Retain interrupted progress. | M1.1 actor ownership and M1.3 order cancellation. Check cover stages, geometry, work authority and no duplicate charges/refunds. | Complete — 248 field-position checks; three native captures |
-| **M1.5 — Controls and feedback** | Contextual commands, target previews, Hold fire, Reserve/Auto Frag toggles and concise action status. | M1.1–M1.4 APIs. Check real input, rejected orders, partial radio acknowledgements, cancellation and layout. | Pending |
+| **[M1.5 — Controls and feedback](18-2-1-5-controls-and-feedback.md)** | Contextual commands, target previews, Hold fire, Reserve/Auto Frag toggles and concise action status. | M1.1–M1.4 APIs. Check real input, rejected orders, partial radio acknowledgements, cancellation and layout. | Complete — 22/22 affected suites; 121 command checks; eleven native captures |
 | **M1.6 — Persistence and integration** | Preserve individual equipment through outcomes/retry, migrate old saves, and combine the mechanics in Harbor. | M1.1–M1.5. Check empty inventories/casualties, migration, integrated encounter, affected regression gate and native rendering. | Pending |
 
 ## Tasks
@@ -31,13 +31,13 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Each section remains a buildable
 - [x] 3. Recover, verify and publish existing-reserve backup and assignment-safe return.
   - [x] Recover the section 3 candidate onto `e180a118` while retaining sections 1–2 corrections.
   - [x] Complete the [section 3 review](18-2-1-3-nearby-reserve-backup.md), record current evidence and publish `codex/m1-section-3` at `57f7fa8`.
-- [ ] 4. Recover, verify and publish [hasty positions, engineer upgrades and work-order integration](18-2-1-4-hasty-positions-and-upgrades.md).
-- [ ] 5. Recover, verify and publish compact controls, previews and action feedback.
+- [x] 4. Recover, verify and publish [hasty positions, engineer upgrades and work-order integration](18-2-1-4-hasty-positions-and-upgrades.md) on `codex/m1-section-4` at `8b6adb8`.
+- [x] 5. Recover, verify and publish [compact controls, previews and action feedback](18-2-1-5-controls-and-feedback.md) on `codex/m1-section-5`.
 - [ ] 6. Recover persistence, run integration/native review, update evidence and publish completion.
 
 ## Behavior contract
 
-This table specifies the complete M1 target. Section 1 provides cooperation and shared actor ownership; section 2 adds payloads, optical smoke and their integration with covering fire. Section 3 supplies nearby reserve dispatch and assignment-safe return. Section 4 adds hasty positions and engineer upgrades. Contextual controls and campaign inventory persistence remain later sections on this branch.
+This table specifies the complete M1 target. Section 1 provides cooperation and shared actor ownership; section 2 adds payloads, optical smoke and their integration with covering fire. Section 3 supplies nearby reserve dispatch and assignment-safe return. Section 4 adds hasty positions and engineer upgrades. Section 5 exposes contextual controls; campaign inventory persistence remains section 6.
 
 | Area | M1 behavior |
 |---|---|
@@ -54,17 +54,17 @@ This table specifies the complete M1 target. Section 1 provides cooperation and 
 | Work interruption | Pressure can pause the actor; accepted new orders release it. The site keeps paid materials and earned progress. Resume uses an eligible worker; repeated current commands preserve the same action/worker rather than charging or rerouting again. Cancel/salvage cannot refund free digging or duplicate paid refunds. |
 | Persistence | Campaign version 3 adds per-member throwable stock, with version-1/2 and nested retry migration, including older engineer records from the field-unit definitions. Explicit empty and zero stock stay empty, casualties stay lost, and actual released inventory carries between operations. Actor tasks, projectiles, smoke, requests and tactical works remain transient. |
 
-## Planned controls and feedback — section 5
+## Controls and feedback — section 5
 
-Section 1 adds automatic local cooperation under existing commands and exposes reasons in diagnostics. Section 2 adds the simulation throw/preview API and defensive policy, with placeholder throw/smoke presentation. Section 3 adds reserve/request APIs and lifecycle reasons. The controls below are the later section 5 contract.
+Section 5 adapts the completed cooperation, throw, backup and work executors through the existing battlefield interface. Buttons and shortcuts use the same capability/stock gates. Policy toggles use the connected selected sections and report actual reception, including mixed-state feedback and disconnected units.
 
-G frag, V smoke, D dig, U engineer upgrade, B nearby backup and H Hold fire will be available with selected capable infantry. RESERVE and AUTO FRAG are explicit strip toggles. Escape/right-click cancel the pending targeting gesture; S/Move/Retreat replace accepted preparation according to existing order rules. An already released grenade is a world object.
+G frag, V smoke, D dig, U engineer upgrade, B nearby backup and H Hold fire are available with selected capable infantry. RESERVE and AUTO FRAG are explicit strip toggles. Escape/right-click cancel the pending targeting gesture; S/Move/Retreat replace accepted preparation according to existing order rules. An already released grenade is a world object.
 
-The strip shows stock and relevant capabilities. Throw previews use the executor's known-body trajectory and allied-risk checks; work previews use the same ground/access rules as commitment. Rejected commands explain the reason without spending stock or supply. Selection text reports real work/cover/backup state; detailed action ownership stays in diagnostics. The strip fits above both the Field Guide and multi-selection roster.
+The strip shows stock and relevant capabilities. Throw previews use the executor's known-body trajectory and allied-risk checks; work previews retain the executor's snapped footprint and actual additional cost. Rejected commands explain the reason without spending stock or supply. Selection text reports retained work, remaining time and actual cover/backup state; detailed action ownership stays in diagnostics. The strip fits above both the Field Guide and multi-selection roster. A commitment rejection takes precedence over the preview reason without removing aiming geometry.
 
 ## Verification
 
-Use Godot 4.5.1. `python3 tools/check.py --group m1` selects the M1 suites present at the current checkpoint: `test_infantry_coordination.gd`, `test_throwables.gd`, `test_m1_optics.gd`, `test_support_requests.gd`, `test_support_lifecycle.gd`, `test_field_positions.gd`, `test_field_position_lifecycle.gd` and `test_field_position_orders.gd`. `--group tactical` also checks affected existing executors. Later checkpoints add command, persistence and integrated-defense suites; the complete slice's integrated native Harbor review belongs to M1.6.
+Use Godot 4.5.1. `python3 tools/check.py --group m1` selects the ten current M1 suites, including `test_m1_commands.gd` and `test_m1_command_lifecycle.gd` alongside the earlier cooperation, throw, optics, backup and field-work checks. `--group tactical` also checks affected existing executors. Section 6 adds persistence and integrated-defense suites; the complete slice's integrated native Harbor encounter belongs to M1.6.
 
 Current checkpoint results are recorded below as the sections pass. Previous local-candidate results are historical only. A functional pass does not establish human balance, hardware performance or a completed mission.
 
@@ -78,6 +78,8 @@ Current checkpoint results are recorded below as the sections pass. Previous loc
 - **Completed M1.3 checkpoint:** [current evidence](../evidence/m1-03-checks.json) records 29/29 affected suites passing in 203 seconds with no assertion/script failures, including 467 M1 checks (79 coordination, 145 throwable, 56 optics, 125 support-request and 62 lifecycle). Corrections cover queued/provisional order ownership through actual ordinary completion, paused service/stall timing with absolute deadlines, parked rollback cleanup, actual target/weapon use and copied exposed-body smoke geometry. Identical final tests produce 24 lifecycle and seven support failures on integrated pre-fix tree `ba5456bc`, then zero here. No new native rendering, UI or hardware-performance result is claimed for this checkpoint.
 
 - **Completed M1.4 checkpoint:** [current evidence](../evidence/m1-04-checks.json) records **715 passing M1 checks**, including 151 field-position, 81 work-lifecycle and 16 work-order checks. The affected gate passes **39/40 suites**; its remaining Harbor crowd-spacing failure is identical on unchanged section 3 (`57f7fa8`). The obsolete visual-test fake was repaired without changing assertions or production animation. Identical final lifecycle/order suites produce 13 and five failures before their fixes and zero afterward. [Native review](../evidence/m1-04-native-review.json) contains three inspected Harbor captures of the same site progressing from survey to hasty to reinforced cover through real movement/work APIs. Contextual controls and full slice integration remain later sections.
+
+**Completed M1.5 checkpoint:** [current evidence](../evidence/m1-05-checks.json) records **22/22 selected suites passing**, including **836 M1 checks** and **121 command checks**. The identical 59-check lifecycle suite produces 14 failures on the recovered candidate and zero after correction, with no script errors. [Native evidence](../evidence/m1-05-native-review.json) records **399 checks and eleven inspected captures** with matching prelaunch/end/current hashes, including compact layouts, targeting/rejection feedback and actual digging/reinforcement. The existing input-suite shutdown warning is documented. Screenshots remain local; metadata and fixtures are published.
 
 ## Bounds and remaining work
 

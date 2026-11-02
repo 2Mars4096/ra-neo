@@ -1,0 +1,472 @@
+{
+  "generated_at_utc": "2026-11-02T19:44:20.370327+00:00",
+  "engine": "4.5.1.stable.official.f62fdbde1",
+  "checkpoint": {
+    "branch": "codex/m1-section-5",
+    "base_commit": "8b6adb8bc43739295a4bd051b3d772e485412ad0",
+    "recovered_candidate_commit": "1f42d246ecc4698e72feed30190d163bd7615037",
+    "scope": "M1 section 5: contextual controls, previews and action feedback; reviewed section 1–4 executors retained. Persistence and combined encounter integration remain section 6.",
+    "publication_status": "Code, tests, documentation and verification metadata on codex/m1-section-5; native screenshots excluded.",
+    "tested_local_base_commit": "40b5f6db6a6f402eb5e521e4c5a9a9d809fac9df",
+    "base_tree_sha": "df983c69733d4c37c294746c70ae3083232d2c38"
+  },
+  "summary": {
+    "suites_passed": 22,
+    "suites_failed": 0,
+    "script_errors": 0,
+    "suite_seconds_sum": 283.5,
+    "runner_seconds_rounded": 284,
+    "m1_suites": 10,
+    "m1_checks": 836,
+    "m1_failures": 0,
+    "command_checks": 121,
+    "source_file_count": 104
+  },
+  "m1_suite_checks": {
+    "test_field_position_lifecycle.gd": 81,
+    "test_field_position_orders.gd": 16,
+    "test_field_positions.gd": 151,
+    "test_infantry_coordination.gd": 79,
+    "test_m1_command_lifecycle.gd": 59,
+    "test_m1_commands.gd": 62,
+    "test_m1_optics.gd": 56,
+    "test_support_lifecycle.gd": 62,
+    "test_support_requests.gd": 125,
+    "test_throwables.gd": 145
+  },
+  "verification_runs": [
+    {
+      "name": "final_selected_gate",
+      "command": "GODOT_BIN=/tmp/ra-neo-m1-runtime/Godot_v4.5.1-stable_linux.x86_64 python3 tools/check.py --group m1 --group tactical --group release --group core test_infantry_coordination test_throwables test_m1_optics test_support_requests test_support_lifecycle test_field_positions test_field_position_lifecycle test_field_position_orders test_m1_commands test_m1_command_lifecycle test_field_ui test_hud_layout test_battlefield_interface test_command_modes test_hud_states test_input_actions test_review_usability test_notifications test_player_settings test_middle_pan test_regional_campaign_ui test_input.gd",
+      "groups": [
+        "m1",
+        "tactical",
+        "release",
+        "core"
+      ],
+      "log_dir": "/tmp/for-every-dawn-check-gpwofilu",
+      "raw_report_path": "/tmp/for-every-dawn-check-gpwofilu/checks.json",
+      "raw_report_sha256": "fcaf21451ca1896922e0e57e8968ed3f6ba48b35163ccc747835d82f4092c511",
+      "suites": 22,
+      "passed": 22,
+      "failed": [],
+      "scope": "All ten current M1 suites plus twelve affected existing input, HUD, field UI, settings, notification, camera and campaign UI suites. Selection only; not a full repository run."
+    }
+  ],
+  "results": [
+    {
+      "group": "m1",
+      "script": "test_field_position_lifecycle.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 21.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD POSITION LIFECYCLE: 81 checks, 0 failures"
+    },
+    {
+      "group": "m1",
+      "script": "test_field_position_orders.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 3.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD POSITION ORDERS: 16 checks, 0 failures"
+    },
+    {
+      "group": "m1",
+      "script": "test_field_positions.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 7.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD POSITIONS: 151 checks, 0 failures"
+    },
+    {
+      "group": "m1",
+      "script": "test_infantry_coordination.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nINFANTRY COORDINATION: 79 checks, 0 failures"
+    },
+    {
+      "group": "m1",
+      "script": "test_m1_command_lifecycle.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 19.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nM1 COMMAND LIFECYCLE: 59 checks, 0 failures"
+    },
+    {
+      "group": "m1",
+      "script": "test_m1_commands.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 18.5,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nM1 COMMANDS: 62 checks, 0 failures"
+    },
+    {
+      "group": "m1",
+      "script": "test_m1_optics.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 1.6,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nM1 OPTICS: 56 checks, 0 failures"
+    },
+    {
+      "group": "m1",
+      "script": "test_support_lifecycle.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 1.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nSUPPORT LIFECYCLE: 62 checks, 0 failures"
+    },
+    {
+      "group": "m1",
+      "script": "test_support_requests.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nSUPPORT REQUESTS: 125 checks, 0 failures"
+    },
+    {
+      "group": "m1",
+      "script": "test_throwables.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.2,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTHROWABLES: 145 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_field_ui.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 8.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD UI: 4655 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_hud_layout.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 21.7,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nHUD LAYOUT: 1413 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_battlefield_interface.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 18.1,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nBATTLEFIELD INTERFACE: 13090 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_command_modes.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 21.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nCOMMAND MODES: 33 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_hud_states.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 20.5,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nGARRISON STATES ok, tank shelled in 6.6s\nHUD STATES: 29 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_input_actions.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 21.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\ncursor hint refresh: 1.166 ms\nINPUT ACTIONS: 61 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_regional_campaign_ui.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 26.5,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nREGIONAL CAMPAIGN UI: 47 checks, 0 failures"
+    },
+    {
+      "group": "release",
+      "script": "test_review_usability.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 4.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nREVIEW USABILITY: 13 checks, 0 failures"
+    },
+    {
+      "group": "release",
+      "script": "test_middle_pan.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 19.9,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\ndefault zoom=72 focus=(500.0693, 382.4017) expected=(500.0693, 382.4017) grab_error=0.0000 m\nfar zoom paused zoom=220 focus=(538.084, 390.0448) expected=(538.084, 390.0448) grab_error=0.0000 m\nMIDDLE PAN: 17 checks, 0 failures"
+    },
+    {
+      "group": "release",
+      "script": "test_notifications.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 21.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nNOTIFICATIONS: 26 checks, 0 failures"
+    },
+    {
+      "group": "release",
+      "script": "test_player_settings.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 16.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nPLAYER SETTINGS: 18 checks, 0 failures"
+    },
+    {
+      "group": "core",
+      "script": "test_input.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 4.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nINPUT TESTS: 19 checks, 0 failures\nWARNING: ObjectDB instances leaked at exit (run with --verbose for details).\n     at: cleanup (core/object/object.cpp:2514)"
+    }
+  ],
+  "negative_controls": {
+    "command_lifecycle": {
+      "generated_at_utc": "2026-11-02T19:35:47.498758+00:00",
+      "engine": "4.5.1.stable.official.f62fdbde1",
+      "command": "/tmp/ra-neo-m1-runtime/Godot_v4.5.1-stable_linux.x86_64 --headless --path <checkout> --script tests/test_m1_command_lifecycle.gd",
+      "baseline": {
+        "path": "/tmp/ra-m1-section5-command-candidate",
+        "base_commit": "40b5f6db6a6f402eb5e521e4c5a9a9d809fac9df",
+        "candidate_delta_commit": "1f42d246ecc4698e72feed30190d163bd7615037",
+        "delta_scope": "git diff 1f42d24^ 1f42d24 -- scripts tests",
+        "patch_path": "/tmp/ra-m1-section5-candidate.patch",
+        "patch_sha256": "9de40f39cafffd584e4f632011e146b006542024b334139dfa94545f25d69a0e",
+        "construction": "git archive section4 base, apply isolated section5 scripts/tests delta, copy final lifecycle test, import resources",
+        "result": {
+          "log_path": "/tmp/ra-m1-section5-lifecycle-candidate.log",
+          "log_sha256": "25ef62c6adeb481b758b73b04a7fa98e82c9ebd6cd2c302d5a1413d8d20e58d0",
+          "exit_code": 1,
+          "checks": 59,
+          "failures": 14,
+          "script_errors": 0,
+          "failed_assertions": [
+            "rifle-only U cannot arm an unsupported engineer upgrade",
+            "zero-stock G agrees with the unavailable frag button",
+            "D cannot arm field work in a non-field mode",
+            "reserve rejection explains the lost communication",
+            "reserve partial acknowledgement identifies the accepted fraction and radio loss",
+            "reserve can toggle the connected section off while its disconnected peer remains unchanged",
+            "auto_frag rejection explains the lost communication",
+            "auto_frag partial acknowledgement identifies the accepted fraction and radio loss",
+            "auto_frag can toggle the connected section off while its disconnected peer remains unchanged",
+            "repeated H releases the connected section even when its disconnected peer never received Hold fire",
+            "dig preview near existing work shows the executor's snapped site footprint",
+            "paused engineer feedback retains the live work assignment instead of advertising availability",
+            "Resume stays unavailable when the living last engineer has lost radio contact",
+            "paid interrupted upgrade previews no additional supply charge"
+          ],
+          "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFAIL: rifle-only U cannot arm an unsupported engineer upgrade\nFAIL: zero-stock G agrees with the unavailable frag button\nFAIL: D cannot arm field work in a non-field mode\nFAIL: reserve rejection explains the lost communication\nFAIL: reserve partial acknowledgement identifies the accepted fraction and radio loss\nFAIL: reserve can toggle the connected section off while its disconnected peer remains unchanged\nFAIL: auto_frag rejection explains the lost communication\nFAIL: auto_frag partial acknowledgement identifies the accepted fraction and radio loss\nFAIL: auto_frag can toggle the connected section off while its disconnected peer remains unchanged\nFAIL: repeated H releases the connected section even when its disconnected peer never received Hold fire\nFAIL: dig preview near existing work shows the executor's snapped site footprint\nFAIL: paused engineer feedback retains the live work assignment instead of advertising availability\nFAIL: Resume stays unavailable when the living last engineer has lost radio contact\nFAIL: paid interrupted upgrade previews no additional supply charge\nM1 COMMAND LIFECYCLE: 59 checks, 14 failures\n"
+        }
+      },
+      "current": {
+        "path": "/workspace/scratch/35a5b1692e52/ra-neo",
+        "branch": "codex/m1-section-5",
+        "result": {
+          "log_path": "/tmp/ra-m1-section5-lifecycle-complete.log",
+          "log_sha256": "fa8eb382bf85346670021c698843dcabce89d02e3e542dcaab3ed9063bbb6463",
+          "exit_code": 0,
+          "checks": 59,
+          "failures": 0,
+          "script_errors": 0,
+          "failed_assertions": [],
+          "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nM1 COMMAND LIFECYCLE: 59 checks, 0 failures\n"
+        }
+      },
+      "identical_test_sha256": "38a876a77dd8118f6429006ccb692b0e6478e027304d7652d5046b551446d242",
+      "baseline_test_sha256": "38a876a77dd8118f6429006ccb692b0e6478e027304d7652d5046b551446d242",
+      "source_snapshot_sha256": {
+        "scripts/tactical_interface.gd": {
+          "baseline": "f5a8bc65740278de82601278cedd2df221005b2074c6d5b7a3cc28ba329c584e",
+          "current": "556fa0b2a1148f2c8942d1c4548e671ad3308845bfb19165bc097c0a6e69ee53"
+        },
+        "scripts/battle.gd": {
+          "baseline": "47dedee713d17fae43badaa8dd7e8b8201dcfc865b2de5d790f97cc0fcc65af4",
+          "current": "14f7ecc7a0ae1993f87b1c7053144373fc3147c4ccc36bc0c62fd9da396c86dd"
+        },
+        "scripts/hud.gd": {
+          "baseline": "bb3dec6f2b0176d38094d3b3c6fae27252c735bc0ad875b4040c32e2efe076d9",
+          "current": "63efbd89eed30219708d15e964a454658e66f87c2bed12f54463b85d089dc40e"
+        },
+        "scripts/battlefield_interface.gd": {
+          "baseline": "f14fbbfd6748efd86f50d91e2d9ac2cb521bdca348e0660112a9bd556fdc9a65",
+          "current": "f14fbbfd6748efd86f50d91e2d9ac2cb521bdca348e0660112a9bd556fdc9a65"
+        },
+        "scripts/field_positions.gd": {
+          "baseline": "4b6237afd188795e4a55521894d21b6fad17ad7d269d3233ab42cf1735aed51a",
+          "current": "4b6237afd188795e4a55521894d21b6fad17ad7d269d3233ab42cf1735aed51a"
+        },
+        "tests/test_m1_command_lifecycle.gd": {
+          "baseline": "38a876a77dd8118f6429006ccb692b0e6478e027304d7652d5046b551446d242",
+          "current": "38a876a77dd8118f6429006ccb692b0e6478e027304d7652d5046b551446d242"
+        }
+      },
+      "scope": "Actual Battle input dispatch, HUD preview/status/resume availability and executor integration in a deterministic clear-soil fixture. No hardware-performance or human-playtest claim."
+    }
+  },
+  "native_review": {
+    "metadata_path": "docs/evidence/m1-05-native-review.json",
+    "checks": 399,
+    "failures": 0,
+    "captures_inspected": 11,
+    "renderer": "OpenGL Compatibility",
+    "adapter": "llvmpipe (LLVM 20.1.2, 256 bits)",
+    "window_sizes": [
+      [
+        1280,
+        800
+      ],
+      [
+        1600,
+        900
+      ]
+    ],
+    "requested_ui_scales": [
+      1.0,
+      1.5
+    ],
+    "minimum_label_margin_after_16px_padding": 12.0,
+    "source_provenance": "Prelaunch, run-end and current production/fixture hashes match. Exact final eleven-capture fixture rerun after all source edits.",
+    "publication": "Metadata only; native image files remain local and unpublished.",
+    "scope": "Actual Harbor input, rejection/cancellation, policy state, compact layout/text fit, normal engineer movement, free digging and one paid reinforcement."
+  },
+  "warnings": [
+    {
+      "script": "test_input.gd",
+      "message": "ObjectDB instances leaked at exit (run with --verbose for details).",
+      "status": "Existing shutdown warning retained verbatim in the passing suite output; shutdown cleanup and long-session memory acceptance are not established."
+    }
+  ],
+  "historical_open_issues": [
+    {
+      "script": "test_engaged_spacing.gd",
+      "status": "Not rerun in section 5; inherited failure remains open.",
+      "evidence": "docs/evidence/m1-04-checks.json",
+      "baseline_commit": "57f7fa8e56df405b163d0ecfe0cabce749196660",
+      "detail": "Section 4 reproduced the same Harbor (526, 690) failure on unchanged section 3: soldier overlap for 2.3 seconds against a 1.5-second limit, minimum anchor separation 4.83, both sections fire. Section 5 does not change that combat behavior or threshold."
+    },
+    {
+      "status": "Existing synchronous navigation hitch remains open; no new hardware-performance or command-latency acceptance run."
+    }
+  ],
+  "source_sha256": {
+    "project.godot": "51dcb1de57498bc4f2b737e08516e644476f51d4d7b55a60667fc82e5d139ebc",
+    "resources/assets_battlefield.json": "2ddfe1435d3ea7b6b2a3916be3f350004b62c3a257548a77e74dc1cd8874e831",
+    "resources/assets_city.json": "86dc699114f81820e65e580608209d434e5997788b1910bca896fca56a1fb2af",
+    "resources/assets_rural.json": "5388300b48a0e82ccb6849316f5fa3ffff17b1ece83430397ad511ef872e253c",
+    "resources/assets_street.json": "5b6093a7495ee181327234fcdde42bcdbd2a2cf363df4b035c3618a13ebd2561",
+    "resources/assets_waterfront.json": "29e4d7e6c5387aac4bec73e5c8398fa0bb93888a91c85a808641d548bdc63818",
+    "resources/city_building_geometry.json": "2cf3f23d7f83b1bbb55bbb4c3aedfe7058ab2462daaee169f2e9e636c6564921",
+    "resources/classic_units.json": "7fff5156c15f84d91344c5d7e5f709e37cb7a186e2ccde5b8e7e039d574a53a2",
+    "resources/combat.json": "3a76b503ffaf967bbad7e823a914729f17f53549d3aae7e7154a9c4f602da8b2",
+    "resources/environment_catalog.json": "7d6dbd8dd5e4e1cd28c206041e3bfd69e9ce39ab1310d0219515eb8c91d342e9",
+    "resources/field_units.json": "69f5969a62d6ceccff3745a9f15c2d3033d8b2c150a43d0177c5bc6bf5cc620e",
+    "resources/scenarios.json": "49f850989dd52b72176cb629a7c88ed674736ac3222d4d3d794a75707a0d8bcd",
+    "resources/units.json": "60436807c5afa4ee4e60a4e3ce2524541f8506a0c8104c37e0920f2dadfba0e4",
+    "scenes/main.tscn": "08506f4bf248bf290c2818da78f6307c7b6bc68fa4cfccded8ab1df6428f1aeb",
+    "scripts/architectural_block.gd": "0c43ee06cf300de3993a24ae10bf294cbe8f6f74006ab71280e9cdf3ef4236a6",
+    "scripts/asset_library.gd": "c5cf9674e19a00983d9ea31df93654d2d8f9d3148a5d73f6ae4c1f6104358d0a",
+    "scripts/assets_battlefield.gd": "24e3cd13b76e01c60c89df1ee2e46d107f26c686f826ed248715f80fe95e2857",
+    "scripts/assets_city.gd": "dcb342a860cda86e463248c6979c393338a49d852abe9c1a016425504ea904dc",
+    "scripts/assets_existing.gd": "472caa82dfed040b7536c996c8ce19dffcc382e5c28da106c7086f328b5d84cf",
+    "scripts/assets_rural.gd": "d067d5725f6186a97e1eb8cbaf740073a1e0cdc71862d51df2953a41ae9e85ca",
+    "scripts/assets_street.gd": "a802dc6f69fa30a532af71ddd647d19bbe96b1772cead69b50fd7996cd4e8bee",
+    "scripts/assets_waterfront.gd": "a2f5b8c01659192f978d2e95013f209899c872b5533e89caafe22a52c142c9f7",
+    "scripts/audio_fx.gd": "d38bc7066f641c87d2e6b8656e7060def6708750e507d01896941155a97f385c",
+    "scripts/battle.gd": "14f7ecc7a0ae1993f87b1c7053144373fc3147c4ccc36bc0c62fd9da396c86dd",
+    "scripts/battle_menu.gd": "c8ed1a80c2dbdd96bd517e866ddc70601bb0590adaa28e51393331dd30fe56ee",
+    "scripts/battlefield_interface.gd": "f14fbbfd6748efd86f50d91e2d9ac2cb521bdca348e0660112a9bd556fdc9a65",
+    "scripts/city_building_geometry.gd": "548977fe199c78c6cb733a77cd5bd96f82ac650f6b1ad16a580cabc5d84c5313",
+    "scripts/city_buildings.gd": "ffef8109a99fb17ca779ca56eb13bae3b233f4a3aadeeecce82c0f01b90cae44",
+    "scripts/city_buildings_urban.gd": "7ebfa50a2036c4f9b50458700cd32cfe8d5c878f66793364e9bc9fe12b1f230a",
+    "scripts/city_buildings_works.gd": "78fab233950ece9790dd1dd01571aa3c85cf4bb3ed359097eea6346c0187ed46",
+    "scripts/classic.gd": "4bf60e6587aa46a44d1727aed74d2905fa19cd34fcc83eed0541d8e9d0d9b7f0",
+    "scripts/cover_behavior.gd": "e5d775bb721dad6bfe57270498679b84bbf6fc5edec62b9efbb3ae6901111836",
+    "scripts/effects.gd": "b5aaac0f1ae33756dbf08bb239b801177928c7f4be72fbe17070c280b1fa826e",
+    "scripts/effects_explosions.gd": "fc44db4175a7d47b93725bea81b022a10295b0f3d302ab1abe082c17788ccd79",
+    "scripts/effects_remains.gd": "a8b2c624f068713e5386995d0c1c2fb2cb97988f871b7e1edc15d53e7677d8c6",
+    "scripts/elevation.gd": "d98c501506b01abf4c89aeaba9bcb3ea2b50ffbd085e353cdc91b74fc4c046d9",
+    "scripts/environment_detail.gd": "3d617f2f51cc8d698d31002e3c68e17d86e375ba8a45e372c426a50751fefcef",
+    "scripts/environment_palette.gd": "4c088cbd1fb74e19f943d8b66da6b129259537d0ddfa8aaaf2fd9ab5c5803c46",
+    "scripts/environment_variants.gd": "13a12a5de1746ea239a240bf99cf9d27f0141b79fad50cce3c711160c77d4bb8",
+    "scripts/field_models.gd": "5b88eb181fdec7a3d7a30401533fac23224d771f2bcb1fe36307bb7c1648652f",
+    "scripts/field_ops.gd": "8e846fb0abf92a860a79b4def38c13f34bd317fd339a9973336d7d590d444dd1",
+    "scripts/field_positions.gd": "4b6237afd188795e4a55521894d21b6fad17ad7d269d3233ab42cf1735aed51a",
+    "scripts/foliage_mesh.gd": "6a325a12052b3e179625dbe02d621217f6b13caf9b6e677e92d3f614044e115e",
+    "scripts/garrison.gd": "d14f275d0219fa23aeb15daefe609e7dfce83589f59256978cdb000f165669e0",
+    "scripts/harbor_props.gd": "eb52ce64845b98d3572ac6f1e7b776e77e1f198e89cd50e17e15e72867bcfd27",
+    "scripts/hud.gd": "63efbd89eed30219708d15e964a454658e66f87c2bed12f54463b85d089dc40e",
+    "scripts/infantry.gd": "720fa62541056525c9f185b68f9633803a74a26b3ed746dfb8ee058cf79c64dd",
+    "scripts/infantry_coordination.gd": "1008c19c48ad6fde76b063214b9788db662eaaae763e1f65a244d9708f1476d3",
+    "scripts/minimap_background.gd": "0942c4736046ffe4c81f6e77c14307d339a0e533c3843938d07132058956a6b6",
+    "scripts/notice_feed.gd": "5b2f0e7774cfe6c56e51be1431fac5ae7d2e611ff4da0d69fad18421b9c9a384",
+    "scripts/operation_rules.gd": "1264872eb266cda6ab3d68cd5715c508a56b0aefcf36d5182dc0a537e2703d66",
+    "scripts/parcel_kit.gd": "badc0cfd602d5360dd64cfb8350f1cf4deeb8bcd544459096b6af42c30820bf6",
+    "scripts/player_settings.gd": "e4d6108ca503c6a259d5e8e5437271c59717e6edad3071116104e84a5ef8b8a7",
+    "scripts/region_catalog.gd": "96dee14658c66878e7d96787ac89e03ddc3243490bc7f52a91345d449164c9ea",
+    "scripts/regional_campaign.gd": "b4b48bb65f297d7628b3f95819fe11336d6d93359a1b976a9262360e5bf99675",
+    "scripts/regional_map.gd": "5a1a653f8d17c9e707197e618a773454b3a39ea9a7783694dff34eaf3159e450",
+    "scripts/release_info.gd": "89bcd9adc784f6f388a52ec1b71e2618bc8aca57e56cd953dbdb0a4ebaf32d5e",
+    "scripts/road_network.gd": "21b56494f9026bb1feb917aa773cc3d4a3e31217a9c62b70828900b1526e81ec",
+    "scripts/roadside_props.gd": "b764996b77b38c34060dd82d1a9659aaf4407035592f100c73091aeb794b0cc7",
+    "scripts/ruined_building.gd": "f4d0cf30ab7c7c90efe1832a08287f091e1270a75c30db1439d0454099cf85fd",
+    "scripts/scenario_catalog.gd": "49be849040bdd2eaf061248405c0f271ffdca1d130ddb29d08a28f24a86a08f3",
+    "scripts/section_recovery.gd": "152b61342d5c0e55a27f4c31e4bdb7019290e412646dbf2947a444f1c9404e9e",
+    "scripts/simulation.gd": "8d1a55f156722835ce4cda49c4fadde0a9f6e619f2f27b9f41f1ed65c3b233f2",
+    "scripts/structure_damage.gd": "72e27efd185b081cffc4c3cc4705893b61d042b9771213ed649ddcd82e454d3d",
+    "scripts/support_requests.gd": "816439bdbb5fd1f3640707db3798f663b3cca03119c34e0209efa59a04c3b7a9",
+    "scripts/tactical_actions.gd": "101cdec1195a07747adaff76fc52aae3e9bd820da50f7a6d6a4e1403f2dc288a",
+    "scripts/tactical_context.gd": "e38058a64627d5c442818db1e6ac751f1fcbb1998ca7e1eed7892b9729aeb403",
+    "scripts/tactical_director.gd": "b7dc536bf55a9fd41af17927ddf3e20e69ba7ddaa8b5ef9ce6c3309f8f337d3e",
+    "scripts/tactical_effects.gd": "033f3befe29d91518ace5677dee44f2cb480775f1f85c6c541cd33eff9bd3994",
+    "scripts/tactical_interface.gd": "556fa0b2a1148f2c8942d1c4548e671ad3308845bfb19165bc097c0a6e69ee53",
+    "scripts/tactical_navigation.gd": "2cc0b7325aed3efc03445a05fecd847bbabc80010dfe27468e43218915a92781",
+    "scripts/tactical_work_budget.gd": "cb647ecc1212ff44f173c1a96235fd032e9469e213aff09aa29c7d93494cf59e",
+    "scripts/terrain.gd": "003f111634ce6aca0b4052f5365e94ea3dc3a2c483117f9d85968f170c7a3b3d",
+    "scripts/throwables.gd": "1d6299afea0751dbf55f900c2df97a9da2558b6dc49ae826b133449a2b55e373",
+    "scripts/unit_animation.gd": "f044154b43936061d2d8e433ec7bc652159713b990ece1f4382d640785acc7d2",
+    "scripts/unit_models.gd": "2df525f123b86234872a48fa5dbb82b0d0accf4222a9194e868a103f28f43a0d",
+    "scripts/vehicle_damage.gd": "efd198884a6e41a6f4dc720c1aa03fa3b5441900c1f0b9f4951724708c15eb51",
+    "scripts/visuals.gd": "28957d7cb64d8601b2a2fd0f195628de239084af0f535f452dcd22842818ec3d",
+    "scripts/weather.gd": "47642b37469ecb49490606a29d35015ff33a5bb2aa6c650dd01f812696e2741a",
+    "scripts/weather_visuals.gd": "dea9acb98df54e291fdc9d96af6b138137c73ac0dd850a9807f8110e1474abf2",
+    "tests/m1_section5_native_review.gd": "8e846410ce33cb3d28d9324cb718fde1790a5a4780f7e3e730cfa13abe278acb",
+    "tests/test_battlefield_interface.gd": "a10ae5ab80c302fb9ac49b27c890cdf4e4c45824ee6486a5e52110f62352d80a",
+    "tests/test_command_modes.gd": "1311a6eab929b69865128ffac0c8c0e9df505f2c5b52b75a8738bc26d0dcd869",
+    "tests/test_field_position_lifecycle.gd": "48b7eaea3111b1f0c825af4907fe3e54cec0d198d5a27722abc0264571992689",
+    "tests/test_field_position_orders.gd": "4616cb1dd2f54c5798db930ecd2350928112fa3c15361b91616a9c1caeb2e942",
+    "tests/test_field_positions.gd": "20a0050783fbffe971fac08a07d42af6bd3a7ffaa89ea37cd960208c6e308b0c",
+    "tests/test_field_ui.gd": "21b20dab8843ec610bca8e6db1ac3469d3c5c3bc0373d65ce760517704d415c5",
+    "tests/test_hud_layout.gd": "ab5b5b6d0f79a048c6b0774d531727edbe35ce3aea4862b0c6385a6a532a85f2",
+    "tests/test_hud_states.gd": "f5872bd42f9121f5e7be4f372b0d335f87f4e56fe930707ce4fb0038a23c3176",
+    "tests/test_infantry_coordination.gd": "26aba53f7e78b7bcc008f36cab9f67699a54c50ae1455a216d44d21360e73494",
+    "tests/test_input.gd": "1c88780f71a400161af49de6a1d5b50e67dd05fa559e5d990fa24ffea3c8b43e",
+    "tests/test_input_actions.gd": "2d1a7cc5b9d1fde07d0a8041c6ef866e93e30fb1475a207be37d0478c54c214c",
+    "tests/test_m1_command_lifecycle.gd": "38a876a77dd8118f6429006ccb692b0e6478e027304d7652d5046b551446d242",
+    "tests/test_m1_commands.gd": "32b59a717c59954dacc4c9e28d0a5c208553e303832e221fb1b370ed951e4e0e",
+    "tests/test_m1_optics.gd": "d511bb07a7b0c266d0ec19b1160ea43118b8a88ff654a020421d67a1b21b1a02",
+    "tests/test_middle_pan.gd": "05003a4cfe66dc4bcc3e6c5243d4d56b87b551957691a6b7b0a46b9475c55ae8",
+    "tests/test_notifications.gd": "2ebe5ad3ff2672984f5b0d0a19c444642826296aed6f710cd319ee25df2d2f78",
+    "tests/test_player_settings.gd": "8511048548d4ca290ef1a8a5fb54482cf3fcd49bcf9ddc87ff6d4180575eef5f",
+    "tests/test_regional_campaign_ui.gd": "e4cbd2f7eb94c321ce080ae4ce889048ea49583e6fcf5f1636aa0a917ac92fad",
+    "tests/test_review_usability.gd": "ff52a6e2a8d7636828ee1b4c64da4319c1d85cae6d7c026254577f9d8bfff532",
+    "tests/test_support_lifecycle.gd": "e81a41f5ec1542f4a3768cdd810754a21ff7759097e078832445478e24fef58b",
+    "tests/test_support_requests.gd": "ad51bc9a13d64baef5fbfb726b443e5f57e04d483178b463fce6dc78cec79e30",
+    "tests/test_throwables.gd": "f5fcdab914ef6fb5b4fcbc9a8783483a04b45c2a289ae85921f90a690b7cbbf8",
+    "tools/check.py": "0c55282a86a3c1648b5326b1da0fbe7fc345f52ba6e8105ce9821bd4f35ca6ca"
+  },
+  "source_scope": "Relevant production/configuration paths from the section 4 source manifest, refreshed to current contents; old test paths removed and replaced with exactly these 22 selected suites plus the section 5 native fixture. Includes the new tactical interface and check runner. All compared current lifecycle/native source hashes were checked against this tree.",
+  "performance_acceptance": "Not established by functional runs; use isolated rendered benchmarks on supported hardware.",
+  "evidence_note": "This checkpoint records the final 22-suite selected gate, the identical-test integrated-candidate control and separately verified native metadata. Previous section reports remain historical. Screenshots are not included. No full-repository, human-playtest, balance, supported-hardware performance, campaign throwable persistence or complete integrated mission acceptance is claimed."
+}
