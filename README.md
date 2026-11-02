@@ -103,7 +103,7 @@ The command deck shows supply, reinforcements, selected-unit health/state, and m
 
 ### M1: coordinated infantry defense
 
-The M1 work is delivered in [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **M1.1 is available:** members taking a short cover route reserve a teammate who can actually observe and fire on the threat. The covering member holds its position and retains loaded ammunition; another member can take over after a reload or casualty. Explicit movement/hold orders remain authoritative. **M1.2 adds the grenade/smoke executor:** one requested payload, interruptible preparation, finite stock, physical flight/blast, optical smoke and pooled effects. The targeting controls arrive in M1.5, and inventory persistence in M1.6; backup and digging are the next implementation sections.
+The M1 work is delivered in [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **M1.1 is available:** members taking a short cover route reserve a teammate who can actually observe and fire on the threat. The covering member holds its position and retains loaded ammunition; another member can take over after a reload or casualty. Explicit movement/hold orders remain authoritative. **M1.2 adds the grenade/smoke executor:** one requested payload, interruptible preparation, finite stock, physical flight/blast, optical smoke and pooled effects. The targeting controls arrive in M1.5, and inventory persistence in M1.6; **M1.3 adds existing-reserve backup:** explicitly delegated, ready infantry can answer one nearby request, provide useful support and return to the unchanged assignment. Busy engineers finish their current work first. Digging, controls and persistence follow.
 
 ### M0: readiness and reliable orders
 

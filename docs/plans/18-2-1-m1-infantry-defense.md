@@ -16,7 +16,7 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Their broader urban, domain and 
 |---|---|---|---|
 | **M1.1 — Coordinated cover and movement** | A ready member covers a moving partner, holds a useful firing position and hands over after reload, suppression or casualty; task ownership excludes conflicting actions. | M0 readiness, observations and order authority. Check real ammunition/rays, partner replacement, survival moves and player overrides. | Complete |
 | **M1.2 — Fragmentation and smoke** | Finite carried payloads, interruptible preparation, one release charge, swept flight, physical blast and height-aware optical smoke. | M1.1 covering and actor claims. Check cancellation, allies, alternative throwers, actual impact and air/ground visibility. | Complete |
-| **M1.3 — Nearby reserve backup** | Explicitly delegate an existing section, lease one capable responder, deliver useful support and return to its unchanged assignment. | M1.1 readiness and M1.2 optical rays. Check actual support weapons, exclusive leases, radio loss, retasking and deadlines. | Pending |
+| **M1.3 — Nearby reserve backup** | Explicitly delegate an existing section, lease one capable responder, deliver useful support and return to its unchanged assignment. | M1.1 readiness and M1.2 optical rays. Check actual support weapons, exclusive leases, radio loss, retasking and deadlines. | Complete |
 | **M1.4 — Hasty positions and upgrades** | One infantry member digs shallow cover; an engineer can reinforce the same site with one paid upgrade. Retain interrupted progress. | M1.1 actor ownership and M1.3 order cancellation. Check cover stages, geometry, work authority and no duplicate charges/refunds. | Pending |
 | **M1.5 — Controls and feedback** | Contextual commands, target previews, Hold fire, Reserve/Auto Frag toggles and concise action status. | M1.1–M1.4 APIs. Check real input, rejected orders, partial radio acknowledgements, cancellation and layout. | Pending |
 | **M1.6 — Persistence and integration** | Preserve individual equipment through outcomes/retry, migrate old saves, and combine the mechanics in Harbor. | M1.1–M1.5. Check empty inventories/casualties, migration, integrated encounter, affected regression gate and native rendering. | Pending |
@@ -25,7 +25,7 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Their broader urban, domain and 
 
 - [x] 1. Recover, verify and publish coordinated cover/movement and actor ownership.
 - [x] 2. Recover, verify and publish finite fragmentation grenades and optical smoke.
-- [ ] 3. Recover, verify and publish existing-reserve backup and assignment-safe return.
+- [x] 3. Recover, verify and publish existing-reserve backup and assignment-safe return.
 - [ ] 4. Recover, verify and publish hasty positions, engineer upgrades and work-order integration.
 - [ ] 5. Recover, verify and publish compact controls, previews and action feedback.
 - [ ] 6. Recover persistence, run integration/native review, update evidence and publish completion.
@@ -60,6 +60,8 @@ Use Godot 4.5.1. During staged delivery `python3 tools/check.py --group m1` sele
 Current checkpoint results are recorded below as the sections pass. Previous local-candidate results are historical only. A functional pass does not establish human balance, hardware performance or a completed mission.
 
 ## Checkpoint evidence
+
+- **M1.3:** support requests (105 checks), ordinary engineer work and work resumption pass. Actual alternate-weapon dispatch, exclusive leases, radio loss, accepted/rejected orders and clearing-before-reserve duty are covered. [Focused report](../evidence/m1-03-checks.json).
 
 - **M1.2:** optical smoke, throwables (139 checks) and animation suites pass, including single-item mixed-selection commands. Coordination also passes with smoke enabled. [Focused report](../evidence/m1-02-checks.json). Native presentation follows in M1.6.
 

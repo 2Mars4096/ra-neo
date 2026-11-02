@@ -16,7 +16,9 @@ const Context = preload("res://scripts/tactical_context.gd")
 const Navigation = preload("res://scripts/tactical_navigation.gd")
 const Coordination = preload("res://scripts/infantry_coordination.gd")
 const Throwables = preload("res://scripts/throwables.gd")
+const SupportRequests = preload("res://scripts/support_requests.gd")
 var throwables:Dictionary={}
+var support_requests:Dictionary={}
 var actions = Actions.new()
 var context = Context.new()
 var action_tick := 0
@@ -100,6 +102,7 @@ func _init(populate: bool = true, preset:int=-1) -> void:
 			definitions[kind].altitude=float(scenario.air_altitudes[kind])
 	terrain=Terrain.new(choice,scenario)
 	Throwables.setup(self)
+	SupportRequests.setup(self)
 	# One objective per authored sector/pole pair; legacy maps author two, the harbor three.
 	objectives.clear()
 	for i in mini(scenario.get("sectors",[]).size(),terrain.poles.size()):
@@ -166,6 +169,12 @@ func engagement_allowed(u:Dictionary,target_id:int=-1)->bool:
 
 func issue_throw(ids:Array,payload:String,point:Vector2)->int:
 	return Throwables.issue_throw(self,ids,payload,point)
+
+func request_backup(ids:Array)->int:
+	return SupportRequests.request_backup(self,ids)
+
+func set_reserve(ids:Array,enabled:bool)->int:
+	return SupportRequests.set_reserve(self,ids,enabled)
 
 func set_fire_policy(ids:Array,policy:String)->int:
 	if result!="" or policy not in ["free","hold"]:return 0
@@ -467,6 +476,9 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 # cover until it resolves (resolve_slots), so a unit that gets none is as it was.
 func record_order(u:Dictionary,mode:String,target:Vector2,target_id:int,queued:bool,waiting:bool=false)->Dictionary:
 	if not queued:
+		if not waiting:
+			SupportRequests.cancel_for_unit(self,u)
+			u["reserve_enabled"]=false
 		if not waiting:u.erase("provisional_before")
 		if not waiting:u.erase(SectionRecovery.KEY)
 		if not waiting:FieldOps.pause_builder(self,u.id)
@@ -583,6 +595,8 @@ func resolve_slots()->int:
 				start_next_order(u)
 			continue
 		if not entry.before.is_empty():
+			SupportRequests.cancel_for_unit(self,u)
+			u["reserve_enabled"]=false
 			FieldOps.pause_builder(self,u.id)
 			for actor in u.members:Infantry.Cover.clear(actor)
 			u.erase("provisional_before")
@@ -789,6 +803,8 @@ func stop(ids: Array) -> int:
 	for id in ids:
 		var u := get_unit(int(id))
 		if alive(u) and not definitions[u.kind].get("structure",false) and not comms_blocked(u):
+			SupportRequests.cancel_for_unit(self,u)
+			u["reserve_enabled"]=false
 			FieldOps.pause_builder(self,u.id)
 			accepted+=1
 			u.orders.clear()
@@ -1801,6 +1817,7 @@ func tick(dt: float) -> void:
 		sensor_clock = 0.3
 	if profiling:lap=_lap("visibility",lap)
 	refresh_tactical_events()
+	SupportRequests.tick(self,dt)
 	Director.update(self)
 	if profiling:lap=_lap("director",lap)
 	Garrison.tick(self,dt)
@@ -2529,6 +2546,8 @@ func start_next_order(u:Dictionary,resume_child:bool=false)->void:
 	u.intent=u.orders[0].duplicate()
 	if u.orders[0].has("slot"):return
 	if not resume_child:
+		SupportRequests.cancel_for_unit(self,u)
+		u["reserve_enabled"]=false
 		actions.activate_order(u,u.orders[0],time,"player" if u.team==0 else "ai")
 	if take_route_budget(u.pos,u.orders[0].pos,false,int(u.id),"next_order"):u.path=order_route(u,u.orders[0].pos)
 	else:defer_route(u,"order")

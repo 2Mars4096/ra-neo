@@ -10,6 +10,8 @@ M1 is recovered in six buildable checkpoints on `codex/m1-staged-implementation`
 
 `throwables.gd` owns finite inventory, actor/item claims, preparation, single release, swept collision, blast and optical smoke. `preview_selection` chooses one section for the targeting arc and executor. Released objects survive retasking/casualties; stock is spent only at release. Smoke applies to both teams at actual optical endpoint heights and invalidates caches on deployment/expiry. `tactical_effects.gd` renders fixed projectile/cloud pools, and task animation uses placeholder poses. Controls and persistence follow in later checkpoints.
 
+`support_requests.gd` accepts explicitly delegated existing infantry reserves. One lease owns each responder, copies its assignment and observed contact, bounds placement/service/return, and preserves exclusivity through radio loss. Eligibility and service use actual usable rifle/launcher stock and a legitimate optical lane. Accepted replacement orders revoke stale support; rejected/provisional orders do not. Ordinary engineering work retains ownership until completion before a newly delegated reserve becomes available. No new units or spending are authorized by backup requests.
+
 ## Implemented stack
 
 - Godot **4.5.1-stable**, GDScript, GL Compatibility renderer, 2× MSAA.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-02 — M1.3 nearby reserve backup
+
+- Recover opt-in existing infantry reserves, one-provider request leases, physical support placement, four seconds of useful service and return to the unchanged assignment. No spending or spawning occurs.
+- Use the actual applicable weapon for eligibility, placement and delivery, including a loaded alternate rifle/launcher; a current empty other weapon cannot falsely reject the provider. Preserve active reloads, Hold fire, task ownership and radio/assignment limits.
+- Accepted ordinary engineering orders cancel stale support; rejected/provisional orders preserve it. A clearing engineer finishes the accepted work before newly delegated reserve duty becomes available. Support (105 checks), engineer-work and resume suites pass. [Evidence](evidence/m1-03-checks.json).
+
 ## 2026-11-02 — M1.2 finite grenades and optical smoke
 
 - Recover finite per-member frag/smoke, interruptible preparation, single release consumption, swept flight, physical impact/exposure and height-aware optical obstruction. Acquisition and fog caches use actual aircraft altitude, including altitude-only changes on flat maps.

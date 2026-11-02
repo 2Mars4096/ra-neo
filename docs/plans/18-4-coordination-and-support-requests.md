@@ -1,10 +1,12 @@
 # 18-4: Coordination and support requests
 
 **Parent:** [18-unit-tactical-autonomy](18-unit-tactical-autonomy.md)
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Let units request and deliver useful assistance while preserving assignments, limited resources, communication and player authority.
 
 ## Baseline and evidence
+
+[M1](18-2-1-m1-infantry-defense.md) implements `support_requests.gd`: explicit existing-infantry reserves, one-provider leases, useful service, bounded failure and safe return to held assignments. It also shares actual member covering roles with throws/bounds. The following catalogue describes the broader plan; escort, recon, service and domain-specific providers remain future work.
 
 [TacticalDirector](../../scripts/tactical_director.gd) already coordinates some support/flank choices among units sharing `command_group`; [Simulation.record_order](../../scripts/simulation.gd) replaces that group when a new nonqueued command is issued. [FieldOps](../../scripts/field_ops.gd) has purchases, construction, support posts, enemy waves and mortar/FPV mechanisms. These are not yet a general task request system. A call for backup must dispatch an eligible unit or obtain a real service; it does not create troops or supply.
 
@@ -53,14 +55,16 @@ Fire/smoke requests also carry engagement permission. A support request or urgen
 
 ## Tasks
 
-- [ ] 1. Add persistent assignment IDs and a typed request/claim record through [18-1](18-1-action-framework-and-readiness.md).
-- [ ] 2. Implement COOP-01/02/15/16 with one existing reserve responder and no automatic spending.
-- [ ] 3. Implement useful-arrival tests, duplicate merging, expiries, cancellations and assignment-version-safe return.
+- [x] 1. Add persistent assignment IDs and a typed request/claim record through [18-1](18-1-action-framework-and-readiness.md).
+- [x] 2. Implement COOP-01/02/15/16 with one existing reserve responder and no automatic spending.
+- [x] 3. Implement useful-arrival tests, duplicate merging, expiries, cancellations and assignment-version-safe return.
 - [ ] 4. Add small role reservations for covering and protection; inspect real firing readiness before a movement relies on support.
+  - [x] M1 member covering roles and backup readiness. Persistent escort/protection assignments remain later scope.
 - [ ] 5. Adapt existing engineer, aid, repair, supply and recon providers to the same lifecycle; do not require every expansion mechanic.
 - [ ] 6. Add delegated zones/priorities and minimal UI acknowledgement with [18-11](18-11-command-interface-and-feedback.md).
 - [ ] 7. Add smoke/fire-support and relief adapters after their authoritative effects exist.
 - [ ] 8. Validate competing requests, losses, jamming, new orders, unavailable routes and resource conflicts under [18-12](18-12-performance-and-validation.md).
+  - [x] M1 existing-infantry backup cases, including provisional/rejected/accepted replacement orders and radio-loss leases.
 
 ## Acceptance scenarios
 
