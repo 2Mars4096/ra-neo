@@ -10,11 +10,44 @@ static func covering_weapon(u:Dictionary,member:Dictionary,sim,threat:Dictionary
 
 static func can_cover(u:Dictionary,member:Dictionary,sim,threat:Dictionary)->bool:
 	if not sim.alive(threat) or threat.team==u.team or not sim.contact_known(u,threat):return false
+	if not sim.auto_target_ok(u,threat):return false
 	var weapon:=covering_weapon(u,member,sim,threat)
 	if not sim.Infantry.ready_to_cover(u,member,sim.time,weapon):return false
 	if sim.time<float(member.get("hull_yield",{}).get("until",-INF)):return false
 	if not sim.engagement_allowed(u,int(threat.id)):return false
+	# Do not promise fire that this actor owes to a different player target.
+	# A blocked or unknown order still permits useful local covering fire.
+	var ordered:Dictionary=sim.get_unit(sim.ordered_target(u))
+	if not ordered.is_empty() and ordered.id!=threat.id and sim.alive(ordered) and ordered.team!=u.team and sim.contact_known(u,ordered) and sim.engagement_allowed(u,int(ordered.id)):
+		if sim.weapon_reaches(covering_weapon(u,member,sim,ordered),member.pos,ordered,sim.SOLDIER_CHECKS):return false
+	# An urgent threat which just interrupted cover must not be forgotten by
+	# the next role review while the same soldier is still engaging it.
+	var current:Dictionary=sim.get_unit(int(member.get("target",-1)))
+	if sim.alive(current) and current.team!=u.team and sim.urgent_target_rank(u,current)>sim.urgent_target_rank(u,threat) and sim.contact_known(u,current) and sim.engagement_allowed(u,int(current.id)):
+		if sim.weapon_reaches(weapon,member.pos,current,sim.SOLDIER_CHECKS):return false
 	return sim.weapon_reaches(weapon,member.pos,threat,sim.SOLDIER_CHECKS)
+
+# The firing executor uses the same reciprocal role as movement. A covering
+# label alone must never choose an unrelated weapon or keep an obsolete task.
+static func covering_target(u:Dictionary,member:Dictionary,sim)->Dictionary:
+	var mover_id:=str(member.get("cover_for",""))
+	if mover_id.is_empty():return {}
+	var mover:Dictionary=sim.Infantry.member_by_id(u,mover_id)
+	if mover.is_empty() or mover.hp<=0 or str(mover.get("covered_by",""))!=str(member.member_id):return {}
+	var throwing:bool=sim.Infantry.task_busy(mover) and mover.get("task_kind","")=="throw"
+	if mover.get("cover_phase","") not in ["SEEKING","SETTLING"] and not throwing:return {}
+	var threat:Dictionary=sim.get_unit(int(mover.get("support_threat",-1)))
+	return threat if can_cover(u,member,sim,threat) else {}
+
+static func release_support(u:Dictionary,member:Dictionary,sim,reason:String)->void:
+	var mover:Dictionary=sim.Infantry.member_by_id(u,str(member.get("cover_for","")))
+	if not mover.is_empty() and str(mover.get("covered_by",""))==str(member.member_id):
+		mover.erase("covered_by")
+		if mover.get("coord_reason","")!="defensive_shelter":mover["coord_reason"]="cover_lost"
+	member.erase("cover_for")
+	if member.get("coord_reason","")=="covering_teammate":member.erase("coord_reason")
+	var action:Dictionary=sim.actions.active(u,"member:%s:support"%member.get("member_id",member.index))
+	if not action.is_empty():sim.actions.cancel(u,action,sim.time,reason)
 
 static func _partner(u:Dictionary,mover:Dictionary,sim,threat:Dictionary)->Dictionary:
 	for peer in u.members:
@@ -37,9 +70,10 @@ static func clear(u:Dictionary,sim)->void:
 		var action:Dictionary=sim.actions.active(u,"member:%s:support"%member.get("member_id",member.index))
 		if not action.is_empty():sim.actions.cancel(u,action,sim.time,"support_released")
 
-# Review is O(section members squared), with at most one weapon probe per
-# candidate. A lost supporter is replaced; an already exposed mover finishes
-# its short validated route to shelter instead of freezing in the street.
+# Review is O(section members squared), with at most three weapon probes per
+# candidate (explicit, urgent, support). A lost supporter is replaced; an
+# already exposed mover finishes its short validated route to shelter instead
+# of freezing in the street.
 static func review(u:Dictionary,sim)->void:
 	if u.members.is_empty():return
 	for member in u.members:member.erase("cover_for")

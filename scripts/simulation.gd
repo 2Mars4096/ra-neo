@@ -1287,10 +1287,12 @@ func infantry_target_bound(member:Dictionary,other:Dictionary)->float:
 		if terrain.has_elevation() or definitions[other.kind].domain=="air":distance+=pow(source_h-unit_altitude(other),2)
 	return distance*(0.2 if definitions[other.kind].get("strike",false) else 1.0)
 
-func select_infantry_target(u:Dictionary,member:Dictionary,weapon:String,eligible:Array,range_scale:float)->Dictionary:
+func select_infantry_target(u:Dictionary,member:Dictionary,weapon:String,eligible:Array,range_scale:float,covering_target_id:int=-1)->Dictionary:
 	var checks_left:int=soldier_checks+SHOOTER_CHECKS
 	var desired_id:=ordered_target(u)
-	var current_id:int=member.target
+	# An assigned covering threat replaces ordinary target retention. Explicit
+	# orders and higher-ranked urgent threats keep their existing precedence.
+	var current_id:int=covering_target_id if covering_target_id>=0 else member.target
 	var desired:Dictionary={}
 	var current:Dictionary={}
 	for other in eligible:
@@ -2036,6 +2038,9 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 	var contact:bool=autonomy and Infantry.in_contact(u,time)
 	for member in u.members:
 		if member.hp<=0:continue
+		var support:Dictionary=Coordination.covering_target(u,member,self)
+		if support.is_empty() and not str(member.get("cover_for","")).is_empty():
+			Coordination.release_support(u,member,self,"cover_unavailable")
 		if Infantry.task_busy(member):
 			Infantry.cancel_readiness(member)
 			member.target=-1;member.aim=0.0
@@ -2070,8 +2075,18 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 		var range_scale:float=Garrison.RANGE_SCALE if Garrison.inside(u) else 1.0
 		var selected:Dictionary={}
 		var selected_ready:=false
-		var weapon:String=section_weapon(u,member)
-		if weapon=="atgm":
+		var weapon:String=Coordination.covering_weapon(u,member,self,support) if not support.is_empty() else section_weapon(u,member)
+		# A specialist's explicit infantry target selects its rifle before an
+		# incidental armored contact can send it back to launcher preparation.
+		if weapon=="atgm" and support.is_empty():
+			var ordered:Dictionary=get_unit(ordered_target(u))
+			if alive(ordered) and ordered.team!=u.team and contact_known(u,ordered) and engagement_allowed(u,int(ordered.id)) and auto_target_ok(u,ordered):
+				var ordered_weapon:=Coordination.covering_weapon(u,member,self,ordered)
+				if ordered_weapon!=weapon and effective_weapon(ordered_weapon,ordered.kind):
+					selected=infantry_target_candidate(u,member,ordered_weapon,ordered,range_scale,soldier_checks+SOLDIER_CHECKS)
+					selected_ready=not selected.is_empty()
+					if selected_ready:weapon=ordered_weapon
+		if weapon=="atgm" and support.is_empty():
 			# Missiles are kept for vehicles, works and troops in buildings. A
 			# useful rifle shot takes priority over quiet launcher preparation.
 			if not eligible_by_weapon.has("atgm"):
@@ -2101,10 +2116,12 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 			for other in candidates:
 				if alive(other) and other.team!=u.team and contact_known(u,other) and engagement_allowed(u,int(other.id)) and effective_weapon(weapon,other.kind) and auto_target_ok(u,other):eligible.append(other)
 			eligible_by_weapon[weapon]=eligible
-		if not selected_ready:selected=select_infantry_target(u,member,weapon,eligible_by_weapon[weapon],range_scale)
+		if not selected_ready:selected=select_infantry_target(u,member,weapon,eligible_by_weapon[weapon],range_scale,int(support.get("id",-1)))
 		var target:Dictionary=selected.get("target",{})
 		var victim:Dictionary=selected.get("victim",{})
 		var target_id:int=target.get("id",-1)
+		if not support.is_empty() and target_id!=int(support.id):
+			Coordination.release_support(u,member,self,"cover_target_preempted" if target_id>=0 else "cover_lane_lost")
 		var victim_id:int=int(victim.get("index",-1))
 		if member.target!=target_id or int(member.get("aim_member",-1))!=victim_id or str(member.get("aim_weapon",weapon))!=weapon:member.aim=0.0
 		member.target=target_id

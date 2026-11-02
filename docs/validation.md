@@ -1,5 +1,13 @@
 # Validation evidence
 
+## M1 section 1 — 2026-11-02
+
+Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, for `codex/m1-section-1`. The focused integration gate passes **17/17 suites**, including **79 coordination checks with zero failures**. The [current report](evidence/m1-01-checks.json) records the exact suite selection, outputs and hashes for 83 source/test/configuration files. It replaces an inherited report that included hashes for later M1 modules absent from this branch.
+
+The same 79-check coordination test was run against unchanged checkpoint `0f5eb25` in an isolated export: **10 failures**, all corresponding to incorrect actual covering fire, stale support after urgent preemption or explicit-order/weapon priority. The corrected source passes all 79 checks. The tests exercise real shot events, magazine spending, a physically routed shelter move and arrival cleanup, alongside handover, actor ownership, Move/Attack overrides and hidden/dead/unreachable target fallback.
+
+Affected checks cover ordinary targeting, readiness, action ownership, pressure, cover candidates/contact, contact drills, regrouping, garrison fire, ATGM flight and world damage. No script errors or assertion failures remain. `test_atgm_flight.gd` retains its previously recorded `ObjectDB instances leaked at exit` warning. These are functional tests; no new native visual review, frame-time benchmark or human playtest was performed. M1.2–M1.6 and the existing synchronous navigation hitch remain outside this section.
+
 ## M0 tactical foundation — 2026-10-30
 
 Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, on `codex/unit-tactics-implementation`, continuing recovery checkpoint `e36b211` over planning baseline `caf1b4c`. The final serial `--group tactical` gate passed **58/58 suites** in 347 seconds. This includes the **10 dedicated M0 suites, 1,439 checks, zero failures**, plus the affected command, combat, geometry, garrison, engineering, economy and campaign regressions. [The complete functional report](evidence/m0-tactical-checks.json) retains outputs and source hashes.

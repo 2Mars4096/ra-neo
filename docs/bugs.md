@@ -2,6 +2,8 @@
 
 ## M1 staged review — 2026-11-02
 
+- A soldier could be credited as rifle cover while the combat executor retained another infantry target or selected an empty launcher for incidental armor. The focused reproduction passed role eligibility, then began a three-second launcher reload with the cover claim still active. Combat now honors the validated support weapon/threat, releases diverted claims, and preserves explicit orders and urgent threats. The same review corrected explicit infantry attacks being displaced by incidental armor during specialist weapon selection. Regression checks exercise actual rounds and shot events, not only role labels.
+- The inherited `m1-01-checks.json` contained source hashes for later M1 modules absent from the section 1 tree. That snapshot is replaced with current section 1 suite results and hashes; historical checkpoint claims remain in their original changelog entry.
 - Cover eligibility inspected a specialist’s current empty magazine before choosing the weapon actually needed against the contact. `ready_to_cover` now accepts an optional requested weapon and coordination checks that weapon without switching, replenishing, consuming or interrupting a live reload. A loaded alternate rifle/launcher is usable; pressure, task/medical ownership, Hold fire, equipment and missile limits remain enforced. Focused red/green cases reproduce the old failure and verify the correction.
 
 ## M0 implementation corrections — 2026-10-30

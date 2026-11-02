@@ -1,6 +1,6 @@
 {
   "engine": "4.5.1.stable.official.f62fdbde1",
-  "log_dir": "/tmp/for-every-dawn-check-7k4k2vj_",
+  "log_dir": "/tmp/for-every-dawn-check-3a9lvnok",
   "groups": [
     "tactical"
   ],
@@ -8,31 +8,154 @@
   "results": [
     {
       "group": "tactical",
+      "script": "test_regroup_recovery.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 17.4,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nREGROUP SNAPSHOT t=60 squad=1 pos=(39.00561, 21.97194) hp=160.0 blocked=0.0 target=-1 orders=[] maneuver={  } path=[]\n actor=0 pos=(32.05, 23.0) phase=SHELTERED occupying=true goal=(32.05, 23.0) cover_path=[] gap=7.03117656707764 regroup=[]\n actor=1 pos=(44.50561, 21.97194) phase=SHELTERED occupying=true goal=(44.50561, 21.97194) cover_path=[] gap=5.5 regroup=[]\n actor=2 pos=(46.50561, 21.97194) phase=SHELTERED occupying=true goal=(46.50561, 21.97194) cover_path=[] gap=7.5 regroup=[]\nREGROUP SNAPSHOT t=60 squad=2 pos=(34.92694, 24.80478) hp=160.0 blocked=0.0 target=-1 orders=[] maneuver={  } path=[]\n actor=0 pos=(31.54938, 26.11226) phase=SEEKING occupying=true goal=(30.0, 27.95) cover_path=[(30.0, 27.95)] gap=3.62179565429688 regroup=[(34.92694, 23.82478)]\n actor=1 pos=(30.0, 25.05) phase=SHELTERED occupying=true goal=(30.0, 25.05) cover_path=[] gap=4.93303918838501 regroup=[]\n actor=2 pos=(30.02194, 27.02111) phase=SEEKING occupying=true goal=(28.0, 25.05) cover_path=[(27.93807, 26.98609), (28.0, 25.05)] gap=5.38248682022095 regroup=[]\nREGROUP SNAPSHOT t=60 squad=3 pos=(40.23995, 26.22888) hp=105.0 blocked=0.0 target=-1 orders=[] maneuver={  } path=[]\n actor=0 pos=(44.95, 31.0) phase=SHELTERED occupying=true goal=(44.95, 31.0) cover_path=[] gap=6.70433759689331 regroup=[]\n actor=1 pos=(47.0, 29.95) phase=SHELTERED occupying=true goal=(47.0, 29.95) cover_path=[] gap=7.71653985977173 regroup=[]\nFIRST ORDER COMPLETIONS: { 3: 41.6000000000002, 1: 42.5000000000001, 2: 52.4666666666662 }\nVILLAGE owner=0 progress=12.0\nREGROUP RECOVERY: 139107 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_cover_behavior.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.1,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nCOVER BEHAVIOR: 0 failures; maximum individual movement=7.10605907440186 settled=true"
+    },
+    {
+      "group": "tactical",
+      "script": "test_cover_contact.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 12.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nSANDBAG normal sandbag close sheltered=2\nSANDBAG rotated sandbag close sheltered=2\nCOVER CONTACT: 99 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_garrison_fire.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 6.1,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nbuilding 211 bounds [P: (336.0001, 373.1), S: (20.0001, 15.5)] rects 1 door (346.1787, 391.65)\nside (1.0, 0.0): shots 20 by 3 soldiers, first at +2.0s, enemy hp 160 -> 0, states [\"HOLDING\", \"SETTLING\", \"ACQUIRING\", \"FIRING\", \"CYCLING\", \"RELOADING\"]\nside (0.0, -1.0): shots 23 by 3 soldiers, first at +1.2s, enemy hp 160 -> 107, states [\"HOLDING\", \"SETTLING\", \"ACQUIRING\", \"FIRING\", \"CYCLING\", \"RELOADING\"]\nside (-1.0, 0.0): shots 8 by 3 soldiers, first at +1.2s, enemy hp 160 -> 0, states [\"HOLDING\", \"SETTLING\", \"ACQUIRING\", \"FIRING\", \"CYCLING\", \"RELOADING\"]\nside (0.0, 1.0)(door): shots 11 by 3 soldiers, first at +1.3s, enemy hp 160 -> 0, states [\"HOLDING\", \"SETTLING\", \"ACQUIRING\", \"FIRING\", \"CYCLING\", \"RELOADING\"]\ntank + infantry: shots 9, targets [7] (tank 6, infantry 7)\njavelin: missiles 3 -> 0, launches at [4.59999999999999, 11.6333333333333, 18.6666666666668], tank hp 440 -> 76, gunner HOLDING\nGARRISON FIRE: 27 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_world_damage.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 31.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nSHOTS TO COLLAPSE (integrity = (20 + area x floors x 0.30) x construction)\n  design             area floors integrity |  tank at_gun  atgm  helo  boat\n  outbuilding          10      1        14 |     2     2     3     2     3\n  dacha_hut            16      1        15 |     2     3     3     2     3\n  gatehouse            27      1        28 |     3     5     6     4     5\n  garage_row          115      1        38 |     4     6     8     5     7\n  stone_house          42      1        39 |     4     6     8     5     7\n  shop_pavilion       182      1        52 |     6     8    11     7     9\n  stone_house          46      2        57 |     6     9    12     8    10\n  petrol_station      216      1        59 |     6     9    12     8    10\n  barn_long           265      1        60 |     6     9    12     8    10\n  classic_row          90      2        74 |     8    11    15    10    13\n  colonnade_landing     198      1        79 |     8    12    16    10    14\n  shop_pavilion       198      2        97 |    10    14    20    13    17\n  classic_row          95      3       106 |    11    16    22    14    18\n  workshop_hall       448      1       108 |    11    16    22    14    19\n  coop_shed           576      1       116 |    12    17    24    15    20\n  classic_row          95      4       134 |    14    20    27    17    23\n  market_hall         540      1       146 |    15    21    30    19    25\n  slipway             432      1       150 |    15    22    30    19    25\n  transit_shed        971      1       187 |    19    27    38    24    32\n  classic_corner      203      3       203 |    21    29    41    26    34\n  kindergarten        385      2       251 |    26    36    51    32    42\n  classic_corner      203      4       264 |    27    38    53    33    44\n  cathedral           660      1       349 |    35    50    70    44    59\n  port_admin          312      4       394 |    40    57    79    50    66\n  barracks            480      3       452 |    46    65    91    57    76\n  fort_ruin           900      1       522 |    53    75   105    66    87\n  civic_hall          576      3       538 |    54    77   108    68    90\n  panel_5             342      5       693 |    70    99   139    87   116\n  panel_9             480      9       900 |    90   129   180   113   150\n  point_tower         256     13       900 |    90   129   180   113   150\nTANK vs stone_house (48 m2, 1 floor, integrity 41): 5 shots to collapse (expected 5), states [0, 1, 2, 3], 10.3 s\nRUBBLE at (708.6593, 112.0333): traversable before false after true; solid before { \"infantry\": true, \"tracked\": true, \"wheeled\": true } after infantry false tracked false wheeled true\nRUBBLE speed vs open: infantry 0.55 tracked 0.35 wheeled 0.07; surface 'RUBBLE \u00b7 COVER \u00b7 VEHICLES SLOWED'\nRUBBLE infantry approaches with a route to the centre: 10 of 12\nRUBBLE line of sight firing spot -> 1.5 m inside the struck wall: before false after true\nGARRISON protection leak vs small arms: intact 1.00, damaged 1.40, breached 1.90\nBREACH fragments: garrison hp 107 -> 0 after 10 HE hits\nCOLLAPSE of barracks (3 floors, 11 x 39 m): killed 2 survivors 1; sim cost 12.5 ms (nav refresh, rubble zone)\nSANDBAGS under tank HE: protection factor [0.55, 0.65, 0.74, 0.74, 0.74, 0.84, 0.84, 0.93, 1.0], leak to soldiers [1.0, 1.17, 1.35, 1.35, 1.35, 1.52, 1.52, 1.7, 1.0], gone after 8 hits\nDEPOT cook-off after 5 HE rounds: 4 secondary blasts; crew 160 -> 0, command post 520 -> 438\nOUTCOMES tank HE vs corvette (n=3000): { \"firepower\": 595, \"mobility\": 605, \"crew\": 737, \"fire\": 440, \"flooding\": 443, \"catastrophic\": 180 }\nFLOODING one hole (0.035/s), 3 crew pumping: flood level 0.34 after 40 s, alive true, draft 0.44 m\nFLOODING two holes, crew of 1: sank after 7.5 s\nFIRE 12 s: corvette 480 -> 420 hp, burning false\nOUTCOMES autocannon vs gunship (n=3000): { \"crew\": 247, \"mobility\": 211, \"hydraulics\": 98, \"firepower\": 147, \"tail_rotor\": 156 }\nTAIL ROTOR: down after 2.9 s, troops below 160 -> 53, wreck true\nDRONE drone downed per hit: rifle 1.00 engineer 0.91 tank 1.00 aa 1.00\nDRONE fpv_drone downed per hit: rifle 1.00 engineer 0.92 tank 1.00 aa 1.00\nVISUALS: tiles built in 3518 ms; damage marks 4 (one MultiMesh); collapse handled in 9.2 ms; parcel triangles 848, hidden 848; rubble mound 1 mesh nodes\nBATTLE consume_events: collapse of stone_house handled in 8.9 ms; hidden 848 triangles; rubble true; marks 6\nHOOK cost: 300 fresh shot events 1.58 ms; idle tick 0.0011 ms\nWORLD DAMAGE: 82 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_contact_drill.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 1.9,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\n  fire-from-cover slot=(16.30294, 42.30294) clear=true dist=11.6\n  member 0 phase=SETTLING pos=(10.0, 42.05) target=2 posture=CROUCHED shot=5.5\n  member 1 phase=SHELTERED pos=(16.30294, 42.30294) target=2 posture=CROUCHED shot=6.5\n  member 2 phase=SHELTERED pos=(14.0, 42.05) target=-1 posture=CROUCHED shot=-100.0\n  tank: wall face=(15.0, 33.95) re-evaluated goal=(0.0, 0.0) phase=OVERWATCH\n  rifle: wall face=(15.0, 33.95) re-evaluated goal=(15.0, 33.95) phase=SHELTERED\n  crossfire member 0 phase=EXPOSED posture=PRONE pos=(18.0, 53.53)\n  crossfire member 1 phase=EXPOSED posture=PRONE pos=(16.725, 55.735)\n  crossfire member 2 phase=EXPOSED posture=PRONE pos=(19.275, 55.735)\n  crossfire open=3 prone=3 sheltered=0 crossfire=true\n  crossfire wall member 0 phase=SHELTERED posture=CROUCHED goal=(14.0, 42.05) pos=(14.0, 42.05)\n  crossfire wall member 1 phase=SHELTERED posture=CROUCHED goal=(12.0, 42.05) pos=(12.0, 42.05)\n  crossfire wall member 2 phase=EXPOSED posture=PRONE goal=(0.0, 0.0) pos=(19.275, 44.735)\n  drop member 0 posture=PRONE phase=\n  drop member 1 posture=PRONE phase=\n  drop member 2 posture=PRONE phase=\n  ambush first_fire=2.47 dropped=0.00 returned=0.90 max_seeking=1 cover_fire=true rush_in_drill=false\n  ambush member 0 phase=SHELTERED posture=CROUCHED hp=53\n  ambush member 1 phase=SHELTERED posture=CROUCHED hp=53\n  ambush member 2 phase=SEEKING posture=STANDING hp=53\nCONTACT DRILL: 34 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_soldier_targeting.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.4,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nhidden section:\n  hidden section: shots at it 0, wounded 0/3\nexposed soldier:\n  exposed soldier vs rifles: shots 9 hits 1 (all at him 1), exposed wounded 1, hidden wounded 0\nvehicle fire:\n  tank vs section: shots 1 hits 1 (at exposed 1), exposed wounded 1, hidden wounded 0\nlegacy fallback:\nSOLDIER TARGETING: 27 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
       "script": "test_action_integration.gd",
       "passed": true,
       "exit_code": 0,
-      "seconds": 5.3,
+      "seconds": 3.5,
       "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nACTION INTEGRATION: 169 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_action_targeting.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 1.2,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nACTION TARGETING: 20 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_atgm_flight.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 7.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFLIGHT 8.9 u: launch 0.77 s, impact 2.20 s, flight 1.43 s (expected 1.43), attack top, hit true\nFLIGHT 16.9 u: launch 0.77 s, impact 4.77 s, flight 4.00 s (expected 3.99), attack top, hit true\nLOCK sight cleared at 4.00 s, launch 0.77 s later\nFIRE-AND-FORGET gunner killed mid-flight: 3/4 hits\nFIRE-AND-FORGET gunner suppressed mid-flight: 3/4 hits\nFIRE-AND-FORGET gunner sight mid-flight: 3/4 hits\nFIRE-AND-FORGET gunner moved mid-flight: 3/4 hits\nMOVING tank 16 m crossing: mean 14.0 m driven in flight, 5/6 hits, 6/6 impacts at the tank\nDESTROYED in flight: impact 0.0 m from the old spot, lost destroyed, blast missile, soldiers hp 160 -> 53, 3/3 struck\nMISS: impact 3.1 m from the tank, blast missile at the impact point, tank hp 440 -> 438\nPRESENTATION moving: sim impact 4.77 s, visual arrival 4.77 s (+0.000), arrival 0.00 m from the sim impact point, hit true, surface armor\nPRESENTATION destroyed: sim impact 4.77 s, visual arrival 4.77 s (+0.000), arrival 0.00 m from the sim impact point, hit false, surface ground\nLOAD launches in 40 s: 3, missiles left 0\nRESUPPLY 3 rounds in 34.6 s (10.5 s each = 30 s real)\nAI RESUPPLY reached source true, full at 56.5 s, resumed true\nINFANTRY in the open: 0 missiles, 9 gunner rifle shots\nATGM FLIGHT: 62 checks, 0 failures\nWARNING: ObjectDB instances leaked at exit (run with --verbose for details).\n     at: cleanup (core/object/object.cpp:2514)"
+    },
+    {
+      "group": "tactical",
+      "script": "test_cover_candidates.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nCOVER CANDIDATES: 263 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_hull_regroup.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 1.7,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nHULL CASE held regroup 0.03 -> 3.37 gap=2.78 tank moved=0.0\nHULL CASE parked regroup 0.03 -> 3.37 gap=2.78 tank moved=0.0\nHULL REGROUP: 1186 checks, 0 failures"
     },
     {
       "group": "tactical",
       "script": "test_infantry_coordination.gd",
       "passed": true,
       "exit_code": 0,
-      "seconds": 2.2,
-      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nINFANTRY COORDINATION: 39 checks, 0 failures"
+      "seconds": 1.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nINFANTRY COORDINATION: 79 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_section_contact.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 6.4,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\n  attack_move: casualty at 1.1 s, phase after 1 s=CONSOLIDATE, anchor moved 0.0 u in 4 s\n  attack-move: resumed 6.3 s after the casualty, now 32.7 u on\n  move: casualty at 1.1 s, phase after 1 s=, anchor moved 16.2 u in 4 s\n  drag: dragged at 0.6 s, in cover at 2.4 s, stable=true aid=8.0 wound=SEVERE enemy hp=160\n  open field casualty: aid under fire=false, aiding/dragging under fire 0.0 s, enemy hp=160\n  idle: first fire 1.5 s, prone 0.0 s, bound 7.1 s, sheltered 19.8 s, anchor 10.9 u from start, living 1\n  hold: first fire 1.5 s, prone 0.0 s, bound -1.0 s, sheltered -1.0 s, anchor 1.0 u from start, living 0\nSECTION CONTACT: 24 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_tactical_actions.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 0.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTACTICAL ACTIONS: 70 checks, 0 failures"
+    },
+    {
+      "group": "tactical",
+      "script": "test_tactical_pressure.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 1.6,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTACTICAL PRESSURE: 61 checks, 0 failures"
     },
     {
       "group": "tactical",
       "script": "test_tactical_readiness.gd",
       "passed": true,
       "exit_code": 0,
-      "seconds": 1.4,
+      "seconds": 1.3,
       "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTACTICAL READINESS: 61 checks, 0 failures"
     }
   ],
-  "checkpoint": "M1.1 coordinated cover and movement",
+  "checkpoint": {
+    "branch": "codex/m1-section-1",
+    "scope": "M1.1 coordinated cover and movement only",
+    "baseline_commit": "0f5eb258de5725773ade541f683130d50bf89106",
+    "planning_commit": "14caa85f1930960ace3100124cda699849df6636",
+    "recorded_at_utc": "2026-11-02T07:40:41.572178+00:00"
+  },
+  "command": "GODOT_BIN=/path/to/Godot-4.5.1 python3 tools/check.py --group tactical test_infantry_coordination test_tactical_readiness test_action_targeting test_action_integration test_tactical_pressure test_cover_behavior test_cover_candidates test_cover_contact test_contact_drill test_section_contact test_soldier_targeting test_garrison_fire test_atgm_flight test_regroup_recovery test_hull_regroup test_tactical_actions test_world_damage",
   "source_sha256": {
+    "project.godot": "51dcb1de57498bc4f2b737e08516e644476f51d4d7b55a60667fc82e5d139ebc",
+    "resources/combat.json": "3a76b503ffaf967bbad7e823a914729f17f53549d3aae7e7154a9c4f602da8b2",
+    "resources/scenarios.json": "49f850989dd52b72176cb629a7c88ed674736ac3222d4d3d794a75707a0d8bcd",
+    "resources/units.json": "60436807c5afa4ee4e60a4e3ce2524541f8506a0c8104c37e0920f2dadfba0e4",
     "scripts/architectural_block.gd": "0c43ee06cf300de3993a24ae10bf294cbe8f6f74006ab71280e9cdf3ef4236a6",
     "scripts/asset_library.gd": "c5cf9674e19a00983d9ea31df93654d2d8f9d3148a5d73f6ae4c1f6104358d0a",
     "scripts/assets_battlefield.gd": "24e3cd13b76e01c60c89df1ee2e46d107f26c686f826ed248715f80fe95e2857",
@@ -60,13 +183,12 @@
     "scripts/environment_variants.gd": "13a12a5de1746ea239a240bf99cf9d27f0141b79fad50cce3c711160c77d4bb8",
     "scripts/field_models.gd": "2f96ea8beaf322d701e9f2872efe4674efa4fe36a25b4b1bb3497dad05c056b2",
     "scripts/field_ops.gd": "c0197e67d01dd54ed24efc1e91b9074a585bd16919fab48a7ff020ddc99b37f7",
-    "scripts/field_positions.gd": "62c6748354541c3586d50c0c2d39f2441f523306ce97e4818e63ce80894288f1",
     "scripts/foliage_mesh.gd": "6a325a12052b3e179625dbe02d621217f6b13caf9b6e677e92d3f614044e115e",
     "scripts/garrison.gd": "d14f275d0219fa23aeb15daefe609e7dfce83589f59256978cdb000f165669e0",
     "scripts/harbor_props.gd": "eb52ce64845b98d3572ac6f1e7b776e77e1f198e89cd50e17e15e72867bcfd27",
     "scripts/hud.gd": "2131227dc1cb3957a96f6a215a6413301f494c741505327521f7fa50a0b20c9a",
     "scripts/infantry.gd": "157972f182ff7bbb4e63df30eb029974a1cdb6b17fbd59f9985f42a9963bd31b",
-    "scripts/infantry_coordination.gd": "5a7fbf9ec761eb8b8074249fd337179543045389e81aece55dc79dfcb15bd37a",
+    "scripts/infantry_coordination.gd": "c0f046884c5163b62bf7c66617fac18806fa5fe15bb29616aca25987a68a6148",
     "scripts/minimap_background.gd": "0942c4736046ffe4c81f6e77c14307d339a0e533c3843938d07132058956a6b6",
     "scripts/notice_feed.gd": "5b2f0e7774cfe6c56e51be1431fac5ae7d2e611ff4da0d69fad18421b9c9a384",
     "scripts/operation_rules.gd": "1264872eb266cda6ab3d68cd5715c508a56b0aefcf36d5182dc0a537e2703d66",
@@ -81,23 +203,54 @@
     "scripts/ruined_building.gd": "f4d0cf30ab7c7c90efe1832a08287f091e1270a75c30db1439d0454099cf85fd",
     "scripts/scenario_catalog.gd": "49be849040bdd2eaf061248405c0f271ffdca1d130ddb29d08a28f24a86a08f3",
     "scripts/section_recovery.gd": "152b61342d5c0e55a27f4c31e4bdb7019290e412646dbf2947a444f1c9404e9e",
-    "scripts/simulation.gd": "2789864ac2ade68fea8b507b39d338b302a53590ac3e842c2f122a2cdf332724",
+    "scripts/simulation.gd": "bd0d043a968ab8c2832cbe83eb09fee2af3ebebee40f6edeff94feda8c2e99a8",
     "scripts/structure_damage.gd": "72e27efd185b081cffc4c3cc4705893b61d042b9771213ed649ddcd82e454d3d",
-    "scripts/support_requests.gd": "b8e3c768774bfbb2248f0163827f8833fcddc6aa59c79e958a0ddf33b76439e3",
     "scripts/tactical_actions.gd": "101cdec1195a07747adaff76fc52aae3e9bd820da50f7a6d6a4e1403f2dc288a",
     "scripts/tactical_context.gd": "48a1149456104097fe29218374ecdaa7c0e0fdebd733e753ced69a7751b34071",
     "scripts/tactical_director.gd": "340ca14c34cf3ab0d6dc2735dfbaef491e3a8aa89148ca39855e1c612db076d8",
-    "scripts/tactical_effects.gd": "033f3befe29d91518ace5677dee44f2cb480775f1f85c6c541cd33eff9bd3994",
-    "scripts/tactical_interface.gd": "88675c610683da405055b451598fbb4e53cf829ea47cc23bc1f6023e500d0a3b",
     "scripts/tactical_navigation.gd": "2cc0b7325aed3efc03445a05fecd847bbabc80010dfe27468e43218915a92781",
     "scripts/tactical_work_budget.gd": "cb647ecc1212ff44f173c1a96235fd032e9469e213aff09aa29c7d93494cf59e",
     "scripts/terrain.gd": "003f111634ce6aca0b4052f5365e94ea3dc3a2c483117f9d85968f170c7a3b3d",
-    "scripts/throwables.gd": "491aec519316884c0e46678bb6ec1ffa93b6bcc6f98b35fbeafacb657685f53c",
     "scripts/unit_animation.gd": "a82c719bcdec5838b08dbafb6062cbc663998ae4af40dc9b7d745c4b3e0ebd78",
     "scripts/unit_models.gd": "2df525f123b86234872a48fa5dbb82b0d0accf4222a9194e868a103f28f43a0d",
     "scripts/vehicle_damage.gd": "efd198884a6e41a6f4dc720c1aa03fa3b5441900c1f0b9f4951724708c15eb51",
     "scripts/visuals.gd": "28957d7cb64d8601b2a2fd0f195628de239084af0f535f452dcd22842818ec3d",
     "scripts/weather.gd": "47642b37469ecb49490606a29d35015ff33a5bb2aa6c650dd01f812696e2741a",
-    "scripts/weather_visuals.gd": "dea9acb98df54e291fdc9d96af6b138137c73ac0dd850a9807f8110e1474abf2"
-  }
+    "scripts/weather_visuals.gd": "dea9acb98df54e291fdc9d96af6b138137c73ac0dd850a9807f8110e1474abf2",
+    "tests/test_action_integration.gd": "c24fc8e9b83dec7644cf954f396ecb8382de484216795cf03eac829488a08afc",
+    "tests/test_action_targeting.gd": "b7bd3b8baf00181b32ba93710d5d2f73524ac32222cfdec8b1b105e6af8be4a7",
+    "tests/test_atgm_flight.gd": "cf5386bc46248e0174df5e4773c3640398836428fac00df88f63b1bda3d6c56c",
+    "tests/test_contact_drill.gd": "7754df4d5ef2f7ce93d14e8bc43ce8a4f632f2871c103e05260852606295a81e",
+    "tests/test_cover_behavior.gd": "830fb3e3e014f54cb1fec8ce8d9380da36b7cd5e146193053e5433eb3d136ede",
+    "tests/test_cover_candidates.gd": "59341e74d49347e67a9019ffb738ffbe5f13609594ade21fc4e5414306ce037b",
+    "tests/test_cover_contact.gd": "f0a0398eb450d5f730ecae7a6b19a000970e8ab027b1dc4ca4c4d4c5949f28a4",
+    "tests/test_garrison_fire.gd": "be5f44dfb4cf496ff793490b4fd5dfc1ee79887bc470564d88f22d2337471506",
+    "tests/test_hull_regroup.gd": "d9b087821c53d737ed8a710fe368527608337d50a1e7d746d42f7a7ed3b35870",
+    "tests/test_infantry_coordination.gd": "26aba53f7e78b7bcc008f36cab9f67699a54c50ae1455a216d44d21360e73494",
+    "tests/test_regroup_recovery.gd": "daebb104dd5ec5cea37fccd4fefcc670c2d8f07f389c9e3f378df215e5050e5c",
+    "tests/test_section_contact.gd": "e3771af4f04ca1c864a3f5c65d0c4d747ec847a7a765689f1c1ad8cc225647bd",
+    "tests/test_soldier_targeting.gd": "0e5106cd58fd838c8389b68f01b2a6ac743a283f45fc0ee83f1e12c835f57fe6",
+    "tests/test_tactical_actions.gd": "c4fef10a29ec5fef147db09aa1eaeb9fbed9221f029093e69ecde1bfaa078998",
+    "tests/test_tactical_pressure.gd": "1e5d408a1c4d57a67a40dffbd7b0bb454ea80e201f118ba6034f04d70338f713",
+    "tests/test_tactical_readiness.gd": "ba8249bbd9dff28e2156f26fbd9195d57e1a65672ab1e1f8a58ac008bb175261",
+    "tests/test_world_damage.gd": "80b754a7d7fde143403d22a5044b1a06d8ec34456f0e4119f7bc5cabb3ffe2f8",
+    "tools/check.py": "2b5e5c3d660300ff4423316ed5ab1a4537d9b429e3ff47f6db1b3adc4951be04"
+  },
+  "negative_control": {
+    "production_commit": "0f5eb258de5725773ade541f683130d50bf89106",
+    "test": "tests/test_infantry_coordination.gd",
+    "test_sha256": "26aba53f7e78b7bcc008f36cab9f67699a54c50ae1455a216d44d21360e73494",
+    "identical_test_in_both_runs": true,
+    "checks": 79,
+    "expected_failures": 10,
+    "script_errors": false,
+    "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFAIL: combat selects the covering rifle and protected threat before incidental armor\nFAIL: covering obligation cannot start an empty incidental launcher reload\nFAIL: the credited coverer releases a real rifle round during the teammate's bound\nFAIL: covering fire produces an authoritative shot event from the covering member\nFAIL: the assigned threat takes priority over a different ordinary retained target\nFAIL: urgent target selection releases both sides of the old covering obligation\nFAIL: urgent preemption releases the old support action instead of claiming false ground coverage\nFAIL: rifle valid different explicit target prevents a contradictory covering promise\nFAIL: atgm valid different explicit target prevents a contradictory covering promise\nFAIL: atgm combat honors the explicit infantry target despite incidental armor\nINFANTRY COORDINATION: 79 checks, 10 failures"
+  },
+  "summary": {
+    "suites_passed": 17,
+    "suites_failed": 0,
+    "coordination_checks": 79,
+    "coordination_failures": 0
+  },
+  "evidence_note": "Fresh section-1 evidence replaces the inherited snapshot whose hashes included later M1 modules absent from this branch. No native visual review or hardware-performance benchmark was run for this source-only integration correction."
 }

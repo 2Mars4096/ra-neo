@@ -6,7 +6,7 @@
 
 ## Delivery boundary
 
-M0 is complete at `5850504`. M1 is divided into the six sections below. The current request stops after **section 1** on `codex/m1-section-1`, reusing the existing M1.1 checkpoint `0f5eb25` and reviewing its integration before a separate commit and push. Its parent `b94593a` adds only the M1 plan to M0. Later sections exist on the separate staged implementation branch; their code and completion claims are outside this branch.
+M0 is complete at `5850504`. M1 is divided into the six sections below. The current delivery stops after **section 1** on `codex/m1-section-1`, reusing the existing M1.1 checkpoint `0f5eb25` with reviewed combat integration corrections and fresh verification. Its parent `b94593a` adds only the M1 plan to M0. The section plan was published first at `14caa85`, followed by the verified implementation checkpoint. Later sections exist on the separate staged implementation branch; their code and completion claims are outside this branch.
 
 This slice crosses plans 18-2/3/4/5/9/10/11/12. Their broader urban, domain and sustainment catalogues remain open. Status below describes this branch. Each future section remains a separate buildable checkpoint with affected checks and tracking updates; the current delivery does not advance to section 2.
 
@@ -14,7 +14,7 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Their broader urban, domain and 
 
 | Section | Scope | Dependency and acceptance | Status |
 |---|---|---|---|
-| **[M1.1 — Coordinated cover and movement](18-2-1-1-coordinated-cover-and-movement.md)** | A ready member covers a moving partner, holds a useful firing position and hands over after reload, suppression or casualty; task ownership excludes conflicting actions. | M0 readiness, observations and order authority. Check real ammunition/rays, partner replacement, survival moves and player overrides. | Implemented; focused review in progress |
+| **[M1.1 — Coordinated cover and movement](18-2-1-1-coordinated-cover-and-movement.md)** | A ready member covers a moving partner, holds a useful firing position and hands over after reload, suppression or casualty; task ownership excludes conflicting actions. | M0 readiness, observations and order authority. Check real ammunition/rays, partner replacement, survival moves and player overrides. | Complete — 17/17 affected suites pass |
 | **M1.2 — Fragmentation and smoke** | Finite carried payloads, interruptible preparation, one release charge, swept flight, physical blast and height-aware optical smoke. | M1.1 covering and actor claims. Check cancellation, allies, alternative throwers, actual impact and air/ground visibility. | Pending |
 | **M1.3 — Nearby reserve backup** | Explicitly delegate an existing section, lease one capable responder, deliver useful support and return to its unchanged assignment. | M1.1 readiness and M1.2 optical rays. Check actual support weapons, exclusive leases, radio loss, retasking and deadlines. | Pending |
 | **M1.4 — Hasty positions and upgrades** | One infantry member digs shallow cover; an engineer can reinforce the same site with one paid upgrade. Retain interrupted progress. | M1.1 actor ownership and M1.3 order cancellation. Check cover stages, geometry, work authority and no duplicate charges/refunds. | Pending |
@@ -24,7 +24,7 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Their broader urban, domain and 
 ## Tasks
 
 - [x] 1. Reuse the existing coordinated cover/movement and actor-ownership implementation from `0f5eb25`.
-  - [ ] Complete the [section 1 review](18-2-1-1-coordinated-cover-and-movement.md), record current evidence and publish `codex/m1-section-1`.
+  - [x] Complete the [section 1 review](18-2-1-1-coordinated-cover-and-movement.md), record current evidence and publish `codex/m1-section-1`.
 - [ ] 2. Recover, verify and publish finite fragmentation grenades and optical smoke.
 - [ ] 3. Recover, verify and publish existing-reserve backup and assignment-safe return.
 - [ ] 4. Recover, verify and publish hasty positions, engineer upgrades and work-order integration.
@@ -37,7 +37,7 @@ This table specifies the complete M1 target. Only cooperation and shared actor o
 
 | Area | M1 behavior |
 |---|---|
-| Cooperation | A coverer must be alive, available, loaded, settled, permitted to fire and able to reach the observed threat with its real weapon ray. It holds its actual firing position and cannot voluntarily top off while a teammate depends on it. Reload, casualty, suppression, smoke or forced hull avoidance invalidate the role. An exposed mover finishes its validated short shelter move if support is lost. An observed threat the section cannot engage can justify a validated local screened shelter move, explicitly labeled unsupported; it cannot justify an exposed flank or override Move/Hold/Retreat. |
+| Cooperation | A coverer must be alive, available, loaded, settled, permitted to fire and able to reach the observed threat with its real weapon ray. Actual combat uses that threat and its appropriate weapon ahead of incidental targets. A conflicting explicit attack or urgent threat preempts support and releases its claim. The coverer holds its actual firing position and cannot voluntarily top off while a teammate depends on it. Reload, casualty, suppression, smoke or forced hull avoidance invalidate the role. An exposed mover finishes its validated short shelter move if support is lost. An observed threat the section cannot engage can justify a validated local screened shelter move, explicitly labeled unsupported; it cannot justify an exposed flank or override Move/Hold/Retreat. |
 | Inventory | New capable infantry start with one frag and one smoke each. A selected group requests one throw, choosing one eligible member. Reservation does not spend stock; release spends once. Lost holders do not donate or regenerate equipment. There is no grenade refill service in M1. |
 | Manual throws | G/V selects payload; the next valid point chooses an available member with a safe arc, starts preparation and replaces the selected section's current command with a hold at its position. A blocked nearest member does not hide another member's valid throw. New commands cancel uncommitted work. Hold fire permits only the explicitly requested throw. Released objects survive retasking, casualty and cancellation. |
 | Defensive frag | AUTO FRAG is off by default. A settled, free-fire section may use carried frag stock against at least two currently observed, exposed infantry when a useful covering partner is available. Reviews are bounded and releases separated; opportunity, current partner, command, arc and allied exposure are rechecked before release. Smoke remains manual. |
@@ -66,8 +66,8 @@ Current checkpoint results are recorded below as the sections pass. Previous loc
 
 ## Checkpoint evidence
 
-- **Historical M1.1 checkpoint `0f5eb25`:** the recorded run reports 39 coordination checks plus readiness/action-integration passes, with earlier cover behavior/candidate passes. The inherited [report](../evidence/m1-01-checks.json) includes source hashes for later modules absent from that checkpoint, so it is retained as history, not evidence for this branch's review.
-- **Current section 1 review:** pending; record the fresh results in the [section plan](18-2-1-1-coordinated-cover-and-movement.md) before marking the review complete.
+- **Current M1.1 checkpoint:** 17/17 affected suites pass, including 79 coordination checks with zero failures. The [fresh report](../evidence/m1-01-checks.json) records the exact selection, 83 current source hashes and the known ATGM suite shutdown warning; it replaces the inherited snapshot.
+- **Regression sensitivity:** the identical 79-check coordination test against unchanged `0f5eb25` produces 10 expected failures without script errors. Current tests exercise actual covering fire, physical shelter arrival, role cleanup and explicit/urgent target preemption. See the [section plan](18-2-1-1-coordinated-cover-and-movement.md) for the correction and verification scope. No new native rendering or hardware-performance result is claimed.
 
 ## Bounds and remaining work
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-02 — Section 1 checkpoint and actual covering fire
+
+- Publish `codex/m1-section-1` from the existing M1.1 checkpoint `0f5eb25`, with a six-section M1 handoff and a detailed [section 1 plan](plans/18-2-1-1-coordinated-cover-and-movement.md). This branch stops after coordinated cover/movement; sections 2–6 remain pending here.
+- Make the firing executor honor a validated covering partner's weapon and protected threat. A loaded rifle no longer becomes an empty-launcher reload for incidental armor, and ordinary retained targets no longer divert promised covering fire.
+- Preserve explicit target and urgent-threat precedence. Diverted support releases both reciprocal roles and its action channel while the mover can finish its shelter route. A specialist's viable explicit infantry attack selects the rifle before incidental armored contacts.
+- Expand the coordination suite from 39 to **79 checks**, including real shots/ammunition, actual routed arrival, support release, player overrides and explicit-target fallback. The identical new test produces **10 failures on unchanged `0f5eb25`** and **zero on this correction**.
+- Verification: **17/17 selected integration suites pass**, including cover/contact, regrouping, targeting, readiness, action integration, garrisons and ATGM/world damage. Replace the inherited mismatched hash snapshot with [current evidence](evidence/m1-01-checks.json), including 83 source hashes and the negative control. The existing ATGM shutdown warning remains recorded; no new native-render or hardware-performance result is claimed.
+
 ## 2026-11-02 — M1.1 coordinated cover and movement
 
 - Recover the first buildable section of the unpublished M1 candidate onto `codex/m1-staged-implementation`, based on the existing GitHub plan and completed M0. Record all six implementation sections before continuing.

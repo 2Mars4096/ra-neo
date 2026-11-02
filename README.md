@@ -103,7 +103,7 @@ The command deck shows supply, reinforcements, selected-unit health/state, and m
 
 ### M1: coordinated infantry defense
 
-The M1 work is delivered in [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **M1.1 is available:** members taking a short cover route reserve a teammate who can actually observe and fire on the threat. The covering member holds its position and retains loaded ammunition; another member can take over after a reload or casualty. Explicit movement/hold orders remain authoritative. Grenades, smoke, backup, digging, their controls and campaign inventory follow in the remaining sections.
+The M1 work is divided into [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **Section 1 is available on `codex/m1-section-1`:** members taking a short cover route reserve a teammate who can observe and fire on the threat. The covering member holds its position, uses the assigned threat's appropriate weapon and retains loaded ammunition; another member can take over after a reload or casualty. Explicit orders remain authoritative, and switching to an urgent threat releases the previous covering claim. Grenades, smoke, backup, digging, their controls and campaign inventory follow in the remaining sections.
 
 ### M0: readiness and reliable orders
 

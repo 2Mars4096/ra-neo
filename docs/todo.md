@@ -2,14 +2,14 @@
 
 ## Tactical expansion — M1 section 1, 2026-11-02
 
-M0 is complete at `5850504`. [M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) is split into six buildable sections: coordinated movement, grenades/smoke, reserve backup, field positions, controls, and persistence/integration. The current delivery stops after [section 1](plans/18-2-1-1-coordinated-cover-and-movement.md) on `codex/m1-section-1`, reusing checkpoint `0f5eb25` with a focused integration review. M1.2–M1.6 remain pending on this branch. Broader domain actions and the existing CPU hitch follow-up remain open.
+M0 is complete at `5850504`. [M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) is split into six buildable sections: coordinated movement, grenades/smoke, reserve backup, field positions, controls, and persistence/integration. The current delivery completes [section 1](plans/18-2-1-1-coordinated-cover-and-movement.md) on `codex/m1-section-1`, reusing checkpoint `0f5eb25` with corrections to actual covering fire and explicit/urgent target preemption. Fresh verification passes 17/17 affected suites and 79 coordination checks. M1.2–M1.6 remain pending on this branch. Broader domain actions and the existing CPU hitch follow-up remain open.
 
 - [ ] [18: Tactical actions and capable individual units](plans/18-unit-tactical-autonomy.md) — master milestones, shared contracts and acceptance gates.
   - [ ] [18-1: Action framework and readiness](plans/18-1-action-framework-and-readiness.md).
     - [x] [18-1-1: M0 tactical foundation](plans/18-1-1-m0-foundation.md) — implemented; 58/58 integration suites, native review and current-build CPU evidence recorded.
   - [ ] [18-2: Infantry fire and movement](plans/18-2-infantry-fire-and-movement.md).
     - [ ] [18-2-1: M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) — six-section plan; M1.2–M1.6 pending on this branch.
-      - [ ] [18-2-1-1: Coordinated cover and movement](plans/18-2-1-1-coordinated-cover-and-movement.md) — implementation reused; current review and verification in progress.
+      - [x] [18-2-1-1: Coordinated cover and movement](plans/18-2-1-1-coordinated-cover-and-movement.md) — reviewed combat integration, physical shelter/role cleanup and player-order authority; 17/17 affected suites pass.
   - [ ] [18-3: Grenades and urban actions](plans/18-3-infantry-grenades-and-urban-actions.md).
   - [ ] [18-4: Coordination and support requests](plans/18-4-coordination-and-support-requests.md).
   - [ ] [18-5: Engineering and field fortifications](plans/18-5-engineering-and-field-fortifications.md).

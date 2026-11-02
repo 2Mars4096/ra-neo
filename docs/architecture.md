@@ -6,7 +6,9 @@
 
 ## M1 staged implementation
 
-M1 is recovered in six buildable checkpoints on `codex/m1-staged-implementation`; the [active plan](plans/18-2-1-m1-infantry-defense.md) records which are verified. `infantry_coordination.gd` validates actual observation, permission, weapon readiness and fire lanes before reserving reciprocal covering roles. Coverers retain their firing position and cannot voluntarily top off while supporting a teammate. A lost partner can be replaced; narrow survival moves remain explicitly unsupported. Shared actor task markers exclude conflicting movement, combat, reload and medical work, and replacement commands clear those roles.
+M1 is divided into six buildable checkpoints; the current `codex/m1-section-1` branch stops after [coordinated cover and movement](plans/18-2-1-1-coordinated-cover-and-movement.md). `infantry_coordination.gd` validates actual observation, permission, weapon readiness and fire lanes before reserving reciprocal covering roles. Combat consumes that validated role to select the supporting weapon and threat before ordinary target retention. Explicit targets and higher-ranked urgent threats retain precedence; invalid or diverted support releases both roles and its action channel while preserving the mover's validated shelter route. A specialist's viable explicit infantry target selects its rifle before incidental armor can trigger launcher preparation.
+
+Coverers retain their firing position and cannot voluntarily top off while supporting a teammate. A lost partner can be replaced; narrow survival moves remain explicitly unsupported. Shared actor task markers exclude conflicting movement, combat, reload and medical work, and replacement commands clear those roles. Role reviews remain bounded by the section roster, with at most three weapon probes per candidate for explicit, urgent and support targets; this is a code bound, not a new performance measurement.
 
 ## Implemented stack
 
