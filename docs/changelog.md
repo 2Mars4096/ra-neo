@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-02 — M1.4 hasty positions and engineer reinforcement
+
+- Recover one-member local digging, free shallow cover, retained interrupted progress, staged geometry and paid engineer reinforcement of the same site. Ordinary field-work resume/cancel, destruction and refund adapters preserve one owner and one charge.
+- Dig/upgrade previews ignore unobserved hostile bodies and works; accepted placement and worker movement retain full physical collision. Moving workers immediately relocate their actor-index entry, preserving same-tick queries.
+- Five affected suites pass, including 151 position checks, geometry, existing engineering/resume and backup. [Evidence](evidence/m1-04-checks.json).
+
 ## 2026-11-02 — M1.3 nearby reserve backup
 
 - Recover opt-in existing infantry reserves, one-provider request leases, physical support placement, four seconds of useful service and return to the unchanged assignment. No spending or spawning occurs.

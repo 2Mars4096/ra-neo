@@ -8,7 +8,7 @@ M0 is complete at `5850504`. [M1 infantry defense](plans/18-2-1-m1-infantry-defe
   - [ ] [18-1: Action framework and readiness](plans/18-1-action-framework-and-readiness.md).
     - [x] [18-1-1: M0 tactical foundation](plans/18-1-1-m0-foundation.md) — implemented; 58/58 integration suites, native review and current-build CPU evidence recorded.
   - [ ] [18-2: Infantry fire and movement](plans/18-2-infantry-fire-and-movement.md).
-    - [ ] [18-2-1: M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) — M1.1–M1.3 complete and verified; M1.4–M1.6 pending.
+    - [ ] [18-2-1: M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) — M1.1–M1.4 complete and verified; controls and persistence/integration pending.
   - [ ] [18-3: Grenades and urban actions](plans/18-3-infantry-grenades-and-urban-actions.md).
   - [ ] [18-4: Coordination and support requests](plans/18-4-coordination-and-support-requests.md).
   - [ ] [18-5: Engineering and field fortifications](plans/18-5-engineering-and-field-fortifications.md).

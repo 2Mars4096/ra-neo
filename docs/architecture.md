@@ -12,6 +12,8 @@ M1 is recovered in six buildable checkpoints on `codex/m1-staged-implementation`
 
 `support_requests.gd` accepts explicitly delegated existing infantry reserves. One lease owns each responder, copies its assignment and observed contact, bounds placement/service/return, and preserves exclusivity through radio loss. Eligibility and service use actual usable rifle/launcher stock and a legitimate optical lane. Accepted replacement orders revoke stale support; rejected/provisional orders do not. Ordinary engineering work retains ownership until completion before a newly delegated reserve becomes available. No new units or spending are authorized by backup requests.
 
+`field_positions.gd` owns one worker per local job. Survey sites give no protection, completed hasty sites provide ordinary cover, and a paid engineer upgrade creates dug-in protection on the same footprint. Interrupted work retains authorized materials/progress; existing field-work adapters handle resume, cancellation, damage and single refunds. Preview-only occupancy filters ignore unknown hostile bodies/works; commitment and execution remain fully physical. Each worker move updates its actor-index cell immediately.
+
 ## Implemented stack
 
 - Godot **4.5.1-stable**, GDScript, GL Compatibility renderer, 2× MSAA.

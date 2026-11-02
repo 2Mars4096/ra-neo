@@ -1,14 +1,14 @@
 # 18-5: Engineering and field fortifications
 
 **Parent:** [18-unit-tactical-autonomy](18-unit-tactical-autonomy.md)
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Let infantry prepare limited local protection and engineers construct, maintain and alter useful battlefield positions through delegated, physical work.
 
 ## Baseline and scope
 
 [Field operations](../../scripts/field_ops.gd) already provides paid construction, lines/queues, interruption/resume, refunds and barrier/wreck clearing. [Definitions](../../resources/field_units.json) include trenches, sandbags, berms, wire, barriers, nets and support posts. `sync_obstacles` publishes cover/movement/concealment effects; regional construction validates elevation.
 
-Ordinary infantry digging, controlled wall passages, minefields and bridges need new contracts. Existing trenches are authored zones. This plan extends the current construction system.
+[M1](18-2-1-m1-infantry-defense.md) implements ordinary infantry hasty positions and paid engineer reinforcement of the same site through `field_positions.gd` and existing field-work adapters. Trenches remain authored zones. Controlled wall passages, minefields, bridges and general engineer request dispatch remain future scope.
 
 ## Action catalogue
 
@@ -53,7 +53,8 @@ Regional saves preserve forces/outcomes, not tactical works. New inventories use
 ## Tasks
 
 - [ ] 1. Integrate the [18-1 action contract](18-1-action-framework-and-readiness.md), preserving payment, refund, clearing and progress invariants.
-- [ ] 2. Deliver ENG-01 and staged ENG-02 on eligible open ground, using shared work stages and one selected defense intent.
+  - [x] M1 actor-owned digging/upgrades, existing resume/cancel/refund adapters and stage-appropriate geometry; broader clearing/request adapters remain planned.
+- [x] 2. Deliver ENG-01 and staged ENG-02 on eligible open ground, using shared work stages and one selected defense intent.
 - [ ] 3. Connect useful placement and passage reservations for ENG-04 through ENG-07; share safe work/cover roles with [18-2 infantry](18-2-infantry-fire-and-movement.md).
 - [ ] 4. Integrate ENG-11, ENG-12 and ENG-19 into the request lifecycle; cover builder loss, replacement, interrupted access and competing jobs.
 - [ ] 5. Add connected trenches, repairs and building improvements after geometry/accounting gates pass.
@@ -78,4 +79,4 @@ Regional saves preserve forces/outcomes, not tactical works. New inventories use
 
 ## Notes
 
-Touchpoints: `FieldOps`, `Terrain`, `StructureDamage`, campaign inventories. Placeholder work poses and stage meshes require documented collision envelopes. [18-10](18-10-logistics-medical-and-recovery.md) owns medical behavior. This is unimplemented planning.
+Touchpoints: `FieldOps`, `Terrain`, `StructureDamage`, campaign inventories. M1 uses the existing 7×2 trench footprint, distinct stage meshes and a placeholder work pose without excavating terrain. [18-10](18-10-logistics-medical-and-recovery.md) owns medical behavior. Broader engineering actions remain planned.

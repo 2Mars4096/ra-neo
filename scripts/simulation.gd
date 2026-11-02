@@ -17,6 +17,7 @@ const Navigation = preload("res://scripts/tactical_navigation.gd")
 const Coordination = preload("res://scripts/infantry_coordination.gd")
 const Throwables = preload("res://scripts/throwables.gd")
 const SupportRequests = preload("res://scripts/support_requests.gd")
+const FieldPositions = preload("res://scripts/field_positions.gd")
 var throwables:Dictionary={}
 var support_requests:Dictionary={}
 var actions = Actions.new()
@@ -103,6 +104,7 @@ func _init(populate: bool = true, preset:int=-1) -> void:
 	terrain=Terrain.new(choice,scenario)
 	Throwables.setup(self)
 	SupportRequests.setup(self)
+	FieldPositions.setup(self)
 	# One objective per authored sector/pole pair; legacy maps author two, the harbor three.
 	objectives.clear()
 	for i in mini(scenario.get("sectors",[]).size(),terrain.poles.size()):
@@ -175,6 +177,12 @@ func request_backup(ids:Array)->int:
 
 func set_reserve(ids:Array,enabled:bool)->int:
 	return SupportRequests.set_reserve(self,ids,enabled)
+
+func issue_dig(ids:Array,point:Vector2)->int:
+	return FieldPositions.issue_dig(self,ids,point)
+
+func upgrade_position(ids:Array,site_id:int)->int:
+	return FieldPositions.issue_upgrade(self,ids,site_id)
 
 func set_fire_policy(ids:Array,policy:String)->int:
 	if result!="" or policy not in ["free","hold"]:return 0
@@ -1808,6 +1816,7 @@ func tick(dt: float) -> void:
 	plan_queued_routes(resolve_slots())
 	if profiling:lap=_lap("route_queue",lap)
 	Throwables.tick(self,dt)
+	FieldPositions.tick(self,dt)
 	if profiling:lap=_lap("infantry_actions",lap)
 	recruit_clock = maxf(0, recruit_clock-dt)
 	sensor_clock -= dt
