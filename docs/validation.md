@@ -1,5 +1,28 @@
 # Validation evidence
 
+## M1 section 2 — Grenades and smoke
+
+Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, for `codex/m1-section-2` based on completed section 1 (`d10682e`). The final affected gate passes **22/22 suites** with no assertion or script errors. [Current functional evidence](evidence/m1-02-checks.json) records the exact command, outputs, distinct negative-control baselines and hashes for **92 source/test/configuration files**. Section 1's report remains its historical record.
+
+| Focused M1 suite | Checks | Failures |
+|---|---:|---:|
+| Coordinated cover and movement | 79 | 0 |
+| Throwable preparation, stock, collision and blast | 145 | 0 |
+| Smoke, observation and covering-fire integration | 56 | 0 |
+| **Total** | **280** | **0** |
+
+The throwable suite covers alternate throwers, actor/item exclusivity, cancellation without spending, single release, current ally checks, opt-in defensive support, swept geometry, physical exposure and projectile survival after retasking/death. The same final test had **two failures before the stale-cleanup ownership guard** in the integrated working tree and zero after it. This control did not use a full historical checkout.
+
+The same final optics test had **11 failures on isolated historical section 2 (`26480fb`)** and zero here. It checks living-body sight despite a screened anchor, a clear anchor with screened members, dead/out-of-range/wall-blocked bodies, jammed local knowledge, real covering rounds/events, release of false cover while another observer keeps the contact known, and indexed/exhaustive parity for compact and widely dispersed sections. Existing smoke checks also cover elevated rays, both factions, cache invalidation, contact memory and released missile behavior.
+
+The broader gate covers readiness, action/target ownership, cover/contact, regrouping, spatial targeting, garrisons, elevation, enemy knowledge, ATGM/world damage, animation and scene air clearance. The unchanged ATGM suite retains its previously recorded `ObjectDB instances leaked at exit` warning. The runner reports 173 seconds; tests overlapped native software rendering, so these timings are not a performance comparison.
+
+### Native presentation
+
+`tests/m1_section2_native_review.gd` drives the simulation API in the actual Harbor scene with ordinary fog, isolated user settings and campaign saving disabled. Godot's OpenGL compatibility renderer on **llvmpipe**, at **1280 × 720**, produced **three captures and zero review failures**. All images were visually inspected: [preparation](images/m1-section2-01-preparation.png), [airborne frag](images/m1-section2-02-flight.png), and [deployed smoke](images/m1-section2-03-smoke.png). [Native metadata](evidence/m1-02-native-review.json) records state, source hashes and image hashes.
+
+Preparation shows the selected section's throwing state; release presents one projectile and decreases frag stock once. The deployed cloud presents seven placeholder puffs, decreases smoke stock once and blocks the tested ground optical ray. This verifies scene integration of section 2's API-level mechanics. Contextual input remains section 5 and campaign inventory remains section 6. Hardware frame rate, human command clarity and balance remain unmeasured for this checkpoint.
+
 ## M1 section 1 — 2026-11-02
 
 Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, for `codex/m1-section-1`. The focused integration gate passes **17/17 suites**, including **79 coordination checks with zero failures**. The [current report](evidence/m1-01-checks.json) records the exact suite selection, outputs and hashes for 83 source/test/configuration files. It replaces an inherited report that included hashes for later M1 modules absent from this branch.

@@ -1,5 +1,14 @@
 # Changelog
 
+## M1 section 2 — Grenades and smoke checkpoint
+
+- Continue `codex/m1-section-2` from completed section 1 (`d10682e`), recovering the section 2 candidate (`26480fb`) and preserving corrected covering-fire and explicit/urgent target priority. Complete the [section 2 plan](plans/18-2-1-2-grenades-and-smoke.md); sections 3–6 remain pending.
+- Add finite member-owned frag/smoke stock, shared command/preview validation, one thrower per group request, atomic actor/item claims and interruptible preparation. Release consumes exactly once; an already released object survives later orders or thrower loss. Defensive frag is opt-in and rechecks current opportunity, cover and allies.
+- Add deterministic swept flight, actual-impact blast exposure and finite ground smoke shared by both factions' optical acquisition, firing and fog. Add bounded payload/smoke meshes, a placeholder throw pose and visible grenade bursts.
+- Correct stale automatic cleanup overwriting a new covering assignment and smoke acquisition disagreeing with living-body firing rays. Preserve indexed/exhaustive parity for both compact and wide sections. Identical regression tests reproduce two cleanup failures before the guard and 11 optics failures on the historical candidate; both pass now.
+- Verification: **22/22 selected suites pass**, including **280 M1 checks** (79 coordination, 145 throwable, 56 optics). [Functional evidence](evidence/m1-02-checks.json) includes outputs, negative controls and 92 source/test/configuration hashes. Three inspected [native Harbor captures](evidence/m1-02-native-review.json) show preparation, airborne frag and deployed smoke with zero review failures. The known ATGM shutdown warning remains; no hardware frame-rate or human-balance acceptance is implied.
+- Throws currently use the simulation API; contextual buttons/hotkeys/previews remain section 5 and campaign inventory remains section 6. No refill service, room-entry mechanics or later-section modules are imported.
+
 ## 2026-11-02 — Section 1 checkpoint and actual covering fire
 
 - Publish `codex/m1-section-1` from the existing M1.1 checkpoint `0f5eb25`, with a six-section M1 handoff and a detailed [section 1 plan](plans/18-2-1-1-coordinated-cover-and-movement.md). This branch stops after coordinated cover/movement; sections 2–6 remain pending here.

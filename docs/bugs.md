@@ -1,5 +1,10 @@
 # Bugs and failed approaches
 
+## M1 section 2 integration corrections
+
+- A canceled automatic throw remained in the preparation queue long enough for its cleanup to erase a newly accepted covering role and complete the replacement support action. `_finish_preparation` now releases automatic cooperation only when that job still owns the member's actor marker. The identical 145-check throwable suite reports two failures before this guard and none afterward in the integrated working tree. Cancellation still preserves stock and released projectiles retain world ownership.
+- Smoke acquisition used the squad's empty formation center while firing used individual bodies. A screened center hid exposed living soldiers; a clear center could reveal an entirely screened section. Acquisition and jammed local knowledge now validate each living body with the same source's range, wall, elevation and smoke checks. Indexed searches include narrow member offsets and wide dispersed sections. The identical 56-check optics suite produces 11 failures on historical section 2 (`26480fb`) and none here, including actual covering shots, dead/covered/out-of-range bodies, lost local cover with shared spotting, and indexed/exhaustive parity. [Current evidence](evidence/m1-02-checks.json) records both controls and their distinct baselines.
+
 ## M1 staged review — 2026-11-02
 
 - A soldier could be credited as rifle cover while the combat executor retained another infantry target or selected an empty launcher for incidental armor. The focused reproduction passed role eligibility, then began a three-second launcher reload with the cover claim still active. Combat now honors the validated support weapon/threat, releases diverted claims, and preserves explicit orders and urgent threats. The same review corrected explicit infantry attacks being displaced by incidental armor during specialist weapon selection. Regression checks exercise actual rounds and shot events, not only role labels.

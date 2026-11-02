@@ -6,7 +6,7 @@
 
 ## Baseline and ownership
 
-M0 adds `tactical_context.gd` and sensor adapters: copied last-observed positions with source/time, deterministic confidence/30-second expiry, bounded local/team stores and radio-aware sharing. Memory never authorizes firing or follows hidden motion/death. This is the minimal contract in [18-1-1](18-1-1-m0-foundation.md); uncertainty areas, new sensor types, markers, investigation and smoke remain future work. The baseline below is historical.
+M0 adds `tactical_context.gd` and sensor adapters: copied last-observed positions with source/time, deterministic confidence/30-second expiry, bounded local/team stores and radio-aware sharing. Memory never authorizes firing or follows hidden motion/death. This is the minimal contract in [18-1-1](18-1-1-m0-foundation.md). [M1 section 2](18-2-1-2-grenades-and-smoke.md) implements authoritative optical smoke, including finite-height rays, visibility-cache invalidation and exposed living member bodies for acquisition/jammed observation, with indexed/exhaustive parity for wide sections. Its 56 optics checks pass; the identical test produces eleven failures on the historical candidate. Uncertainty areas, new sensor types, markers and investigation remain future work. The baseline below is historical.
 
 At `f5916e8`, [simulation.gd](../../scripts/simulation.gd) refreshes visibility every 0.3 seconds and uses local observation under jamming. Existing orders survive link loss; new remote orders and sensor uploads are blocked. Explicit pursuit retains a last visible destination. [field_ops.gd](../../scripts/field_ops.gd) remembers observed enemy sites. General mobile-contact memory and gameplay smoke are absent. [terrain.gd](../../scripts/terrain.gd) and [elevation.gd](../../scripts/elevation.gd) share physical sight and ridge rules.
 
@@ -51,6 +51,7 @@ Radio policy retains the current usability abstraction of friendly position trac
 - [ ] 2. Adapt current visibility, explicit pursuit and enemy-site memory through those contracts; preserve legacy scenario behaviour behind explicit defaults.
 - [ ] 3. Deliver contact ageing, sector watching, local warnings and support-area marking using existing sensing geometry.
 - [ ] 4. Integrate authoritative optical smoke with the first grenade slice; unify acquisition, known-contact queries, fog and selected-unit explanations.
+  - [x] M1.2 cylinder/ray, acquisition/fire/known-contact and fog-cache integration, including exposed-body and wide-section query parity; 56 optics checks pass. Contextual explanations remain part of M1.5.
 - [ ] 5. Add hold-fire and uncertain sound investigation with readable intent and information limits.
 - [ ] 6. Prototype relay/lost-link policies; evaluate optional mobile jamming, emissions and decoys separately.
 - [ ] 7. Pass the information-invariant and load gates in [18-12](18-12-performance-and-validation.md).
@@ -71,4 +72,4 @@ Radio policy retains the current usability abstraction of friendly position trac
 
 ## Notes
 
-Implementation touchpoints: `simulation.gd`, `terrain.gd`, `elevation.gd`, `field_ops.gd`, `tactical_director.gd`, `battle.gd`, `hud.gd` and effect presentation. Remaining module boundaries are proposals beyond the implemented M0 context adapter. This plan does not itself enable the later actions.
+Implementation touchpoints: `simulation.gd`, `throwables.gd`, `terrain.gd`, `elevation.gd`, `field_ops.gd`, `tactical_director.gd`, `battle.gd`, `hud.gd` and effect presentation. M1.2 uses owner-independent optical cylinders and preserves the existing guidance rules for already released fire-and-forget missiles. Verification is recorded in its section plan; remaining sensor and information-action boundaries are proposals beyond M0 and this smoke subset.

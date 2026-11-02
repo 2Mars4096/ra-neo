@@ -1,12 +1,12 @@
 # 18-3: Infantry grenades and urban actions
 
 **Parent:** [18-unit-tactical-autonomy](18-unit-tactical-autonomy.md)
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Add purposeful throwable and building interactions with finite resources, shared physical effects and understandable player authority.
 
 ## Baseline and scope
 
-The [garrison system](../../scripts/garrison.gd) provides doorway entry and windows; [cover](../../scripts/cover_behavior.gd) provides corner fire; [structure damage](../../scripts/structure_damage.gd) provides breach states, collapse and blasts. `BREACHED` does not establish a walkable opening. The [simulation](../../scripts/simulation.gd) has delayed missiles, but no general throwable action or authoritative smoke screen.
+The [garrison system](../../scripts/garrison.gd) provides doorway entry and windows; [cover](../../scripts/cover_behavior.gd) provides corner fire; [structure damage](../../scripts/structure_damage.gd) provides breach states, collapse and blasts. `BREACHED` does not establish a walkable opening. The planning baseline had delayed missiles but no general throwable action or authoritative smoke screen. [M1 section 2](18-2-1-2-grenades-and-smoke.md) implements `throwables.gd`: finite frag/smoke stock, interruptible preparation, swept flight, physical blast and smoke volumes. Current verification passes 22 selected suites, including 145 throwable checks, with three inspected native captures. Wider urban behavior remains open.
 
 This plan owns throwable delivery and building interactions. [18-9](18-9-information-and-electronic-warfare.md) owns smoke sensing; [18-5](18-5-engineering-and-field-fortifications.md) owns physical openings. Core uses authored entrances and abstract occupancy. Detailed rooms and independent upper-floor navigation remain optional.
 
@@ -48,8 +48,11 @@ Evacuation distinguishes delegated defense from [explicit hard hold](18-11-comma
 ## Tasks
 
 - [ ] 1. Define payload data, inventory reservations and authoritative throwable state through [18-1](18-1-action-framework-and-readiness.md) and [18-10](18-10-logistics-medical-and-recovery.md); preserve regional save validation for new inventory fields.
+  - [x] M1.2 tactical stock, actor/item claims and one-time release spending; stale canceled jobs cannot release a newer action's roles. Regional inventory persistence/migration remains M1.6.
 - [ ] 2. Build GRN-01 in one exterior fixture, including canceled preparation, collision, valid blast exposure, enemy parity and a synchronized placeholder arc.
+  - [x] M1.2 exterior frag behavior, group request selection and bounded opt-in defensive use; 145 throwable checks pass, with preparation/airborne presentation inspected.
 - [ ] 3. Add GRN-02 only with the 18-9 smoke query contract; connect it to a concrete covered movement and backup scenario.
+  - [x] M1.2 smoke/covering/visibility integration and inspected placeholder smoke; backup interaction follows with M1.3.
 - [ ] 4. Extend URB-01, URB-02 and URB-06, including concurrent entry/exit requests and a damaged-building response.
 - [ ] 5. Add GRN-03 and contested-entry/breach coordination after status effects and authored portals pass their own checks.
 - [ ] 6. Keep distraction, illumination, search and elevated-post expansions gated on the sensing and geometry systems they need.
@@ -72,4 +75,4 @@ Evacuation distinguishes delegated defense from [explicit hard hold](18-11-comma
 
 ## Notes
 
-Touchpoints: `Simulation`, `Garrison`, `StructureDamage`, `Terrain`, inventories and pooled effects. Use placeholder payload meshes, throw poses, landing cues and smoke volumes independent of authoritative state. No gameplay code or native validation accompanies this plan.
+Touchpoints: `Simulation`, `Throwables`, `Garrison`, `StructureDamage`, `Terrain`, inventories and pooled effects. M1.2 supplies placeholder payload meshes, a throw pose and smoke volumes independent of authoritative state. Its native review drives the simulation API; contextual controls follow in M1.5. Current implementation, regression sensitivity and native evidence are tracked in the section plan. The wider urban catalogue, human playtesting and performance acceptance remain open.

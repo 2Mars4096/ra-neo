@@ -1,0 +1,77 @@
+{
+  "adapter": "llvmpipe (LLVM 20.1.2, 256 bits)",
+  "captures": [
+    {
+      "clouds": 0,
+      "frag": 3,
+      "name": "01-preparation",
+      "path": "docs/images/m1-section2-01-preparation.png",
+      "preparations": 1,
+      "projectiles": 0,
+      "smoke": 3,
+      "time": 0.3,
+      "visible_projectiles": 0,
+      "visible_puffs": 0,
+      "generated_path": "res://artifacts/m1-section2-native/01-preparation.png",
+      "sha256": "48f59aa59b30fa5caa57b2c6d3669ed0dd8f0860b161cc1f46d8359f6990f2d6"
+    },
+    {
+      "clouds": 0,
+      "frag": 2,
+      "name": "02-flight",
+      "path": "docs/images/m1-section2-02-flight.png",
+      "preparations": 0,
+      "projectiles": 1,
+      "smoke": 3,
+      "time": 1.43333333333333,
+      "visible_projectiles": 1,
+      "visible_puffs": 0,
+      "generated_path": "res://artifacts/m1-section2-native/02-flight.png",
+      "sha256": "63ee5701ff1ecaa1fafd1e65b2afc88ac33a830c710e9cba8100eefb1f57a9d1"
+    },
+    {
+      "clouds": 1,
+      "frag": 2,
+      "name": "03-smoke",
+      "path": "docs/images/m1-section2-03-smoke.png",
+      "preparations": 0,
+      "projectiles": 0,
+      "smoke": 2,
+      "time": 4.39999999999999,
+      "visible_projectiles": 0,
+      "visible_puffs": 7,
+      "generated_path": "res://artifacts/m1-section2-native/03-smoke.png",
+      "sha256": "853bb2ea3ca1e6bfd746b495ccb7413e28a93a70ba2cc117ba4729032ca38291"
+    }
+  ],
+  "engine": "4.5.1-stable (official)",
+  "failures": 0,
+  "note": "Staged API-level section 2 mechanics in the actual Harbor scene with ordinary fog. Campaign persistence disabled. No contextual input, performance or human-playtest claim.",
+  "render_pixels": "(1280.0, 720.0)",
+  "source_sha256": {
+    "scripts/battle.gd": "1ec63c1e7e5635fb0d849d01db103842f0d55cf75fc2b2749977a93b726f476d",
+    "scripts/infantry_coordination.gd": "1008c19c48ad6fde76b063214b9788db662eaaae763e1f65a244d9708f1476d3",
+    "scripts/simulation.gd": "093de1a9f96917093fc8bc516a3a018e213439e024cb3ff85aedd787debf3823",
+    "scripts/tactical_effects.gd": "033f3befe29d91518ace5677dee44f2cb480775f1f85c6c541cd33eff9bd3994",
+    "scripts/throwables.gd": "1d6299afea0751dbf55f900c2df97a9da2558b6dc49ae826b133449a2b55e373",
+    "scripts/unit_animation.gd": "f044154b43936061d2d8e433ec7bc652159713b990ece1f4382d640785acc7d2",
+    "tests/m1_section2_native_review.gd": "ce87c8bbbbb49e1c0355586dd92377d8f54d3fbd586a960eae51e25339c62fd2"
+  },
+  "command": "GODOT_BIN --path . --display-driver x11 --audio-driver Dummy --rendering-method gl_compatibility --script tests/m1_section2_native_review.gd -- --output=res://artifacts/m1-section2-native",
+  "environment": {
+    "platform": "Linux",
+    "renderer": "OpenGL compatibility",
+    "display": "Isolated Xvfb display",
+    "software_rendering": true,
+    "campaign_saves": "Disabled; isolated user-data directories"
+  },
+  "visual_review": {
+    "inspected_all_captures": true,
+    "observations": [
+      "Preparation state and raised weapon/throw pose appear in the normal selection view.",
+      "A single small airborne frag is visible; preparation is finished and inventory decreases once.",
+      "The deployed cloud renders seven translucent placeholder puffs; its authoritative ground optical ray is blocked."
+    ],
+    "limits": "Staged API commands in the real Harbor scene. This validates presentation integration, not section-5 contextual input, production art, hardware frame rate or human usability."
+  }
+}

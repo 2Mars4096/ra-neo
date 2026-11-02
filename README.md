@@ -103,13 +103,17 @@ The command deck shows supply, reinforcements, selected-unit health/state, and m
 
 ### M1: coordinated infantry defense
 
-The M1 work is divided into [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **Section 1 is available on `codex/m1-section-1`:** members taking a short cover route reserve a teammate who can observe and fire on the threat. The covering member holds its position, uses the assigned threat's appropriate weapon and retains loaded ammunition; another member can take over after a reload or casualty. Explicit orders remain authoritative, and switching to an urgent threat releases the previous covering claim. Grenades, smoke, backup, digging, their controls and campaign inventory follow in the remaining sections.
+The M1 work is divided into [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **Sections 1 and 2 are available on `codex/m1-section-2`.** Members taking a short cover route reserve a teammate who can observe and fire on the threat. The covering member holds its position, uses the assigned threat's appropriate weapon and retains loaded ammunition; another member can take over after a reload or casualty. Explicit orders remain authoritative, and switching to an urgent threat releases the previous covering claim.
+
+[Section 2](docs/plans/18-2-1-2-grenades-and-smoke.md) adds finite frag and smoke inventory, interruptible throw preparation, swept projectile flight and physical blast exposure. Cancellation preserves unspent stock; release spends one charge and the projectile continues independently. Smoke blocks optical observation and fire for both factions within its volume, while high rays can pass above it. Visibility follows exposed living soldiers, including when the squad's center is screened. The initial grenade meshes, throw pose and smoke puffs are placeholders.
+
+This checkpoint exposes throws through the simulation command/preview API and includes a reproducible [native scene review](docs/evidence/m1-02-native-review.json). Contextual buttons, hotkeys and aim previews arrive in section 5; throwable inventory carries across operations in section 6. Optional defensive frag behavior is off by default. Backup requests and infantry digging are the next two implementation sections.
 
 ### M0: readiness and reliable orders
 
 In autonomous tactical modes, stationary soldiers prepare empty weapons during quiet moments. A low rifle magazine can top off while another capable loaded member watches; movement, casualty aid and cover transit take precedence. The selection panel shows how many members are reloading and ready. Explicit targets take priority, ordinary targets stay stable, and AA can switch to a newly observed urgent air threat. Depleted sections assess losses against their originally assigned strength; healing still restores only survivors.
 
-Accepted replacement orders cancel obsolete preparation and plans. Queued commands retain their order, temporary movement preserves the parent task, and pending route work retries without being reported as impossible. **S remains Stop and hold position.** M0's separate fire-permission contract is internal; it adds no new control to learn. Grenades, smoke, backup requests and infantry digging are the next planned slice.
+Accepted replacement orders cancel obsolete preparation and plans. Queued commands retain their order, temporary movement preserves the parent task, and pending route work retries without being reported as impossible. **S remains Stop and hold position.** M0's separate fire-permission contract is internal; it adds no new control to learn. M1 builds on this foundation in the sections described above.
 
 Campaign checkpoints now preserve partial magazines, specialist equipment ownership and original section strength, with migration from the earlier save format. **Settings → Copy bug report** includes bounded action reasons, assignment versions and planning diagnostics. See [the M0 plan](docs/plans/18-1-1-m0-foundation.md) and [validation evidence](docs/validation.md) for tested behavior and limits.
 
@@ -134,6 +138,7 @@ This is a **tactical MVP**, not an AAA release. It contains eleven scenario conf
 ```sh
 python3 tools/check.py
 python3 tools/check.py --group m0
+python3 tools/check.py --group m1
 python3 tools/check.py --group tactical
 python3 tools/check.py --group regional
 python3 tools/build_region_maps.py --check
@@ -141,6 +146,7 @@ python3 -m unittest discover -s tools -p 'test_regional_*.py'
 ./tools/play.sh --audio-driver Dummy --script tests/render_review.gd
 ./tools/play.sh --audio-driver Dummy --script tests/model_review.gd
 ./tools/play.sh --audio-driver Dummy --script tests/m0_native_review.gd
+./tools/play.sh --audio-driver Dummy --script tests/m1_section2_native_review.gd
 ./tools/play.sh --audio-driver Dummy -- --benchmark
 ```
 
