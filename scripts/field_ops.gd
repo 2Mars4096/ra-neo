@@ -908,6 +908,8 @@ static func assign_builder(sim,site:Dictionary,engineer:Dictionary,plan:Dictiona
 		# Stop only the superseded construction assignment, not unrelated orders.
 		sim.stop([previous.id])
 		previous.erase("building_id")
+	# Explicit work replaces reserve duty; continuing paid work retains it.
+	if replace_intent:sim.SupportRequests.cancel_for_unit(sim,engineer)
 	sim.Director.cancel(engineer)
 	sim.cancel_preparation(engineer)
 	sim.terrain.planning.cancel_owner(int(engineer.id))
@@ -983,6 +985,7 @@ static func clear_site(sim,site_id:int,engineer_id:int)->bool:
 	if site.team!=0 and not sim.contact_known(engineer,site):return fail(sim,"Obstacle not currently spotted")
 	var plan:=work_plan(sim,site.kind,site.pos,engineer,true,site.id,site.get("rotated",false))
 	if plan.reason!="":return fail(sim,"No route to the obstacle")
+	sim.SupportRequests.cancel_for_unit(sim,engineer)
 	pause_builder(sim,engineer.id)
 	sim.Director.cancel(engineer)
 	sim.cancel_preparation(engineer)
@@ -1014,6 +1017,7 @@ static func clear_wreck(sim,hull_id:int,engineer_id:int)->bool:
 	var avoid:Array=[{"pos":wreck.pos,"radius":float(wreck.radius)*0.7*1.415+radius+0.27}]
 	var plan:=_work_route(sim,wreck.pos,float(wreck.radius)+radius+0.5,avoid,engineer,true,[engineer.id])
 	if plan.reason!="":return fail(sim,"No route to the wreck")
+	sim.SupportRequests.cancel_for_unit(sim,engineer)
 	pause_builder(sim,engineer.id)
 	sim.Director.cancel(engineer)
 	sim.cancel_preparation(engineer)

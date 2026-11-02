@@ -16,7 +16,9 @@ const Context = preload("res://scripts/tactical_context.gd")
 const Navigation = preload("res://scripts/tactical_navigation.gd")
 const Coordination = preload("res://scripts/infantry_coordination.gd")
 const Throwables = preload("res://scripts/throwables.gd")
+const SupportRequests = preload("res://scripts/support_requests.gd")
 var throwables:Dictionary={}
+var support_requests:Dictionary={}
 var actions = Actions.new()
 var context = Context.new()
 var action_tick := 0
@@ -100,6 +102,7 @@ func _init(populate: bool = true, preset:int=-1) -> void:
 			definitions[kind].altitude=float(scenario.air_altitudes[kind])
 	terrain=Terrain.new(choice,scenario)
 	Throwables.setup(self)
+	SupportRequests.setup(self)
 	# One objective per authored sector/pole pair; legacy maps author two, the harbor three.
 	objectives.clear()
 	for i in mini(scenario.get("sectors",[]).size(),terrain.poles.size()):
@@ -166,6 +169,12 @@ func engagement_allowed(u:Dictionary,target_id:int=-1)->bool:
 
 func issue_throw(ids:Array,payload:String,point:Vector2)->int:
 	return Throwables.issue_throw(self,ids,payload,point)
+
+func request_backup(ids:Array)->int:
+	return SupportRequests.request_backup(self,ids)
+
+func set_reserve(ids:Array,enabled:bool)->int:
+	return SupportRequests.set_reserve(self,ids,enabled)
 
 func set_fire_policy(ids:Array,policy:String)->int:
 	if result!="" or policy not in ["free","hold"]:return 0
@@ -244,11 +253,11 @@ func refresh_tactical_events()->void:
 
 # Only a real sighting writes memory. The recorded position is a value copy;
 # neither a future lookup nor loss of radio follows an unseen live target.
-func record_observation(observer:Dictionary,target:Dictionary,upload:bool=true)->void:
+func record_observation(observer:Dictionary,target:Dictionary,upload:bool=true,sight_point:Vector2=Vector2.INF)->void:
 	if not is_same(target,get_unit(int(target.id))):return
 	var previous:Dictionary=context.local_for(observer.id,target.id,time,observer.team)
 	var shared:Dictionary=context.team_contact(observer.team,target.id,time) if upload else {}
-	context.observe(observer.team,target.id,target.kind,target.pos,time,observer.id,upload)
+	context.observe(observer.team,target.id,target.kind,target.pos,time,observer.id,upload,sight_point)
 	if previous.is_empty() or float(previous.age)>0.65:wake_tactical(observer,"contact_observed")
 	if upload and (shared.is_empty() or float(shared.age)>0.65):
 		var reach:=0.0
@@ -466,6 +475,9 @@ func order_target(u:Dictionary,command:Dictionary,index:int,deferred:bool)->Dict
 # A unit whose target is still resolving (`waiting`) keeps building and its
 # cover until it resolves (resolve_slots), so a unit that gets none is as it was.
 func record_order(u:Dictionary,mode:String,target:Vector2,target_id:int,queued:bool,waiting:bool=false)->Dictionary:
+	# A Shift order with no ordinary head activates immediately. End temporary
+	# backup before activation changes the assignment; a genuine tail waits.
+	if not waiting and (not queued or u.orders.is_empty()):SupportRequests.cancel_for_unit(self,u)
 	if not queued:
 		if not waiting:u.erase("provisional_before")
 		if not waiting:u.erase(SectionRecovery.KEY)
@@ -578,11 +590,15 @@ func resolve_slots()->int:
 				continue
 			u.orders.remove_at(at)
 			if at==0:
-				u.path.clear()
-				u.erase("route_pending")
+				# A rejected queued head never owned the active backup route.
+				if not SupportRequests.owns_maneuver(u):
+					u.path.clear()
+					u.erase("route_pending")
 				start_next_order(u)
 			continue
 		if not entry.before.is_empty():
+			SupportRequests.cancel_for_unit(self,u)
+			u["reserve_enabled"]=false
 			FieldOps.pause_builder(self,u.id)
 			for actor in u.members:Infantry.Cover.clear(actor)
 			u.erase("provisional_before")
@@ -591,7 +607,9 @@ func resolve_slots()->int:
 			terrain.planning.cancel_owner(int(u.id))
 			cancel_preparation(u)
 			actions.accept_order(u,order,time,"player" if u.team==0 else "ai")
-		elif at==0:actions.activate_order(u,order,time,"player" if u.team==0 else "ai")
+		elif at==0:
+			SupportRequests.cancel_for_unit(self,u)
+			actions.activate_order(u,order,time,"player" if u.team==0 else "ai")
 		entry.command.slots.append({"pos":plan.pos,"radius":crowd_radius(u.kind),"layer":collision_layer(u)})
 		if at==0:
 			u.intent=order.duplicate()
@@ -789,6 +807,8 @@ func stop(ids: Array) -> int:
 	for id in ids:
 		var u := get_unit(int(id))
 		if alive(u) and not definitions[u.kind].get("structure",false) and not comms_blocked(u):
+			SupportRequests.cancel_for_unit(self,u)
+			u["reserve_enabled"]=false
 			FieldOps.pause_builder(self,u.id)
 			accepted+=1
 			u.orders.clear()
@@ -937,13 +957,16 @@ func update_visibility() -> void:
 			if land and time-float(target.get("last_shot",-100.0))>=3.0:radius*=ground[1]
 			if not posts.is_empty():
 				for post in posts:
-					if target_visible_from(observer,target,post,radius):
+					var sight_point:=observation_point_from(observer,target,post,radius)
+					if sight_point.is_finite():
 						target.seen_by[observer.team] = true
-						record_observation(observer,target)
+						record_observation(observer,target,true,sight_point)
 						break
-			elif target_visible_from(observer,target,observer.pos,radius):
-				target.seen_by[observer.team] = true
-				record_observation(observer,target)
+			else:
+				var sight_point:=observation_point_from(observer,target,observer.pos,radius)
+				if sight_point.is_finite():
+					target.seen_by[observer.team] = true
+					record_observation(observer,target,true,sight_point)
 		if observer.team == 0:
 			var origin := terrain.cell(observer.pos)
 			var sight:float=float(d.sight)*float(weather.sight_scale)
@@ -1191,17 +1214,21 @@ func relief_fog_clear(observer:Dictionary,source:Vector2,point:Vector2) -> bool:
 # empty formation anchor. Every candidate must pass the same source's range,
 # walls, elevation and optical ray, including garrison lookout sources.
 func target_visible_from(observer:Dictionary,target:Dictionary,source:Vector2,radius:float)->bool:
+	return observation_point_from(observer,target,source,radius).is_finite()
+
+func observation_point_from(observer:Dictionary,target:Dictionary,source:Vector2,radius:float)->Vector2:
 	var ground_line:bool=definitions[observer.kind].domain!="air" and definitions[target.kind].domain!="air"
 	if throwables.get("smoke",[]).is_empty() or target.get("members",[]).is_empty():
-		return source.distance_squared_to(target.pos)<=radius*radius and (not ground_line or terrain.line_clear(source,target.pos)) and relief_sight_clear(observer,target,source)
+		var visible:bool=source.distance_squared_to(target.pos)<=radius*radius and (not ground_line or terrain.line_clear(source,target.pos)) and relief_sight_clear(observer,target,source)
+		return target.pos if visible else Vector2.INF
 	var source_h:=eye_height(observer,source)
 	for member in target.members:
 		if member.hp<=0.0 or source.distance_squared_to(member.pos)>radius*radius:continue
 		if ground_line and not terrain.line_clear(source,member.pos):continue
 		var target_h:float=terrain.height_at(member.pos)+1.6
 		if terrain.has_elevation() and not terrain.elevation_clear(source,member.pos,source_h,target_h,true):continue
-		if smoke_clear(source,member.pos,source_h,target_h):return true
-	return false
+		if smoke_clear(source,member.pos,source_h,target_h):return member.pos
+	return Vector2.INF
 
 # Keep indexed and exhaustive smoke spotting equivalent when a sheltered
 # section's anchor is outside sight but one of its soldiers is still visible.
@@ -1384,9 +1411,9 @@ func contact_known(u:Dictionary,other:Dictionary) -> bool:
 	var sight:float=d.sight*weather.sight_scale
 	if terrain.cover(other.pos) and definitions[other.kind].domain=="land":sight*=0.7
 	if definitions[other.kind].domain=="land" and time-float(other.get("last_shot",-100.0))>=3.0:sight*=terrain.concealment(other.pos)
-	var observed:bool=target_visible_from(u,other,u.pos,sight)
-	if observed:record_observation(u,other,false)
-	return observed
+	var sight_point:=observation_point_from(u,other,u.pos,sight)
+	if sight_point.is_finite():record_observation(u,other,false,sight_point)
+	return sight_point.is_finite()
 
 func effective_unit(u:Dictionary,target_kind:String) -> bool:
 	if definitions[u.kind].get("strike",false):
@@ -1830,6 +1857,7 @@ func tick(dt: float) -> void:
 		sensor_clock = 0.3
 	if profiling:lap=_lap("visibility",lap)
 	refresh_tactical_events()
+	SupportRequests.tick(self,dt)
 	Director.update(self)
 	if profiling:lap=_lap("director",lap)
 	Garrison.tick(self,dt)
@@ -2573,6 +2601,8 @@ func start_next_order(u:Dictionary,resume_child:bool=false)->void:
 	u.intent=u.orders[0].duplicate()
 	if u.orders[0].has("slot"):return
 	if not resume_child:
+		SupportRequests.cancel_for_unit(self,u)
+		u["reserve_enabled"]=false
 		actions.activate_order(u,u.orders[0],time,"player" if u.team==0 else "ai")
 	if take_route_budget(u.pos,u.orders[0].pos,false,int(u.id),"next_order"):u.path=order_route(u,u.orders[0].pos)
 	else:defer_route(u,"order")

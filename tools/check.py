@@ -39,7 +39,7 @@ registered = {script for entries in GROUPS.values() for script, _ in entries}
 GROUPS["regression"] = [(path.name, None) for path in sorted((ROOT / "tests").glob("test_*.gd")) if path.name not in registered]
 GROUPS["playthrough"] = [("harbor_playthrough.gd", "HARBOR PLAYTHROUGH:")]
 M1_SUITES = {
-    "test_infantry_coordination.gd", "test_throwables.gd", "test_support_requests.gd",
+    "test_infantry_coordination.gd", "test_throwables.gd", "test_support_requests.gd", "test_support_lifecycle.gd",
     "test_field_positions.gd", "test_m1_persistence.gd", "test_m1_commands.gd",
     "test_m1_optics.gd", "test_m1_defense.gd",
 }

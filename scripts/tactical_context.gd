@@ -11,9 +11,12 @@ const LOCAL_CONTACTS:=32
 var teams:Dictionary={}
 var observers:Dictionary={}
 
-func observe(team:int,target_id:int,kind:String,pos:Vector2,now:float,observer_id:int=-1,upload:bool=true)->void:
+func observe(team:int,target_id:int,kind:String,pos:Vector2,now:float,observer_id:int=-1,upload:bool=true,sight_point:Vector2=Vector2.INF)->void:
 	if team<0 or target_id<0 or not is_finite(now) or not pos.is_finite():return
 	var fact:Dictionary={"id":target_id,"kind":kind,"pos":pos,"observed_at":now,"observer_id":observer_id,"source":"sensor"}
+	# Keep the group's reported position while retaining the actual observed
+	# body ray. Later support requests must not recover it from a hidden unit.
+	if sight_point.is_finite() and sight_point!=pos:fact["sight_point"]=sight_point
 	if observer_id>=0:
 		if not observers.has(observer_id) or int(observers[observer_id].team)!=team:
 			observers[observer_id]={"team":team,"contacts":{}}

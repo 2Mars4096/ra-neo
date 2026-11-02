@@ -1,5 +1,26 @@
 # Validation evidence
 
+## M1 section 3 — Nearby reserve backup
+
+Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, for `codex/m1-section-3`, based on completed section 2 (`e180a118`). The final affected gate passes **29/29 suites in 203 seconds**, without assertion or script errors. [Current evidence](evidence/m1-03-checks.json) records the exact selection and command, outputs, hashes for **99 source/test/configuration files**, and matched regression controls. Previous section reports remain historical to their own checkpoints.
+
+| Focused M1 suite | Checks | Failures |
+|---|---:|---:|
+| Coordinated cover and movement | 79 | 0 |
+| Throwables | 145 | 0 |
+| Smoke and optics | 56 | 0 |
+| Reserve requests and useful support | 125 | 0 |
+| Support lifecycle and order ownership | 62 | 0 |
+| **Total** | **467** | **0** |
+
+The support suite exercises actual movement to a useful position, sustained service and return under the original assignment. It checks exclusive claims, unavailable providers, real radio loss and local acknowledgement, request/return deadlines, alternative weapons and ammunition, Hold fire, occupied engineering/clearing work, and copied observations. New cases run the firing executor and require a real requested rifle round/event; a diverted target or weapon cannot accrue delivery time. Smoke cases preserve exposed-body geometry across hidden motion/death, including a later request using the remembered observation.
+
+The lifecycle suite exercises both immediate and deferred queued-head activation through physical arrival and ordinary command completion. Genuine queued tails retain authority until activation. Formation-budget denial pauses both queued and replacement placement without consuming support stall/service time, while absolute deadlines still apply. Requester Stop and lease expiry clear owned movement/actions in live state and rollback snapshots; rejected placement cannot resurrect terminal support.
+
+The identical final support test reports **125 checks / 7 failures before correction** and **125 / 0 afterward**. The identical lifecycle test reports **62 / 24** on an isolated export of integrated baseline tree `ba5456bc00ecf1970485cdd1e91f9834f70f0bb8`, and **62 / 0** here. That baseline combines section 2 with the recovered `39af9e3` scripts/tests; it is not a whole historical-commit checkout. The evidence includes reconstruction instructions and production/test hashes. Both negative controls fail assertions without script errors.
+
+The broader gate covers action ownership, copied knowledge, readiness, navigation admission, pressure, command modes/input, cover/contact, regrouping, garrisons, elevation, engineer work and wreck clearing. Section 3 changes simulation APIs and existing executors; contextual Reserve/Backup controls remain section 5. No new rendered assets or native capture are introduced. Functional timings do not establish hardware frame rate, human command clarity or balance.
+
 ## M1 section 2 — Grenades and smoke
 
 Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, for `codex/m1-section-2` based on completed section 1 (`d10682e`). The final affected gate passes **22/22 suites** with no assertion or script errors. [Current functional evidence](evidence/m1-02-checks.json) records the exact command, outputs, distinct negative-control baselines and hashes for **92 source/test/configuration files**. Section 1's report remains its historical record.

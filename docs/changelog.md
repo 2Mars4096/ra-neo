@@ -1,5 +1,13 @@
 # Changelog
 
+## M1 section 3 — Nearby reserve backup checkpoint
+
+- Continue `codex/m1-section-3` from completed section 2 (`e180a118`), recovering the section 3 candidate (`39af9e3`) and reviewing its integration. Add the [section 3 plan](plans/18-2-1-3-nearby-reserve-backup.md); sections 4–6 remain pending.
+- Add explicit reserve delegation and nearby backup APIs for existing infantry. One eligible responder owns the exclusive request/provider claims, follows a normal route, supplies four seconds of useful coverage and returns under its unchanged assignment. Requests create no troops and spend no supply; busy engineering, garrison duties, Hold fire and unavailable actors remain protected.
+- Preserve accepted leases through radio loss, with local acknowledgement, absolute expiry, bounded return and unavailable/cancelled outcomes. New accepted commands revoke reserve work. Queued heads now cancel before activation; rejected queued placement retains the valid route. Pending placement cannot manufacture service or route-stall time, and terminal cleanup clears owned rollback motion instead of reviving it on rejection.
+- Make delivery credit agree with the actor's actual target/weapon and availability. Copy observed exposed-body geometry into contact memory for smoke-aware support, preserving group-position semantics and hidden-motion/death isolation.
+- Verification: **29/29 selected suites pass**, including **467 M1 checks**: 79 coordination, 145 throwable, 56 optics, 125 support and 62 lifecycle. The identical support/lifecycle tests reproduce seven and 24 failures respectively on the integrated pre-fix baseline. [Current evidence](evidence/m1-03-checks.json) records outputs, control provenance and 99 source/test/configuration hashes. Section 3 adds no new contextual input or rendered assets; controls remain section 5, and no new hardware-performance or human-playtest acceptance is claimed.
+
 ## M1 section 2 — Grenades and smoke checkpoint
 
 - Continue `codex/m1-section-2` from completed section 1 (`d10682e`), recovering the section 2 candidate (`26480fb`) and preserving corrected covering-fire and explicit/urgent target priority. Complete the [section 2 plan](plans/18-2-1-2-grenades-and-smoke.md); sections 3–6 remain pending.
