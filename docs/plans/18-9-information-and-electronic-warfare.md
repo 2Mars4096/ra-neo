@@ -6,7 +6,7 @@
 
 ## Baseline and ownership
 
-M0 adds `tactical_context.gd` and sensor adapters: copied last-observed positions with source/time, deterministic confidence/30-second expiry, bounded local/team stores and radio-aware sharing. Memory never authorizes firing or follows hidden motion/death. This is the minimal contract in [18-1-1](18-1-1-m0-foundation.md); uncertainty areas, new sensor types, markers, investigation and smoke remain future work. The baseline below is historical.
+M0 adds `tactical_context.gd` and sensor adapters: copied last-observed positions with source/time, deterministic confidence/30-second expiry, bounded local/team stores and radio-aware sharing. Memory never authorizes firing or follows hidden motion/death. This is the minimal contract in [18-1-1](18-1-1-m0-foundation.md); M1 adds optical smoke with real endpoint heights, shared acquisition/fog queries and cache invalidation. Uncertainty areas, new sensor types, markers and investigation remain future work. The baseline below is historical.
 
 At `f5916e8`, [simulation.gd](../../scripts/simulation.gd) refreshes visibility every 0.3 seconds and uses local observation under jamming. Existing orders survive link loss; new remote orders and sensor uploads are blocked. Explicit pursuit retains a last visible destination. [field_ops.gd](../../scripts/field_ops.gd) remembers observed enemy sites. General mobile-contact memory and gameplay smoke are absent. [terrain.gd](../../scripts/terrain.gd) and [elevation.gd](../../scripts/elevation.gd) share physical sight and ridge rules.
 
@@ -50,7 +50,7 @@ Radio policy retains the current usability abstraction of friendly position trac
   - [x] M0 observation/report subset, storage limits, expiry, hidden-state isolation and event invalidation. Hazards remain future work.
 - [ ] 2. Adapt current visibility, explicit pursuit and enemy-site memory through those contracts; preserve legacy scenario behaviour behind explicit defaults.
 - [ ] 3. Deliver contact ageing, sector watching, local warnings and support-area marking using existing sensing geometry.
-- [ ] 4. Integrate authoritative optical smoke with the first grenade slice; unify acquisition, known-contact queries, fog and selected-unit explanations.
+- [x] 4. Integrate authoritative optical smoke with the first grenade slice; unify acquisition, known-contact queries, fog and selected-unit explanations.
 - [ ] 5. Add hold-fire and uncertain sound investigation with readable intent and information limits.
 - [ ] 6. Prototype relay/lost-link policies; evaluate optional mobile jamming, emissions and decoys separately.
 - [ ] 7. Pass the information-invariant and load gates in [18-12](18-12-performance-and-validation.md).

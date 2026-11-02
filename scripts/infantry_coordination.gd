@@ -73,7 +73,7 @@ static func _defensive_shelter(u:Dictionary,member:Dictionary,sim,threat:Diction
 	if not slot.get("screened",false) or not sim.terrain.cover(slot.pos):return false
 	if slot.pos.distance_to(u.pos)>sim.Infantry.Cover.LEASH or slot.get("path",[]).is_empty():return false
 	if not sim.Infantry.Cover.sees(sim,threat,member.pos) or sim.Infantry.Cover.sees(sim,threat,slot.pos):return false
-	return true
+	return sim.smoke_clear(threat.pos,member.pos,sim.eye_height(threat),sim.terrain.height_at(member.pos)+1.6)
 
 static func begin_bound(u:Dictionary,member:Dictionary,sim,threat:Dictionary,slot:Dictionary)->bool:
 	if threat.is_empty():return true

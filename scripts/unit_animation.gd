@@ -11,6 +11,8 @@ static func state(u:Dictionary,sim,moving:bool=false) -> String:
 	if u.recovering:return "RECOVERING"
 	if not u.orders.is_empty() and u.orders[0].mode=="retreat":return "WITHDRAWING"
 	if u.suppression>0.6:return "PINNED"
+	for member in u.members:
+		if int(member.get("task_action",0))>0:return str(member.get("state","PREPARING"))
 	if int(u.get("garrison",-1))>=0:return "GARRISON FIRING" if sim.time-float(u.get("last_shot",-100))<1.5 else "GARRISONED"
 	if u.has("bombard") and u.orders.is_empty():return "BOMBARDING"
 	if sim.time-float(u.get("last_hit",-100))<0.5:return "BRACING"
@@ -150,6 +152,12 @@ static func pose(model:Node3D,u:Dictionary,sim,dt:float) -> void:
 			var weapon:Node3D=rig[1]
 			set_rotation_axis(weapon,0,lerpf(weapon.rotation.x,PI/2 if prone else (-0.65 if reload else (0.0 if member_aiming else (-0.24 if member_moving else -0.12))),minf(1,dt*6)))
 			set_position_axis(weapon,2,member_recoil*0.035)
+			if sim.Infantry.task_busy(member):
+				var throwing:bool=member.get("task_kind","")=="throw"
+				var work:float=sin(sim.time*4.2+index)*0.14
+				set_rotation_axis(body,0,-0.12 if throwing else -0.28+work)
+				set_rotation_axis(weapon,0,-1.25 if throwing else -0.85+work)
+				set_position_axis(body,1,-0.18)
 			for side in SIDES:
 				var joints:Array=rig[2 if side<0 else 3]
 				var leg:Node3D=joints[0]

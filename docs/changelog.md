@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-02 — M1.2 finite grenades and optical smoke
+
+- Recover finite per-member frag/smoke, interruptible preparation, single release consumption, swept flight, physical impact/exposure and height-aware optical obstruction. Acquisition and fog caches use actual aircraft altitude, including altitude-only changes on flat maps.
+- One mixed-selection gesture chooses one eligible section and consumes one payload. Shared selection skips exhausted/incapable sections and preserves the other sections’ orders and stock. Defensive throws retain weapon-specific covering readiness.
+- Add bounded smoke/projectile rendering and placeholder task poses; manual controls follow in M1.5. Optical smoke, throwables and animation suites pass; native presentation follows in M1.6. [Evidence](evidence/m1-02-checks.json).
+
 ## 2026-11-02 — M1.1 coordinated cover and movement
 
 - Recover the first buildable section of the unpublished M1 candidate onto `codex/m1-staged-implementation`, based on the existing GitHub plan and completed M0. Record all six implementation sections before continuing.

@@ -52,6 +52,7 @@ var attack_mode := false
 # FPV strike targeting: armed from the reinforcement panel, the next map click aims it.
 var strike_mode := false
 var build_mode:=""
+var tactical_effects=preload("res://scripts/tactical_effects.gd").new()
 var build_rotated:=false
 # Drag-to-install for linear works and net areas: world-space anchor while held.
 var build_drag:=false
@@ -176,6 +177,7 @@ func _ready() -> void:
 			art.ring(deposit,3.3,Color("b59b59"))
 			for i in 9:art.make_rock(deposit,Vector3(sin(i*2.4)*2,0.3,cos(i*2.4)*2),Vector3(0.65,0.6,0.7),i)
 	add_child(effects)
+	add_child(tactical_effects)
 	effects.set_ground_terrain(sim.terrain)
 	effects.set_world_bounds(sim.terrain.world_size,sim.terrain.shore_x)
 	audio=preload("res://scripts/audio_fx.gd").new();audio.setup(sim,effects);add_child(audio)
@@ -677,6 +679,7 @@ func _process(dt: float) -> void:
 		shown_wetness=sim.weather.wetness
 		art.ground_material.set_shader_parameter("wetness",shown_wetness)
 	effects.wind=Vector3(sim.weather.wind.x,0,sim.weather.wind.y)
+	tactical_effects.sync(sim)
 	var fog_on:bool=sim.weather.rain>0.01
 	if atmosphere.fog_enabled!=fog_on:atmosphere.fog_enabled=fog_on
 	if atmosphere.fog_light_color!=FOG_LIGHT:atmosphere.fog_light_color=FOG_LIGHT
@@ -916,6 +919,8 @@ func consume_events() -> void:
 			if harbor_props!=null:preload("res://scripts/harbor_props.gd").crush(harbor_props,int(event.prop),event.heading)
 		elif event.type in ["building_damage","building_collapse","world_blast"]:
 			preload("res://scripts/ruined_building.gd").show_damage(art,self,sim,event)
+			if event.type=="world_blast" and event.get("kind","")=="grenade" and event.get("visible",false):
+				effects.he_burst(Vector3(event.pos.x,float(event.get("height",sim.terrain.height_at(event.pos)+0.12)),event.pos.y),Vector3.UP,0.4)
 		elif event.type=="shot" and event.visible:
 			# Presentation only: effects apply each weapon's barrel offset, tracer cadence and impact surface.
 			var a:=Vector3(event.from.x,float(event.from_y),event.from.y)

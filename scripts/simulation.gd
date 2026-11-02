@@ -15,6 +15,8 @@ const Actions = preload("res://scripts/tactical_actions.gd")
 const Context = preload("res://scripts/tactical_context.gd")
 const Navigation = preload("res://scripts/tactical_navigation.gd")
 const Coordination = preload("res://scripts/infantry_coordination.gd")
+const Throwables = preload("res://scripts/throwables.gd")
+var throwables:Dictionary={}
 var actions = Actions.new()
 var context = Context.new()
 var action_tick := 0
@@ -97,6 +99,7 @@ func _init(populate: bool = true, preset:int=-1) -> void:
 		if definitions.has(kind) and definitions[kind].domain=="air":
 			definitions[kind].altitude=float(scenario.air_altitudes[kind])
 	terrain=Terrain.new(choice,scenario)
+	Throwables.setup(self)
 	# One objective per authored sector/pole pair; legacy maps author two, the harbor three.
 	objectives.clear()
 	for i in mini(scenario.get("sectors",[]).size(),terrain.poles.size()):
@@ -133,6 +136,7 @@ func spawn(kind: String, team: int, pos: Vector2) -> Dictionary:
 	next_id += 1
 	Infantry.create(u,d)
 	Actions.ensure_unit(u)
+	Throwables.ensure_unit(u)
 	if d.get("strike",false):u.merge({"strike_target":-1,"altitude":float(d.altitude),"fuse":time+float(d.get("endurance",60.0))})
 	if terrain.has_elevation() and d.domain=="air":follow_skyline(u,d)
 	if not field_ops.is_empty() and d.get("structure",false):
@@ -159,6 +163,9 @@ func living(team: int) -> Array[Dictionary]:
 # remains independent of Hold fire; explicit attack scope belongs to its order.
 func engagement_allowed(u:Dictionary,target_id:int=-1)->bool:
 	return Actions.engagement_allowed(u,target_id)
+
+func issue_throw(ids:Array,payload:String,point:Vector2)->int:
+	return Throwables.issue_throw(self,ids,payload,point)
 
 func set_fire_policy(ids:Array,policy:String)->int:
 	if result!="" or policy not in ["free","hold"]:return 0
@@ -943,7 +950,9 @@ func update_visibility() -> void:
 			var origin := terrain.cell(observer.pos)
 			var sight:float=float(d.sight)*float(weather.sight_scale)
 			var key := "%d:%d:%s:%.2f" % [origin.x,origin.y,observer.kind,weather.sight_scale]
-			if terrain.has_elevation() and d.domain=="air":key+=":%.2f"%unit_altitude(observer)
+			# Finite-height smoke makes altitude relevant even on flat maps.
+			# Cache and same-tick observer deduplication must use the ray's height.
+			if d.domain=="air":key+=":%.2f"%unit_altitude(observer)
 			if processed_fields.has(key):continue
 			processed_fields[key]=true
 			if not visibility_cache.has(key):
@@ -1047,13 +1056,14 @@ func weapon_reaches(weapon:String,source:Vector2,other:Dictionary,checks:int=SOL
 	var d:Dictionary=definitions[weapon]
 	var td:Dictionary=definitions[other.kind]
 	# Inlined unit_altitude/weapon_range: this runs for every candidate and soldier.
-	var height:float=float(d.altitude)-float(other.get("altitude",td.altitude))
+	var source_h:float=source_altitude if is_finite(source_altitude) else float(d.altitude)
+	var height:float=source_h-float(other.get("altitude",td.altitude))
 	var reach:float=AIR_REACH[weapon] if td.domain=="air" and AIR_REACH.has(weapon) else float(d.range)
 	# A section is reached through one of its soldiers, not its anchor.
 	if not other.get("members",[]).is_empty():
-		return not aim_soldier(source,other,reach*reach-height*height,d.domain!="air" and td.domain!="air",INF,checks).is_empty()
+		return not aim_soldier(source,other,reach*reach-height*height,d.domain!="air" and td.domain!="air",INF,checks,source_h).is_empty()
 	if source.distance_squared_to(other.pos)+height*height>reach*reach:return false
-	return d.domain=="air" or td.domain=="air" or terrain.line_clear(source,other.pos)
+	return (d.domain=="air" or td.domain=="air" or terrain.line_clear(source,other.pos)) and smoke_clear(source,other.pos,source_h+(0.0 if d.domain=="air" else 1.6),eye_height(other))
 
 # Relief uses each actual endpoint for slant range and ridge occlusion. There
 # is no damage bonus for height; the advantage is physical observation/fire.
@@ -1071,7 +1081,7 @@ func relief_weapon_reaches(weapon:String,source:Vector2,other:Dictionary,checks:
 	var target_h:=unit_altitude(other)
 	if source.distance_squared_to(other.pos)+pow(source_h-target_h,2)>reach*reach:return false
 	if not terrain.elevation_clear(source,other.pos,source_h+(0.0 if d.domain=="air" else 1.6),target_h+(0.0 if td.domain=="air" else 1.6),true):return false
-	return not ground_line or terrain.line_clear(source,other.pos)
+	return (not ground_line or terrain.line_clear(source,other.pos)) and smoke_clear(source,other.pos,source_h+(0.0 if d.domain=="air" else 1.6),eye_height(other))
 
 # Per-soldier targeting. Fire at a section goes at one of its soldiers: the
 # nearest able one (not down or KIA) within `reach_sq` (squared ground
@@ -1101,10 +1111,12 @@ func aim_soldier(source:Vector2,other:Dictionary,reach_sq:float,needs_line:bool,
 					break
 				if distance<best_distance and distance<=bound:best=member;best_distance=distance;best_bit=bit
 			bit<<=1
-		if best.is_empty() or (not needs_line and not elevated):return best
+		if best.is_empty():return best
+		var optical_ok:=smoke_clear(source,best.pos,source_h+(1.6 if needs_line else 0.0),terrain.height_at(best.pos)+1.6)
+		if not needs_line and not elevated and optical_ok:return best
 		soldier_checks+=1
 		var relief_ok:bool=not elevated or terrain.elevation_clear(source,best.pos,source_h+(1.6 if needs_line else 0.0),terrain.height_at(best.pos)+1.6,true)
-		if relief_ok and (not needs_line or terrain.line_clear(source,best.pos)):return best
+		if optical_ok and relief_ok and (not needs_line or terrain.line_clear(source,best.pos)):return best
 		tried|=best_bit
 	return {}
 
@@ -1166,14 +1178,28 @@ func eye_height(u:Dictionary,pos:Vector2=Vector2.INF) -> float:
 # Ground-ground line_clear already samples relief; air shortcuts still need
 # the same physical hill occlusion at actual flight altitude.
 func relief_sight_clear(observer:Dictionary,target:Dictionary,source:Vector2=Vector2.INF) -> bool:
+	var point:Vector2=observer.pos if not source.is_finite() else source
+	if not smoke_clear(point,target.pos,eye_height(observer,point),eye_height(target)):return false
 	if not terrain.has_elevation():return true
 	if definitions[observer.kind].domain!="air" and definitions[target.kind].domain!="air":return true
-	var point:Vector2=observer.pos if not source.is_finite() else source
 	return terrain.elevation_clear(point,target.pos,eye_height(observer,point),eye_height(target),true)
 
 func relief_fog_clear(observer:Dictionary,source:Vector2,point:Vector2) -> bool:
+	if not smoke_clear(source,point,eye_height(observer,source),terrain.height_at(point)+1.6):return false
 	if not terrain.has_elevation() or definitions[observer.kind].domain!="air":return true
 	return terrain.elevation_clear(source,point,eye_height(observer,source),terrain.height_at(point)+1.6,true)
+
+func smoke_clear(a:Vector2,b:Vector2,source_height:float=INF,target_height:float=INF)->bool:
+	if throwables.get("smoke",[]).is_empty():return true
+	var ah:=source_height if is_finite(source_height) else terrain.height_at(a)+1.6
+	var bh:=target_height if is_finite(target_height) else terrain.height_at(b)+1.6
+	return not Throwables.blocks_sight(self,Vector3(a.x,ah,a.y),Vector3(b.x,bh,b.y))
+
+# Shared ground observation query for backup's copied frontage/contact point.
+func optical_ray_clear(a:Vector3,b:Vector3)->bool:
+	var from:=Vector2(a.x,a.z)
+	var to:=Vector2(b.x,b.z)
+	return terrain.line_clear(from,to) and terrain.elevation_clear(from,to,a.y,b.y,true) and not Throwables.blocks_sight(self,a,b)
 
 # The weapon a unit brings against this kind (squads: Javelin or rifles).
 func attack_weapon(u:Dictionary,target_kind:String) -> String:
@@ -1765,6 +1791,8 @@ func tick(dt: float) -> void:
 	if profiling:lap=_lap("setup+spatial",lap)
 	plan_queued_routes(resolve_slots())
 	if profiling:lap=_lap("route_queue",lap)
+	Throwables.tick(self,dt)
+	if profiling:lap=_lap("infantry_actions",lap)
 	recruit_clock = maxf(0, recruit_clock-dt)
 	sensor_clock -= dt
 	if profiling:lap=_lap("setup+spatial",lap)
@@ -2500,7 +2528,8 @@ func start_next_order(u:Dictionary,resume_child:bool=false)->void:
 	if u.orders.is_empty() or u.has(SectionRecovery.KEY):return
 	u.intent=u.orders[0].duplicate()
 	if u.orders[0].has("slot"):return
-	if not resume_child:actions.activate_order(u,u.orders[0],time,"player" if u.team==0 else "ai")
+	if not resume_child:
+		actions.activate_order(u,u.orders[0],time,"player" if u.team==0 else "ai")
 	if take_route_budget(u.pos,u.orders[0].pos,false,int(u.id),"next_order"):u.path=order_route(u,u.orders[0].pos)
 	else:defer_route(u,"order")
 

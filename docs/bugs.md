@@ -2,6 +2,8 @@
 
 ## M1 staged review — 2026-11-02
 
+- A single mixed-selection grenade gesture displayed one arc but prepared a throw for every eligible section. Shared deterministic selection now requests one payload and preserves unrelated assignments/stock. Regressions cover distinct selected sections, exhausted/ineligible first choices, frag/smoke release and wholly rejected selections.
+
 - Cover eligibility inspected a specialist’s current empty magazine before choosing the weapon actually needed against the contact. `ready_to_cover` now accepts an optional requested weapon and coordination checks that weapon without switching, replenishing, consuming or interrupting a live reload. A loaded alternate rifle/launcher is usable; pressure, task/medical ownership, Hold fire, equipment and missile limits remain enforced. Focused red/green cases reproduce the old failure and verify the correction.
 
 ## M0 implementation corrections — 2026-10-30
