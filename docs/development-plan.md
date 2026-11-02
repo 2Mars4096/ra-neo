@@ -45,9 +45,9 @@ The current increment deepens distinct battlefield decisions, carries expedition
 
 ## Current delivery focus
 
-### M1 infantry defense — staged implementation, 2026-11-02
+### M1 infantry defense — section 1 checkpoint, 2026-11-02
 
-M0 is complete at `5850504`. The user now authorizes M1 in implementation sections with partial commits on a separate branch. [M1](plans/18-2-1-m1-infantry-defense.md) divides delivery into coordinated cover/movement, finite grenades/smoke, reserve backup, hasty positions/upgrades, compact controls, and persistence/integration. Work is on `codex/m1-staged-implementation`, based on GitHub's plan-only `b94593a`; the active plan records each recovered and currently verified section.
+M0 is complete at `5850504`. [M1](plans/18-2-1-m1-infantry-defense.md) divides delivery into coordinated cover/movement, finite grenades/smoke, reserve backup, hasty positions/upgrades, compact controls, and persistence/integration. The current request stops after [section 1](plans/18-2-1-1-coordinated-cover-and-movement.md), committed and pushed separately on `codex/m1-section-1`. This branch reuses existing checkpoint `0f5eb25` over the plan-only `b94593a`, with focused integration review and fresh verification. Later M1 sections remain outside this branch's delivery.
 
 The broader [Plan 18](plans/18-unit-tactical-autonomy.md) remains the roadmap. M2 domain roles and M3 urban/sustainment expansion follow this slice. Shared physical rules, player order authority and measured responsiveness remain requirements. Human balance and supported-hardware performance acceptance remain separate from functional checks.
 
