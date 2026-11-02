@@ -52,6 +52,7 @@ The local operational save is `user://regional_campaign.json` in Godot’s For E
 
 - Surviving mobile units replace the next battlefield’s authored starting force.
 - Infantry retain individual HP, LIGHT/SEVERE wounds, remaining bleed time and KIA slots. Transferring does not heal or resurrect them.
+- Stable member identities, partial magazines, launcher ownership and each soldier's remaining frag/smoke stock carry forward. Empty stock stays empty; casualty equipment does not replenish survivors.
 - Vehicles retain integrity, crew losses, mobility/gun/optics damage, ammunition and remaining fire/flood hazards.
 - Incompatible units, such as ships on an inland map, remain in reserve until a compatible deployment. A crowded arrival waits for room. Parked units do not simulate while off-map.
 - Remaining supply carries forward. Paid purchases still waiting off-map are refunded once at outcome; built structures do not transfer.
@@ -66,9 +67,11 @@ Victory secures the location. The following unique benefits apply on later deplo
 | South Inlet | +1 supply/s |
 | Windbreak Fields | +1 supply/s |
 
-Replaying a victory cannot stack the same benefit. Defeat or withdrawal releases that battlefield; other secured locations remain. The atlas shows ownership, benefits, force counts and supply. Defeat retry restores the pre-battle force, budget and strategic state through an explicit player action.
+Replaying a victory cannot stack the same benefit. Defeat or withdrawal releases that battlefield; other secured locations remain. The atlas shows ownership, benefits, force counts and supply. Defeat retry restores the pre-battle force, exact inventory, budget and strategic state through an explicit player action.
 
-**This is checkpoint/outcome persistence.** Closing an unfinished battle returns to its deployment checkpoint. Positions, orders, enemy formations, engineered structures, world damage and elapsed battle time are not saved. Revisiting a battlefield creates a fresh tactical world, and redeployment between locations is abstracted.
+**This is checkpoint/outcome persistence.** Closing an unfinished battle returns to its deployment checkpoint. Positions, orders, enemy formations, engineered structures, world damage and elapsed battle time are not saved. Throw preparations, released payloads, smoke and backup requests also stay local to the battle. Revisiting a battlefield creates a fresh tactical world, and redeployment between locations is abstracted.
+
+Save version 3 adds individual grenade inventories. Version-1/2 saves and their retry checkpoints migrate automatically, including old engineer records. Missing legacy stock receives the initial allocation only for eligible living members; existing stock, including empty dictionaries or explicit zeros, is preserved. Migration is idempotent and does not provide a grenade refill service.
 
 A valid previous save is retained as a backup. Corrupt primary data can recover from it; if both copies fail validation, automatic overwrite is blocked until an explicit confirmed reset. Write errors are reported. The current save format accepts at most 256 mobile formations including parked units; exceeding that bound reports an error instead of truncating the force. Campaign tests use isolated paths; ordinary scripted review scenes do not touch the player’s campaign.
 

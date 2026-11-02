@@ -51,7 +51,7 @@ Radio policy retains the current usability abstraction of friendly position trac
 - [ ] 2. Adapt current visibility, explicit pursuit and enemy-site memory through those contracts; preserve legacy scenario behaviour behind explicit defaults.
 - [ ] 3. Deliver contact ageing, sector watching, local warnings and support-area marking using existing sensing geometry.
 - [ ] 4. Integrate authoritative optical smoke with the first grenade slice; unify acquisition, known-contact queries, fog and selected-unit explanations.
-  - [x] M1.2 cylinder/ray, acquisition/fire/known-contact and fog-cache integration, including exposed-body and wide-section query parity; 56 optics checks pass. Contextual explanations remain part of M1.5.
+  - [x] M1.2 cylinder/ray, acquisition/fire/known-contact and fog-cache integration, including exposed-body and wide-section query parity; 56 optics checks pass. M1.5 supplies targeting/status feedback, and M1.6 verifies bidirectional blocking and expiry in the combined Harbor encounter.
 - [ ] 5. Add hold-fire and uncertain sound investigation with readable intent and information limits.
 - [ ] 6. Prototype relay/lost-link policies; evaluate optional mobile jamming, emissions and decoys separately.
 - [ ] 7. Pass the information-invariant and load gates in [18-12](18-12-performance-and-validation.md).

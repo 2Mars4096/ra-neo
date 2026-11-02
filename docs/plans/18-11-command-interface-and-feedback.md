@@ -46,7 +46,7 @@ Hold fire is a separate authoritative engagement permission, so observing or wai
 - [ ] 5. Complete broader activity/service-return cues. M1 reports retained work, remaining time, covering and current backup state; later services remain open.
 - [x] 6. Make M1 mixed-selection commands truthful: one throw/worker, no duplicate spending, partial radio receipts and reversible connected-section toggles.
 - [x] 7. Preserve existing orders, groups, pause and minimap commands; targeted modes remain exclusive and cancellation consumes the gesture.
-- [ ] 8. Complete native/human usability and measured latency acceptance. M1.5 has a reproducible native review; no hardware latency or human-playtest claim is implied.
+- [ ] 8. Complete native/human usability and measured latency acceptance. M1.5 has a reproducible controls review and M1.6 adds a combined native Harbor encounter; no hardware latency or human-playtest claim is implied.
 
 ## Feedback and presentation contract
 

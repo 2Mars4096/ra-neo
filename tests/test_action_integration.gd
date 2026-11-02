@@ -357,7 +357,7 @@ func readiness_campaign_roundtrip()->void:
 	var path:=save_path("partial-magazines")
 	check(campaign.save_state(path)==OK,"partial magazines save through the real campaign writer")
 	var loaded=Campaign.new()
-	check(loaded.load_state(path)==OK and loaded.data.version==2,"campaign reload accepts the inventory-aware schema")
+	check(loaded.load_state(path)==OK and loaded.data.version==Campaign.VERSION,"campaign reload accepts the current inventory-aware schema")
 	var record:Dictionary=loaded.data.roster[0]
 	check(record.members[0].magazines.atgm==0 and record.members[1].magazines.rifle==2 and record.damage.missiles==2,"save retains empty launcher, partial rifle and remaining missile supply")
 	check(not record.has("assignment") and not record.members[0].has("reload_until"),"operational persistence does not serialize transient actions")
@@ -411,15 +411,15 @@ func legacy_campaign_migration()->void:
 	var file:=FileAccess.open(path,FileAccess.WRITE)
 	file.store_string(JSON.stringify(legacy));file.close()
 	check(campaign.load_state(path)==OK,"version-1 save loads through the real migration path")
-	check(campaign.data.version==2 and campaign.data.retry.version==2 and Campaign.valid(campaign.data),"both current state and retry checkpoint migrate to valid version 2")
+	check(campaign.data.version==Campaign.VERSION and campaign.data.retry.version==Campaign.VERSION and Campaign.valid(campaign.data),"both current state and retry checkpoint migrate to the valid current schema")
 	check(campaign.data.roster[0].equipment.is_empty() and campaign.data.retry.roster[0].equipment.is_empty(),"migration does not replace a launcher lost before inventories were recorded")
 	check(campaign.data.roster[0].assigned_members==2 and campaign.data.roster[0].assigned_hp==float(sim.definitions.atgm.hp),"legacy migration reconstructs assigned strength independently of survivors")
 	check(Campaign.upgrade_state(campaign.data)==campaign.data,"repeated migration cannot restock an already migrated inventory")
-	check(campaign.save_state(path)==OK,"migrated state can be written as version 2")
+	check(campaign.save_state(path)==OK,"migrated state can be written in the current schema")
 	var loaded=Campaign.new()
 	var read_ok:bool=loaded.load_state(path)==OK
 	check(read_ok and loaded.data.roster.size()==1 and loaded.data.roster[0].equipment.is_empty() and loaded.data.roster[0].members[0].wound=="KIA" and int(loaded.data.roster[0].members[1].magazines.rifle)==6 and int(loaded.data.roster[0].members[0].magazines.atgm)==0,"migrated casualties and inventory survive another disk round trip")
-	check(loaded.retry(path)==OK and loaded.data.version==2 and loaded.data.roster[0].equipment.is_empty(),"explicit retry uses the migrated checkpoint without inventing equipment")
+	check(loaded.retry(path)==OK and loaded.data.version==Campaign.VERSION and loaded.data.roster[0].equipment.is_empty(),"explicit retry uses the migrated checkpoint without inventing equipment")
 
 func field_work_admission()->void:
 	var sim=Sim.new(false,5)

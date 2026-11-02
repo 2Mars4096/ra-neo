@@ -12,7 +12,7 @@
 
 [Nearby reserve backup](18-2-1-3-nearby-reserve-backup.md) completes the first bounded request adapter on `codex/m1-section-3` over completed section 2 (`e180a118`). The recovered `39af9e3` candidate supplies explicit infantry reserve delegation, copied request observations, one exclusive provider lease, ordinary movement, useful-support checks and return under the unchanged assignment. Review has corrected queued/provisional order ownership, paused service/stall accounting, stale rollback cleanup, capability-only service credit and loss of observed body geometry through smoke. [Current evidence](../evidence/m1-03-checks.json) passes 29/29 affected suites, including 125 support-request and 62 lifecycle checks, with zero assertion/script failures. Identical tests reproduce seven support and 24 lifecycle failures on the integrated pre-fix baseline, then pass after correction. The checkpoint is prepared for commit and publication.
 
-This increment addresses the nearby-backup, unavailability and cancellation/return portions of COOP-01/02/15/16. The broader catalogue and remaining tasks below stay open beyond this infantry adapter. Requests authorize no spawning, purchase or automatic engineer/medical/logistics service; contextual controls remain M1.5.
+This increment addresses the nearby-backup, unavailability and cancellation/return portions of COOP-01/02/15/16. The broader catalogue and remaining tasks below stay open beyond this infantry adapter. Requests authorize no spawning, purchase or automatic engineer/medical/logistics service. M1.5 supplies contextual controls, and M1.6 verifies physical reserve service/return alongside covering, smoke and staged work in Harbor.
 
 ## Action catalogue
 

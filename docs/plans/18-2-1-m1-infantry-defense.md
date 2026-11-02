@@ -1,14 +1,14 @@
 # 18-2-1: M1 infantry defense
 
 **Parent:** [18-2-infantry-fire-and-movement](18-2-infantry-fire-and-movement.md)
-**Status:** in-progress
+**Status:** completed
 **Goal:** Deliver coordinated infantry defense with finite grenades, optical smoke, nearby backup and staged field positions through compact controls.
 
 ## Delivery boundary
 
-M0 is complete at `5850504`. M1 is divided into the six sections below. Sections 1–4 are published at `d10682e`, `e180a118`, `57f7fa8` and `8b6adb8`, with their checkpoint evidence retained below. Section 4's published tree exactly matches tested local checkpoint `40b5f6d`. The current delivery completes **section 5** on `codex/m1-section-5`, recovering only the isolated `1f42d24` controls candidate onto that reviewed baseline. Earlier covering-fire, optical-smoke, reserve lifecycle, copied-observation and field-work corrections are preserved.
+M0 is complete at `5850504`. M1 is divided into the six sections below. Sections 1–5 are published at `d10682e`, `e180a118`, `57f7fa8`, `8b6adb8` and `ece3cd7`, with their checkpoint evidence retained below. Section 4's published tree exactly matches tested local checkpoint `40b5f6d`. The current delivery completes **section 6** on `codex/m1-section-6` from published section 5. Earlier covering-fire, optical-smoke, reserve lifecycle, copied-observation, field-work and command corrections are preserved.
 
-This slice crosses plans 18-2/3/4/5/9/10/11/12. Each section remains a buildable checkpoint with current checks and tracking. This delivery stops after contextual controls and feedback; campaign inventory and the integrated Harbor encounter remain section 6.
+This slice crosses plans 18-2/3/4/5/9/10/11/12. Each section remains a buildable checkpoint with current checks and tracking. Section 6 completes campaign inventory and the integrated Harbor encounter. Broader domain roles, urban actions, replenishment, human balance and supported-hardware performance remain separate work.
 
 ## Implementation sequence
 
@@ -19,7 +19,7 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Each section remains a buildable
 | **[M1.3 — Nearby reserve backup](18-2-1-3-nearby-reserve-backup.md)** | Explicitly delegate an existing section, lease one capable responder, deliver useful support and return to its unchanged assignment. | M1.1 readiness and M1.2 optical rays. Check actual support weapons, exclusive leases, radio loss, retasking and deadlines. | Complete — 29/29 affected suites pass |
 | **[M1.4 — Hasty positions and upgrades](18-2-1-4-hasty-positions-and-upgrades.md)** | One infantry member digs shallow cover; an engineer can reinforce the same site with one paid upgrade. Retain interrupted progress. | M1.1 actor ownership and M1.3 order cancellation. Check cover stages, geometry, work authority and no duplicate charges/refunds. | Complete — 248 field-position checks; three native captures |
 | **[M1.5 — Controls and feedback](18-2-1-5-controls-and-feedback.md)** | Contextual commands, target previews, Hold fire, Reserve/Auto Frag toggles and concise action status. | M1.1–M1.4 APIs. Check real input, rejected orders, partial radio acknowledgements, cancellation and layout. | Complete — 22/22 affected suites; 121 command checks; eleven native captures |
-| **M1.6 — Persistence and integration** | Preserve individual equipment through outcomes/retry, migrate old saves, and combine the mechanics in Harbor. | M1.1–M1.5. Check empty inventories/casualties, migration, integrated encounter, affected regression gate and native rendering. | Pending |
+| **[M1.6 — Persistence and integration](18-2-1-6-persistence-and-integration.md)** | Preserve individual equipment through outcomes/retry, migrate old saves, and combine the mechanics in Harbor. | M1.1–M1.5. Check empty inventories/casualties, migration, integrated encounter, affected regression gate and native rendering. | Complete — 34/34 affected suites; 209 new checks; eight native captures |
 
 ## Tasks
 
@@ -32,12 +32,12 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Each section remains a buildable
   - [x] Recover the section 3 candidate onto `e180a118` while retaining sections 1–2 corrections.
   - [x] Complete the [section 3 review](18-2-1-3-nearby-reserve-backup.md), record current evidence and publish `codex/m1-section-3` at `57f7fa8`.
 - [x] 4. Recover, verify and publish [hasty positions, engineer upgrades and work-order integration](18-2-1-4-hasty-positions-and-upgrades.md) on `codex/m1-section-4` at `8b6adb8`.
-- [x] 5. Recover, verify and publish [compact controls, previews and action feedback](18-2-1-5-controls-and-feedback.md) on `codex/m1-section-5`.
-- [ ] 6. Recover persistence, run integration/native review, update evidence and publish completion.
+- [x] 5. Recover, verify and publish [compact controls, previews and action feedback](18-2-1-5-controls-and-feedback.md) on `codex/m1-section-5` at `ece3cd7`.
+- [x] 6. Implement [campaign inventory and migration](18-2-1-6-persistence-and-integration.md), run integrated Harbor/native review, update evidence and publish `codex/m1-section-6`.
 
 ## Behavior contract
 
-This table specifies the complete M1 target. Section 1 provides cooperation and shared actor ownership; section 2 adds payloads, optical smoke and their integration with covering fire. Section 3 supplies nearby reserve dispatch and assignment-safe return. Section 4 adds hasty positions and engineer upgrades. Section 5 exposes contextual controls; campaign inventory persistence remains section 6.
+This table specifies the implemented M1 contract. Section 1 provides cooperation and shared actor ownership; section 2 adds payloads, optical smoke and their integration with covering fire. Section 3 supplies nearby reserve dispatch and assignment-safe return. Section 4 adds hasty positions and engineer upgrades. Section 5 exposes contextual controls; section 6 preserves campaign inventory and verifies the combined encounter.
 
 | Area | M1 behavior |
 |---|---|
@@ -64,7 +64,7 @@ The strip shows stock and relevant capabilities. Throw previews use the executor
 
 ## Verification
 
-Use Godot 4.5.1. `python3 tools/check.py --group m1` selects the ten current M1 suites, including `test_m1_commands.gd` and `test_m1_command_lifecycle.gd` alongside the earlier cooperation, throw, optics, backup and field-work checks. `--group tactical` also checks affected existing executors. Section 6 adds persistence and integrated-defense suites; the complete slice's integrated native Harbor encounter belongs to M1.6.
+Use Godot 4.5.1. `python3 tools/check.py --group m1` selects thirteen M1 suites: the ten cooperation, throwable, optics, backup, field-work and command suites plus `test_m1_persistence.gd`, `test_m1_campaign_flow.gd` and `test_m1_defense.gd`. `--group tactical` also checks affected existing executors. The shared `m1_defense_fixture.gd` supplies both headless and native Harbor review; its initial forces/clocks are controlled while subsequent actions use normal executors. Campaign flow exercises actual Battle input, atlas switching, disk reload and defeat retry with isolated saves.
 
 Current checkpoint results are recorded below as the sections pass. Previous local-candidate results are historical only. A functional pass does not establish human balance, hardware performance or a completed mission.
 
@@ -80,6 +80,8 @@ Current checkpoint results are recorded below as the sections pass. Previous loc
 - **Completed M1.4 checkpoint:** [current evidence](../evidence/m1-04-checks.json) records **715 passing M1 checks**, including 151 field-position, 81 work-lifecycle and 16 work-order checks. The affected gate passes **39/40 suites**; its remaining Harbor crowd-spacing failure is identical on unchanged section 3 (`57f7fa8`). The obsolete visual-test fake was repaired without changing assertions or production animation. Identical final lifecycle/order suites produce 13 and five failures before their fixes and zero afterward. [Native review](../evidence/m1-04-native-review.json) contains three inspected Harbor captures of the same site progressing from survey to hasty to reinforced cover through real movement/work APIs. Contextual controls and full slice integration remain later sections.
 
 **Completed M1.5 checkpoint:** [current evidence](../evidence/m1-05-checks.json) records **22/22 selected suites passing**, including **836 M1 checks** and **121 command checks**. The identical 59-check lifecycle suite produces 14 failures on the recovered candidate and zero after correction, with no script errors. [Native evidence](../evidence/m1-05-native-review.json) records **399 checks and eleven inspected captures** with matching prelaunch/end/current hashes, including compact layouts, targeting/rejection feedback and actual digging/reinforcement. The existing input-suite shutdown warning is documented. Screenshots remain local; metadata and fixtures are published.
+
+**Completed M1.6 checkpoint:** [current evidence](../evidence/m1-06-checks.json) records **34/34 selected suites passing in 360 seconds**, with **1,045 M1 checks** across thirteen suites and no assertion/script failures. The three new suites contain 123 persistence, 29 real campaign-flow and 57 integrated-defense checks. All 315 recorded sources match before/after the gate. The continuous 33.73-second Harbor encounter includes an actual covering shot during simultaneous dig/frag preparation, physical smoke and reserve return, exact equipment accounting and one interrupted/resumed paid upgrade. [Native evidence](../evidence/m1-06-native-review.json) records **223 checks and eight inspected captures**, with all 103 source hashes matching prelaunch/process/end/postrun. The first native setup discrepancy was a legitimate casualty/pressure withdrawal; the corrected shared fixture aligns initial Harbor state without changing production behavior or acceptance thresholds. Screenshots remain local. Human balance, full-mission pacing, the inherited crowd-spacing failure and hardware performance remain separate gates.
 
 ## Bounds and remaining work
 

@@ -45,7 +45,7 @@ The [action catalogue](../tactical-action-catalogue.md) consolidates the domain 
 ## Tasks
 
 - [x] 1. M0 — Stabilize current decisions: establish action contracts, minimal timestamped observation records, quiet reloads, explicit-target precedence, urgent threat overrides, original-strength assessment and a complete work budget; add the first diagnostic scenarios. [Implementation and measured limits](18-1-1-m0-foundation.md) record shared admission across the audited planning paths; synchronous A* performance remains a separate follow-up.
-- [ ] 2. M1 — Deliver the infantry defense slice: coordinated cover/reload/movement, one fragmentation payload and optical smoke, a nearby backup request, and a hasty fighting position with an engineer upgrade. Integrate compact controls and resource persistence for the enabled features.
+- [x] 2. M1 — Deliver the infantry defense slice: coordinated cover/reload/movement, one fragmentation payload and optical smoke, a nearby backup request, and a hasty fighting position with an engineer upgrade. Compact controls and exact campaign inventory are implemented. [The six-section checkpoint](18-2-1-m1-infantry-defense.md) passes 34 selected suites and integrated native Harbor review; broader human/performance gates remain task 6.
 - [ ] 3. M2 — Give each existing domain a role: vehicle facing/short reposition and repair return, recon observation, AA protection, gunship support and corvette coastal support. Verify interruption and resumption across mixed forces.
 - [ ] 4. M3 — Expand coordinated operations: richer urban actions, specialist transfer, field-work coordination, memory-driven investigation, shared fire commitments and delegated sustainment.
 - [ ] 5. Evaluate Optional catalogue items individually after the earlier slices pass. Create deeper implementation plans only for the next selected increment.
@@ -90,4 +90,4 @@ Dependencies refer to the minimal contracts needed for a slice, not completion o
 
 ## Notes
 
-No implementation duration or hardware capacity is promised. M0 is delivered and verified; [M1](18-2-1-m1-infantry-defense.md) is being delivered in six checkpoints. The [section 5 controls checkpoint](18-2-1-5-controls-and-feedback.md) is on `codex/m1-section-5`, continuing published section 4 at `8b6adb8`. The broad catalogue records the intended design space; it is not an instruction to implement every item at once.
+No implementation duration or hardware capacity is promised. M0 and the six-section [M1 functional slice](18-2-1-m1-infantry-defense.md) are delivered and verified. The [section 6 checkpoint](18-2-1-6-persistence-and-integration.md) is on `codex/m1-section-6`, continuing published section 5 at `ece3cd7`; M2 domain roles are next in the plan. The broad catalogue records the intended design space; it is not an instruction to implement every item at once.

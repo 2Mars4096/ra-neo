@@ -47,12 +47,13 @@ Evacuation distinguishes delegated defense from [explicit hard hold](18-11-comma
 
 ## Tasks
 
-- [ ] 1. Define payload data, inventory reservations and authoritative throwable state through [18-1](18-1-action-framework-and-readiness.md) and [18-10](18-10-logistics-medical-and-recovery.md); preserve regional save validation for new inventory fields.
-  - [x] M1.2 tactical stock, actor/item claims and one-time release spending; stale canceled jobs cannot release a newer action's roles. Regional inventory persistence/migration remains M1.6.
+- [x] 1. Define the M1 payloads, inventory reservations and authoritative throwable state through [18-1](18-1-action-framework-and-readiness.md) and [18-10](18-10-logistics-medical-and-recovery.md); preserve regional save validation for their inventory fields.
+  - [x] M1.2 tactical stock, actor/item claims and one-time release spending; stale canceled jobs cannot release a newer action's roles.
+  - [x] M1.6 campaign version 3 preserves exact per-member stock, including empty/zero inventories and casualties, with version-1/2 and retry migration and real scene/disk lifecycle checks.
 - [ ] 2. Build GRN-01 in one exterior fixture, including canceled preparation, collision, valid blast exposure, enemy parity and a synchronized placeholder arc.
   - [x] M1.2 exterior frag behavior, group request selection and bounded opt-in defensive use; 145 throwable checks pass, with preparation/airborne presentation inspected.
 - [ ] 3. Add GRN-02 only with the 18-9 smoke query contract; connect it to a concrete covered movement and backup scenario.
-  - [x] M1.2 smoke/covering/visibility integration and inspected placeholder smoke; backup interaction follows with M1.3.
+  - [x] M1.2 smoke/covering/visibility integration and inspected placeholder smoke; M1.6 verifies smoke, backup and field work together in Harbor.
 - [ ] 4. Extend URB-01, URB-02 and URB-06, including concurrent entry/exit requests and a damaged-building response.
 - [ ] 5. Add GRN-03 and contested-entry/breach coordination after status effects and authored portals pass their own checks.
 - [ ] 6. Keep distraction, illumination, search and elevated-post expansions gated on the sensing and geometry systems they need.
@@ -75,4 +76,4 @@ Evacuation distinguishes delegated defense from [explicit hard hold](18-11-comma
 
 ## Notes
 
-Touchpoints: `Simulation`, `Throwables`, `Garrison`, `StructureDamage`, `Terrain`, inventories and pooled effects. M1.2 supplies placeholder payload meshes, a throw pose and smoke volumes independent of authoritative state. Its native review drives the simulation API; contextual controls follow in M1.5. Current implementation, regression sensitivity and native evidence are tracked in the section plan. The wider urban catalogue, human playtesting and performance acceptance remain open.
+Touchpoints: `Simulation`, `Throwables`, `Garrison`, `StructureDamage`, `Terrain`, inventories and pooled effects. M1.2 supplies placeholder payload meshes, a throw pose and smoke volumes independent of authoritative state. M1.5 supplies contextual controls; M1.6 adds campaign inventory and the combined native Harbor encounter. Current implementation, regression sensitivity and native evidence are tracked in the section plans. The wider urban catalogue, human playtesting and performance acceptance remain open.

@@ -3,7 +3,7 @@ extends RefCounted
 # Deployment checkpoints, outcomes, survivors and supply persist. Positions,
 # orders, structures and elapsed battle time are local to the current battle.
 const PATH := "user://regional_campaign.json"
-const VERSION := 2
+const VERSION := 3
 const Catalog := preload("res://scripts/region_catalog.gd")
 const MOBILE := ["rifle","atgm","engineer","tank","aa","drone","helo","boat"]
 const DAMAGE_FLAGS := ["mobility_kill","firepower_kill","optics_kill"]
@@ -69,9 +69,21 @@ static func valid(value:Variant,checkpoint:bool=false) -> bool:
 			if member.get("wound","") not in ["HEALTHY","LIGHT","SEVERE","KIA","CREW"]:return false
 			if not number(member.get("bleed_left",0),0,10000):return false
 			if not member.get("stable",false) is bool:return false
+			# Old records may omit M1 stock, but a present inventory is always
+			# authoritative. Malformed legacy stock cannot become a free refill.
+			if int(value.version)>=3 or member.has("throwables"):
+				if not valid_throwables(member.get("throwables")):return false
 		if int(value.version)>=2 and not record.members.is_empty() and not valid_roster_details(record):return false
 	if not checkpoint and not value.get("retry",{}) is Dictionary:return false
 	if not checkpoint and not value.get("retry",{}).is_empty() and not valid(value.retry,true):return false
+	return true
+
+static func valid_throwables(stock:Variant) -> bool:
+	if not stock is Dictionary or stock.size()>2:return false
+	for payload in stock:
+		if payload not in ["frag","smoke"]:return false
+		var amount:Variant=stock[payload]
+		if not number(amount,0,1) or float(amount)!=floorf(float(amount)):return false
 	return true
 
 static func valid_roster_details(record:Dictionary) -> bool:
@@ -97,11 +109,14 @@ static func valid_roster_details(record:Dictionary) -> bool:
 
 # Version 1 never supported handovers or magazine persistence. Its full casualty
 # slots identify the original holder; a lost holder gets no replacement launcher.
-# Version 2 inventories (including an empty one) are always authoritative.
+# Existing inventories (including an empty one) are always authoritative.
+# Version 3 adds carried grenades; legacy absence gets a one-time default.
 static func upgrade_state(value:Dictionary,checkpoint:bool=false) -> Dictionary:
 	var upgraded:Dictionary=value.duplicate(true)
-	if int(upgraded.version)==1:
+	var source_version:=int(upgraded.version)
+	if source_version==1:
 		var definitions:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://resources/units.json"))
+		definitions.merge(JSON.parse_string(FileAccess.get_file_as_string("res://resources/field_units.json")),true)
 		for record in upgraded.roster:
 			if record.members.is_empty():continue
 			record["assigned_hp"]=float(definitions[record.kind].hp)
@@ -114,7 +129,13 @@ static func upgrade_state(value:Dictionary,checkpoint:bool=false) -> Dictionary:
 				member["readiness_weapon"]="atgm" if launcher else "rifle"
 				member["magazines"]={"rifle":6,"atgm":1 if launcher else 0}
 				if launcher:record.equipment["launcher"]={"id":"launcher","holder":member.member_id}
-		upgraded.version=VERSION
+	if source_version<3:
+		for record in upgraded.roster:
+			for member in record.members:
+				if member.has("throwables"):continue
+				var carried:=1 if float(member.hp)>0 and member.wound not in ["SEVERE","KIA","CREW"] else 0
+				member["throwables"]={"frag":carried,"smoke":carried}
+	upgraded.version=VERSION
 	if not checkpoint and not upgraded.get("retry",{}).is_empty():upgraded.retry=upgrade_state(upgraded.retry,true)
 	return upgraded
 
@@ -272,6 +293,7 @@ func restore_unit(sim,unit:Dictionary,record:Dictionary) -> void:
 		member.hp=clampf(float(source.hp),0,float(member.max_hp))
 		member.wound=str(source.wound)
 		member["member_id"]=str(source.get("member_id","member_%d"%index))
+		member["throwables"]=source.get("throwables",{}).duplicate(true)
 		if source.has("magazines"):
 			member["magazines"]=source.magazines.duplicate(true)
 			member["readiness_weapon"]=str(source.readiness_weapon)
@@ -291,6 +313,7 @@ func snapshot(sim) -> Array:
 		if unit.kind not in MOBILE or unit.get("abandoned",false) or unit.has("crash"):continue
 		var record:Dictionary={"kind":str(unit.kind),"hp":float(unit.hp),"members":[],"damage":{}}
 		sim.Infantry.ensure_roster(unit)
+		sim.Throwables.ensure_unit(unit)
 		if not unit.members.is_empty():
 			record["assigned_hp"]=sim.Infantry.assigned_capacity(unit)
 			record["assigned_members"]=int(unit.assigned_members)
@@ -307,7 +330,7 @@ func snapshot(sim) -> Array:
 			var left:float=maxf(0,float(member.get("bleed_at",INF))-sim.time)
 			var magazines:={"rifle":clampi(sim.Infantry.magazine_rounds(member,"rifle"),0,6),"atgm":clampi(sim.Infantry.magazine_rounds(member,"atgm"),0,1)}
 			if not record.equipment.has("launcher") or record.equipment.launcher.holder!=member.member_id:magazines.atgm=0
-			record.members.append({"hp":float(member.hp),"wound":str(member.get("wound","HEALTHY")),"stable":bool(member.get("stable",false)),"bleed_left":left if is_finite(left) else 0.0,"member_id":str(member.member_id),"readiness_weapon":str(member.get("readiness_weapon","rifle")),"magazines":magazines})
+			record.members.append({"hp":float(member.hp),"wound":str(member.get("wound","HEALTHY")),"stable":bool(member.get("stable",false)),"bleed_left":left if is_finite(left) else 0.0,"member_id":str(member.member_id),"readiness_weapon":str(member.get("readiness_weapon","rifle")),"magazines":magazines,"throwables":member.throwables.duplicate(true)})
 		roster.append(record)
 	return roster
 

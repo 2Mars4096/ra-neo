@@ -45,9 +45,9 @@ The current increment deepens distinct battlefield decisions, carries expedition
 
 ## Current delivery focus
 
-### M1 infantry defense — section 5 checkpoint
+### M1 infantry defense — section 6 checkpoint
 
-M0 is complete at `5850504`. [M1](plans/18-2-1-m1-infantry-defense.md) divides delivery into coordinated cover/movement, finite grenades/smoke, reserve backup, hasty positions/upgrades, compact controls, and persistence/integration. Sections 1–3 are published at `d10682e`, `e180a118` and `57f7fa8`; section 4 is published at `8b6adb8`. The current delivery completes [section 5](plans/18-2-1-5-controls-and-feedback.md) on `codex/m1-section-5`, recovering the isolated `1f42d24` candidate while retaining the earlier executor corrections. Its three parts cover commands/cancellation, accurate previews/status, and input/native verification. Campaign inventory persistence and the combined Harbor encounter remain section 6.
+M0 is complete at `5850504`. [M1](plans/18-2-1-m1-infantry-defense.md) divides delivery into coordinated cover/movement, finite grenades/smoke, reserve backup, hasty positions/upgrades, compact controls, and persistence/integration. Sections 1–5 are published at `d10682e`, `e180a118`, `57f7fa8`, `8b6adb8` and `ece3cd7`. The current delivery completes [section 6](plans/18-2-1-6-persistence-and-integration.md) on `codex/m1-section-6`, retaining those reviewed executors. Its three parts cover exact campaign inventory, safe version-1/2 and retry migration, and a combined Harbor encounter with native review. Version 3 preserves spent or empty per-member stock through outcomes and restores the exact deployment stock on retry.
 
 The broader [Plan 18](plans/18-unit-tactical-autonomy.md) remains the roadmap. M2 domain roles and M3 urban/sustainment expansion follow this slice. Shared physical rules, player order authority and measured responsiveness remain requirements. Human balance and supported-hardware performance acceptance remain separate from functional checks.
 
@@ -55,7 +55,7 @@ The broader [Plan 18](plans/18-unit-tactical-autonomy.md) remains the roadmap. M
 
 The user explicitly accepts independent battlefields without adjacent boundaries. [Plan 17](plans/17-regional-operations.md) continues the map branch on `codex/regional-operations`: five selectable operations, functional local supply/dispatch objectives, joint shore-and-sea control, an operational campaign, walkable pass terrain and Windbreak Fields. The earlier [Plan 16](plans/16-regional-map.md) supplies the atlas and shared authoring foundation.
 
-Campaign saves contain deployment checkpoints and outcomes, including survivors, wounds, damage, parked incompatible units, supply and unique secured-location benefits. They do not resume a mid-battle world or simulate travel between maps. A defeat retry restores its deployment checkpoint; resetting the campaign requires atlas confirmation. This keeps the strategic layer small enough to support the tactical game.
+Campaign saves contain deployment checkpoints and outcomes, including survivors, wounds, damage, individual equipment, parked incompatible units, supply and unique secured-location benefits. They do not resume a mid-battle world or simulate travel between maps. A defeat retry restores its deployment checkpoint; resetting the campaign requires atlas confirmation. This keeps the strategic layer small enough to support the tactical game.
 
 The visual editor and deterministic compiler share runtime building profiles, asset footprints, coastlines and terrain data. Elevation authoring includes plateau/ramp controls and a level-building check. Native tests remain authoritative for profile-specific slope access. Expand further when a map introduces a useful decision and passes route, mission and visual checks; boundary continuity is not an acceptance requirement.
 

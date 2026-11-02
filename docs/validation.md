@@ -1,5 +1,31 @@
 # Validation evidence
 
+## M1 section 6 — Campaign persistence and integrated Harbor defense
+
+Verified with **Godot 4.5.1.stable.official.f62fdbde1**, Linux, on `codex/m1-section-6`, based on published section 5 (`ece3cd7`). The final selected gate passes **34/34 suites in approximately 360 seconds**, with no assertion or script errors. All **315** recorded source/test/configuration/asset files match before the gate, at completion and at evidence generation. [Functional evidence](evidence/m1-06-checks.json) retains the exact runner command, selection, outputs and hashes.
+
+| M1 coverage | Checks | Failures |
+|---|---:|---:|
+| Existing ten cooperation, throwable, optics, reserve, field-work and command suites | 836 | 0 |
+| Exact campaign inventory, migration, corruption and failed writes | 123 | 0 |
+| Actual Battle input, atlas, disk startup/outcome and retry lifecycle | 29 | 0 |
+| Continuous Harbor defense encounter | 57 | 0 |
+| **All thirteen M1 suites** | **1,045** | **0** |
+
+The other 21 selected suites cover campaign persistence/UI, action ownership/readiness, field operations, engineers, Harbor victory, combat, wounds, world damage, commands and input/interface behavior. This is an affected integration selection, not a full repository gate. The existing Harbor crowd-spacing failure documented under section 4 was not rerun or weakened. The synchronous navigation hitch remains open.
+
+Version-3 tests preserve exact per-member stock and key sets, empty inventories, casualty slots and parked units; cover version-1/2 and mixed-version retry migration including engineers; and verify corrupt primary/backup handling and actual write failures. Preparation cancellation spends nothing, release spends once, failed outcome replay retains its frozen snapshot, and retry restores the deployment checkpoint. The scene-flow suite uses real Battle input, atlas signals, scene reloads and isolated disk files. Its terminal outcomes are controlled to test lifecycle behavior; it does not establish mission balance.
+
+The shared Harbor fixture runs for **33.73 simulated seconds** on authored terrain. One section concurrently digs, prepares a frag and supplies a real covering shot. Accepted replacements preserve released payloads and pause/resume the same site. Smoke blocks the original optical frontage both ways and expires. The reserve moves normally, fires fifteen shots, earns **4.27 seconds** of useful service and returns physically to its original guard/assignment; the opposing section fires three shots. One site reaches reinforced cover after **one 50-supply payment**, including duplicate orders and paid interruption/resumption. Every member's inventory balances against authoritative release events, and **1,012 full ticks produce zero claim-ownership errors**.
+
+### Native review
+
+The actual Battle scene uses the same shared fixture. **Eight captures and 223 checks pass**, with all captures visually inspected at 1280 × 800 and normal/largest requested UI scale. The sequence shows concurrent roles, released frag with smoke preparation, active smoke and resumed work, returned reserve and hasty cover, paid reinforcement, interruption, and the final reinforced position. Command labels retain at least 12 pixels of measured margin after padding; command/roster bounds remain inside the viewport.
+
+[Native metadata](evidence/m1-06-native-review.json) records exact source/image hashes, per-capture state and execution provenance. All **103** recorded production/data/scene/asset and fixture/runner hashes match before launch, at process start/end and after the run; they also match the functional gate. The first native run correctly withdrew a reserve under pressure after two casualties because its populated-world IDs differed from the headless fixture. Both entry points now share populated Harbor initialization and normal engineer return fire; no health, geometry, work progress, service threshold or completion is forced. That initial failed run is retained as provenance rather than current acceptance.
+
+Screenshot files remain local. Software rendering and controlled encounters do not establish supported-hardware performance, human balance, full-mission pacing or long-session acceptance. Campaign saves remain operational checkpoints and outcomes; tactical actor claims, preparations, projectiles, smoke, requests and field works are transient.
+
 ## M1 section 5 — Contextual controls and feedback
 
 Verified with **Godot 4.5.1.stable.official.f62fdbde1**, Linux, on `codex/m1-section-5`, based on section 4 (published as `8b6adb8`, verified locally as `40b5f6d`) plus the isolated section 5 candidate delta (`1f42d24`). The final selected gate passes **22/22 suites in approximately 284 seconds**, with no assertion or script errors. [Current functional evidence](evidence/m1-05-checks.json) retains the exact runner command, all outputs, current source/test/configuration hashes and the matched negative control.

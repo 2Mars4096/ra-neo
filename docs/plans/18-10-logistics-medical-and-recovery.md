@@ -8,7 +8,7 @@
 
 [infantry.gd](../../scripts/infantry.gd) implements wounds, stabilization, dragging, carrying and treatment. [field_ops.gd](../../scripts/field_ops.gd) supplies aid/repair posts and obstacle/wreck clearing. [vehicle_damage.gd](../../scripts/vehicle_damage.gd) implements component repair and re-crewing/capture. [simulation.gd](../../scripts/simulation.gd) has finite AT missiles, nearby replenishment and enemy automatic return. Player automatic return and general finite reserve ammunition are absent.
 
-[regional_campaign.gd](../../scripts/regional_campaign.gd) now saves a version-2 roster: M0 adds assigned strength, stable member IDs, partial magazines and equipment ownership to the existing wounds, missiles, damage, supply and deployment checkpoints. Version-1 migration and specialist-loss/resource-conservation fixtures are part of [18-1-1](18-1-1-m0-foundation.md). Reload/action timers and tactical contacts remain transient. This plan owns later replenishment, service accounting and equipment migration, using [18-1](18-1-action-framework-and-readiness.md) reservations and [18-4](18-4-coordination-and-support-requests.md) requests. Domain plans own movement/execution.
+[regional_campaign.gd](../../scripts/regional_campaign.gd) saves a version-3 roster. M0 added assigned strength, stable member IDs, partial magazines and equipment ownership to wounds, missiles, damage, supply and deployment checkpoints. [M1.6](18-2-1-6-persistence-and-integration.md) adds exact per-member frag/smoke dictionaries, version-1/2 and retry migration, including engineers, with empty/casualty/parked stock and failed-write coverage. Present inventories remain authoritative; legacy defaults apply only to missing fields. Reload/action timers, tactical contacts, payloads, smoke and work remain transient. This plan owns later replenishment and service accounting, using [18-1](18-1-action-framework-and-readiness.md) reservations and [18-4](18-4-coordination-and-support-requests.md) requests. Domain plans own movement/execution.
 
 ## Action catalogue
 
@@ -61,8 +61,9 @@ Distinguish in-battle cancellation from ending the whole tactical simulation. Be
 - [ ] 1. Audit medical strength and capability checks; implement the minimal service/reservation contract with the action framework.
 - [ ] 2. Deliver opt-in AT resupply-and-return, capability-aware repair selection and safe service queues using current facilities.
 - [ ] 3. Integrate buddy-aid/drag/carry roles with covering and movement assignments; preserve the deferred evacuation scope.
-- [ ] 4. Add throwable replenishment and persistent equipment fields with transaction and migration tests before grenades enter a regional campaign.
-  - [x] M0 existing-roster magazine/equipment/assigned-strength persistence and version-1 migration. Throwable stock and replenishment remain M1.
+- [ ] 4. Extend durable equipment with explicit replenishment sources and transaction tests; campaign inventory is implemented, replenishment remains later scope.
+  - [x] M0 existing-roster magazine/equipment/assigned-strength persistence and version-1 migration.
+  - [x] M1.6 exact throwable stock, version-1/2 and retry migration, release/cancellation accounting, parked forces, backup recovery, failed writes and real campaign scene transitions. No grenade refill service is enabled.
 - [ ] 5. Extend re-crewing and optional delivery/transfer jobs after actual providers and stock exist.
 - [ ] 6. Evaluate recovery vehicles, personnel replacement and finite fuel/batteries as separately enabled expansion work.
 - [ ] 7. Pass [18-12](18-12-performance-and-validation.md) accounting, persistence and congestion gates; expose concise status through [18-11](18-11-command-interface-and-feedback.md).
@@ -84,4 +85,4 @@ Distinguish in-battle cancellation from ending the whole tactical simulation. Be
 
 ## Notes
 
-Baseline: `f5916e8`. Selection policies, transactions and migrations are planned; gameplay, saves and economy remain unchanged.
+Planning baseline: `f5916e8`. M0 readiness/equipment persistence and M1 carried-grenade persistence are implemented; their evidence is in the linked slice plans. Broader support selection, replenishment, transfers and service transactions remain planned.

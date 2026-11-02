@@ -44,7 +44,7 @@ Field-position jobs share actor/site claims and existing Resume/Cancel/clearing 
 
 ## Delegation, shared geometry and persistence
 
-Generalized engineer dispatch through [18-4 requests](18-4-coordination-and-support-requests.md) remains planned. M1.4 uses explicit work orders, reports waiting/working/unsafe states and releases claims on cancellation or loss. Existing defenses require explicit dismantling assignments. Contextual work buttons/hotkeys remain M1.5; campaign inventory and the combined defense encounter remain M1.6.
+Generalized engineer dispatch through [18-4 requests](18-4-coordination-and-support-requests.md) remains planned. M1.4 uses explicit work orders, reports waiting/working/unsafe states and releases claims on cancellation or loss. Existing defenses require explicit dismantling assignments. M1.5 supplies contextual work buttons/hotkeys; M1.6 verifies digging and one paid upgrade alongside covering, grenades, smoke and reserve return in Harbor. Tactical works stay outside the campaign save.
 
 Broader placement work must account for firing faces, friendly routes, work/casualty access and vehicle width. Cover, exposure, navigation, rendering and destruction must share geometry, with changes invalidating affected caches and reservations. Planned wall breaches must create actual traversal portals while retaining building ownership/destruction. Clearing and recovery must arbitrate one claim per wreck.
 
@@ -54,7 +54,7 @@ Regional saves preserve forces/outcomes, not tactical works. New inventories use
 
 - [ ] 1. Integrate the [18-1 action contract](18-1-action-framework-and-readiness.md), preserving payment, refund, clearing and progress invariants.
   - [x] M1.4 field positions use actor/site claims, accepted-order authority, retained progress and payment-aware refunds.
-- [x] 2. Deliver the M1.4 ENG-01 and staged ENG-02 subset on eligible open ground through explicit local work orders; contextual controls remain M1.5.
+- [x] 2. Deliver the M1.4 ENG-01 and staged ENG-02 subset on eligible open ground through explicit local work orders; contextual controls are supplied by M1.5.
 - [ ] 3. Connect useful placement and passage reservations for ENG-04 through ENG-07; share safe work/cover roles with [18-2 infantry](18-2-infantry-fire-and-movement.md).
 - [ ] 4. Integrate ENG-11, ENG-12 and ENG-19 into the request lifecycle; cover builder loss, replacement, interrupted access and competing jobs.
   - [x] Route existing field-position Resume/Cancel/dismantling through compatible workers and shared work ownership; generalized dispatch remains open.

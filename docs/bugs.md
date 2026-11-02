@@ -1,5 +1,11 @@
 # Bugs and failed approaches
 
+## M1 section 6 review — 2026-11-02
+
+- **Resolved:** campaign snapshots omitted carried grenades, so a fresh deployment initialized new stock instead of restoring the actual holders' remaining inventory. Version 3 now snapshots/restores exact independent per-member dictionaries through outcomes, parked units and retry. Explicit empty/zero stock stays empty; canceled preparation spends nothing and released equipment stays spent.
+- **Resolved:** version-1 roster migration read only `units.json`, which omitted engineers defined in `field_units.json`. Migration now merges both definition sources and upgrades legacy grenade stock in both the main roster and retry checkpoint. Present malformed inventory follows backup recovery or blocked-save behavior instead of being converted into initial stock. Focused checks cover engineer/casualty migration, idempotence, corruption and failed writes.
+- **Open, inherited:** the Harbor crowd-spacing failure recorded in section 4 and the synchronous navigation hitch remain separate follow-ups. Section 6 preserves their criteria; its controlled encounter does not establish full-mission balance, supported-hardware performance or long-session acceptance.
+
 ## M1 section 5 review — 2026-11-02
 
 - **Resolved:** targeting shortcuts bypassed the command strip's capability/stock checks, so rifle-only Upgrade, empty-stock Frag and Dig outside field operations could arm unusable actions. Buttons and shortcuts now share selection-level validation; target-specific readiness and geometry remain executor-owned.

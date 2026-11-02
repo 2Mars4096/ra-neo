@@ -1,19 +1,20 @@
 # Todo
 
-## Tactical expansion — M1 section 5
+## Tactical expansion — M1 section 6 complete
 
-M0 is complete at `5850504`. [M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) has six sections: coordinated movement, grenades/smoke, reserve backup, field positions, controls, and persistence/integration. Sections 1–3 are published at `d10682e`, `e180a118` and `57f7fa8`. Section 4 is published at `8b6adb8`; section 5 completes the controls checkpoint on its own branch. The current `codex/m1-section-5` work adds [contextual controls, previews and feedback](plans/18-2-1-5-controls-and-feedback.md) over completed section 4 (`8b6adb8`). The selected gate passes **22/22 suites**, including **836 M1 checks**, and the native review passes **399 checks across eleven inspected captures**. The inherited Harbor crowd-spacing failure recorded in section 4 remains open and was not rerun here. Section 6 persistence/integration and the existing CPU hitch follow-up remain open.
+M0 is complete at `5850504`. All six [M1 infantry-defense sections](plans/18-2-1-m1-infantry-defense.md) are functionally complete. Sections 1–5 are published at `d10682e`, `e180a118`, `57f7fa8`, `8b6adb8` and `ece3cd7`; `codex/m1-section-6` adds [campaign inventory and integrated Harbor verification](plans/18-2-1-6-persistence-and-integration.md) over that reviewed baseline. The final selected gate passes **34/34 suites**, including **1,045 M1 checks**, and native review passes **223 checks across eight inspected captures** with stable source hashes. Version 3 retains exact carried stock through outcomes and retry, migrates old saves safely and leaves tactical effects local to the battle. The inherited Harbor crowd-spacing failure and CPU hitch remain open, as do human balance and supported-hardware acceptance. M2 domain roles are the next planned milestone.
 
 - [ ] [18: Tactical actions and capable individual units](plans/18-unit-tactical-autonomy.md) — master milestones, shared contracts and acceptance gates.
   - [ ] [18-1: Action framework and readiness](plans/18-1-action-framework-and-readiness.md).
     - [x] [18-1-1: M0 tactical foundation](plans/18-1-1-m0-foundation.md) — implemented; 58/58 integration suites, native review and current-build CPU evidence recorded.
   - [ ] [18-2: Infantry fire and movement](plans/18-2-infantry-fire-and-movement.md).
-    - [ ] [18-2-1: M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) — sections 1–5 complete; M1.6 pending.
+    - [x] [18-2-1: M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) — all six functional sections complete; broader human/performance gates remain open.
       - [x] [18-2-1-1: Coordinated cover and movement](plans/18-2-1-1-coordinated-cover-and-movement.md) — reviewed combat integration, physical shelter/role cleanup and player-order authority; 17/17 affected suites pass.
       - [x] [18-2-1-2: Grenades and smoke](plans/18-2-1-2-grenades-and-smoke.md) — finite stock, preparation/release, swept flight, exposed blast and optical smoke; 22/22 suites and three inspected native captures pass.
       - [x] [18-2-1-3: Nearby reserve backup](plans/18-2-1-3-nearby-reserve-backup.md) — delegation, exclusive leases, actual useful support and assignment-safe return; 29/29 affected suites pass, including 125 support-request and 62 lifecycle checks.
       - [x] [18-2-1-4: Hasty positions and engineer upgrades](plans/18-2-1-4-hasty-positions-and-upgrades.md) — 248 field-position checks pass; interrupted work, paid upgrades, ownership and native stage presentation verified.
       - [x] [18-2-1-5: Controls and feedback](plans/18-2-1-5-controls-and-feedback.md) — contextual commands, shared previews, partial radio acknowledgements and work status; 121 command checks and eleven inspected native captures.
+      - [x] [18-2-1-6: Persistence and integration](plans/18-2-1-6-persistence-and-integration.md) — v3 carried inventory, safe legacy/retry migration and continuous Harbor defense; 209 new checks, 34/34 selected suites and eight inspected native captures.
   - [ ] [18-3: Grenades and urban actions](plans/18-3-infantry-grenades-and-urban-actions.md).
   - [ ] [18-4: Coordination and support requests](plans/18-4-coordination-and-support-requests.md).
   - [ ] [18-5: Engineering and field fortifications](plans/18-5-engineering-and-field-fortifications.md).

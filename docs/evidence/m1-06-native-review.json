@@ -1,0 +1,887 @@
+{
+  "checkpoint": "M1 section 6 persistence and integration",
+  "base_commit": "ece3cd7e4eb2beb5326cde737182b77084148e40",
+  "branch": "codex/m1-section-6",
+  "engine": "4.5.1-stable (official)",
+  "adapter": "llvmpipe (LLVM 20.1.2, 256 bits)",
+  "renderer": "OpenGL Compatibility",
+  "execution": {
+    "command": "/tmp/ra-neo-m1-runtime/Godot_v4.5.1-stable_linux.x86_64 --path . --rendering-method gl_compatibility --audio-driver Dummy --script tests/m1_section6_native_review.gd -- --output=res://artifacts/m1-section6-native-verified",
+    "display": ":116",
+    "XDG_DATA_HOME": "/tmp/ra-m1-section6-native-verified/data",
+    "XDG_CONFIG_HOME": "/tmp/ra-m1-section6-native-verified/config",
+    "XDG_CACHE_HOME": "/tmp/ra-m1-section6-native-verified/cache",
+    "process_launch_utc": "2026-11-02T20:19:49.958322+00:00",
+    "process_finish_utc": "2026-11-02T20:20:58.834772+00:00",
+    "exit_code": 0,
+    "source_count": 103,
+    "all_sources_precede_process_launch": true,
+    "prelaunch_process_start_process_end_and_postrun_hashes_match": true,
+    "prelaunch_snapshot_sha256": "cffc8bf003313881747fcc1acfb106f0a646d47c85f4de65d305a2c59cf71371",
+    "runtime_sha256": "db07cae7de644278a1884d4552bdf2bca3f5d30131b18faf3a0c4d730080b199",
+    "log_sha256": "827e183d239cf5c4ed7453c32359a04f6535711e0c50a6832ace216cd87abda6",
+    "raw_metadata_sha256": "6f7e1d4cb3b0c98b7e5d86ae77039868390fd7e0ce6e350b38551e10fe86031a",
+    "completion": "M1 SECTION 6 NATIVE: 8 captures, 223 checks, 0 failures",
+    "local_log_path": "artifacts/m1-section6-native-verified/process.log",
+    "warnings": [
+      "Virtual display driver cannot change V-Sync mode."
+    ]
+  },
+  "checks": 223,
+  "failures": 0,
+  "captures_inspected": 8,
+  "minimum_label_margin_after_16px_padding": 12.0,
+  "scope": [
+    "One continuous deterministic local encounter in the actual Battle scene on authored Harbor terrain; campaign persistence disabled for this visual review.",
+    "Shared fixture begins from the same populated Harbor world as Battle, preserves monotonically assigned unit IDs, and replaces only the initial forces and strategic clocks.",
+    "Ordinary command APIs and full 30 Hz simulation ticks produce concurrent digging, automatic frag preparation and a real covering shot in one section.",
+    "Accepted replacements cancel an unspent smoke preparation, preserve already released frag and smoke payloads, and resume the same physical work site.",
+    "Visible native smoke agrees with forward and reverse optical query obstruction, and the lane becomes clear when its finite world effect expires.",
+    "The delegated reserve physically approaches, fires, delivers a sustained useful interval, returns to its original assignment and releases its temporary ownership.",
+    "The same site progresses through survey, hasty cover and reinforcement; duplicate orders and paid pause/resume charge only 50 supply.",
+    "All eight captures are inspected at the minimum 1280 x 800 physical window, including requested UI scale 1.5 for active reinforcement, interruption and completion. Command bounds, roster clearance and actual bold-font label fit are checked.",
+    "Per-capture member inventory and support state are copied before the next phase, preserving the historical state of each screenshot. Actual Battle input, atlas, save/reload and retry inventory transitions are covered separately by test_m1_campaign_flow.gd."
+  ],
+  "visual_findings": [
+    "The defender, engineer, reserve, opposing section and work site remain in the same Harbor clearing across all eight captures; reserve movement, casualty remains and progressing work are visible.",
+    "The selected section shows Digging with 17 seconds remaining during concurrent roles, then Preparing smoke grenade after its work order is replaced. The frag label drops from 3 to 2 only after release.",
+    "The cloud renders seven puffs over its actual optical volume while work resumes; the same frontage tests blocked in both directions. The hasty site completes while the smoke is still visible.",
+    "At requested UI scale 1.5, the engineer shows Reinforcing with 8 seconds remaining. During Hold, its actor claim is released and the visible hasty structure remains while paid progress stays unchanged for 0.6 simulated seconds.",
+    "Final capture shows the reinforced structure, returned reserve, clear expired smoke lane and 950 remaining supply. Compact commands and group roster remain within the viewport without overlapping."
+  ],
+  "encounter_metrics": {
+    "claim_errors": [],
+    "claim_samples": 1012,
+    "combined_roles": true,
+    "commands": {
+      "backup": 1,
+      "cancelled_smoke": 1,
+      "defensive": 1,
+      "dig": 1,
+      "duplicate_upgrade": 1,
+      "reserve": 1,
+      "resume": 1,
+      "resume_upgrade": 1,
+      "smoke": 1,
+      "upgrade": 1
+    },
+    "covering_shots": 1,
+    "enemy_shots": 3,
+    "frag_bursts": 1,
+    "frag_releases": 1,
+    "max_service": 4.26666666666665,
+    "opening_shots": 10,
+    "released_members": {
+      "63:member_1:frag": 1,
+      "63:member_2:smoke": 1
+    },
+    "reserve_delivered": true,
+    "reserve_moved": true,
+    "reserve_shots": 15,
+    "same_site": true,
+    "smoke_cancel_unspent": true,
+    "smoke_deployed": 1,
+    "smoke_released_after_replacement": true,
+    "smoke_releases": 1,
+    "worker_moved": true
+  },
+  "simulation_seconds": 33.733333333334,
+  "initial_setup_correction": {
+    "local_metadata_path": "artifacts/m1-section6-native-initial/review.json",
+    "metadata_sha256": "56a962b17ec5479c4de00aaa660395cdb4b3849a7342b82dbef032509526b35a",
+    "captures": 4,
+    "failed_checks": 1,
+    "failed_checkpoint": "Successful sustained reserve delivery and return did not complete in the first native setup.",
+    "diagnosis": "The earlier headless fixture began with fresh unit IDs while native Battle retained populated Harbor IDs. ID-staggered defensive review changed the combat sequence; the reserve withdrew under ordinary casualty pressure before completing service.",
+    "correction": "The shared fixture now constructs the same populated Harbor world before replacing forces, and permits the requesting engineer to provide normal protective fire when the opposing section is released. No production mechanics, health, work progress, supply or success thresholds were changed to obtain the result.",
+    "snapshot_correction": "The native wrapper also deep-copies historical member inventories and support dictionaries so later ticks cannot rewrite earlier capture metadata.",
+    "note": "Retained locally as a setup diagnostic. This is not an identical-test negative control or evidence of a production support regression."
+  },
+  "source_sha256": {
+    "assets/materials/construction-atlas.png": "066e7a07d1352567b24f57a01d91d41bb19c30d449c58647a280cc3f09254820",
+    "assets/materials/diorama-atlas.png": "6ac77efae22db63aa1c5a851d096864351e430f785941b12568382b9569839c9",
+    "assets/ui/portraits/aa.png": "5eb52d6d46bd9e5a3df6e02a82fd1845c298ab456f0bd980f7723dc29598267d",
+    "assets/ui/portraits/atgm.png": "e6bb830c3db47be458ae1446a362c56c84ceb45e211eb5943b99ee367cf7f535",
+    "assets/ui/portraits/boat.png": "be8c3f7d46c606a36cb5bb48304aa7ed51af10d28e7506b8da779643645fab2a",
+    "assets/ui/portraits/drone.png": "80f4b4762330302dbec4df75cd7133d2b430cb1817eaa0855155008a0188f447",
+    "assets/ui/portraits/engineer.png": "e560453f11fe2de319f500470b130be1cc2875e18f5930ddded7697ee12f3132",
+    "assets/ui/portraits/harvester.png": "5a58c035683411ba9bf1b777431ffdcceaaf1864595c06013aa3a569388645e4",
+    "assets/ui/portraits/helo.png": "5fb9aab2bd667adcd7be1165fc341703c1012de3409c6a562f4dabfdf608bd03",
+    "assets/ui/portraits/rifle.png": "40dd6819f1d6e78182fb9629851c34cd7e0342c034950cf5ddaf24fcbbbdf3ab",
+    "assets/ui/portraits/tank.png": "8d0a926ddf5974e29ce712b4b6c6291f1e664dfe56e6d78d8da02212c79e1c4a",
+    "project.godot": "51dcb1de57498bc4f2b737e08516e644476f51d4d7b55a60667fc82e5d139ebc",
+    "resources/assets_battlefield.json": "2ddfe1435d3ea7b6b2a3916be3f350004b62c3a257548a77e74dc1cd8874e831",
+    "resources/assets_city.json": "86dc699114f81820e65e580608209d434e5997788b1910bca896fca56a1fb2af",
+    "resources/assets_rural.json": "5388300b48a0e82ccb6849316f5fa3ffff17b1ece83430397ad511ef872e253c",
+    "resources/assets_street.json": "5b6093a7495ee181327234fcdde42bcdbd2a2cf363df4b035c3618a13ebd2561",
+    "resources/assets_waterfront.json": "29e4d7e6c5387aac4bec73e5c8398fa0bb93888a91c85a808641d548bdc63818",
+    "resources/city_building_geometry.json": "2cf3f23d7f83b1bbb55bbb4c3aedfe7058ab2462daaee169f2e9e636c6564921",
+    "resources/classic_units.json": "7fff5156c15f84d91344c5d7e5f709e37cb7a186e2ccde5b8e7e039d574a53a2",
+    "resources/combat.json": "3a76b503ffaf967bbad7e823a914729f17f53549d3aae7e7154a9c4f602da8b2",
+    "resources/environment_catalog.json": "7d6dbd8dd5e4e1cd28c206041e3bfd69e9ce39ab1310d0219515eb8c91d342e9",
+    "resources/field_units.json": "69f5969a62d6ceccff3745a9f15c2d3033d8b2c150a43d0177c5bc6bf5cc620e",
+    "resources/maps/black_sea_harbor.json": "8370fa0246f893aa14e449e09e95ed121d5564d442c68c54677356fab6171464",
+    "resources/maps/blueprints/bayhead_rail_valley.json": "b20d47b5d1c0b824bab5c5752720c850e27cdddd677644b38251d93dfacf359d",
+    "resources/maps/blueprints/limestone_pass.json": "fcb025440ae001f58baf2363c7da07420c28bdc7d9c06942b0e4b5e5e57c5011",
+    "resources/maps/blueprints/south_inlet.json": "05387b288760c6ca81db4c115334d438541b46d3ec496c0af2869e5dd52d3665",
+    "resources/maps/blueprints/windbreak_fields.json": "553f8981fe885badf1a3c6e2005933b7ee83a7276c226621f3ef6053caf9cf8e",
+    "resources/maps/region/bayhead_rail_valley.json": "00100f978b30d0edaf6d6e95bd0142fba941a32a4d1709a498a8a0cfb3f9166a",
+    "resources/maps/region/limestone_pass.json": "daf38d1b1772938a620aa26b9c2ab25bb75ee6acd0318771606f880bb3f80f51",
+    "resources/maps/region/south_inlet.json": "950e70d1d4390bbd8748c93012b0eb1f50c9962ee0a726403a9db19e0abfe31a",
+    "resources/maps/region/windbreak_fields.json": "6a4eefbfc2bee80c471a7d95f66f97ee0cad19d990ae6b4a6c9a16579290e157",
+    "resources/regions/black_sea_region.json": "93f5055b40c192cde5961b9bdb9e1660bf1b1f7efd02ea72067bc1ee682c70f8",
+    "resources/scenarios.json": "49f850989dd52b72176cb629a7c88ed674736ac3222d4d3d794a75707a0d8bcd",
+    "resources/units.json": "60436807c5afa4ee4e60a4e3ce2524541f8506a0c8104c37e0920f2dadfba0e4",
+    "scenes/main.tscn": "08506f4bf248bf290c2818da78f6307c7b6bc68fa4cfccded8ab1df6428f1aeb",
+    "scripts/architectural_block.gd": "0c43ee06cf300de3993a24ae10bf294cbe8f6f74006ab71280e9cdf3ef4236a6",
+    "scripts/asset_library.gd": "c5cf9674e19a00983d9ea31df93654d2d8f9d3148a5d73f6ae4c1f6104358d0a",
+    "scripts/assets_battlefield.gd": "24e3cd13b76e01c60c89df1ee2e46d107f26c686f826ed248715f80fe95e2857",
+    "scripts/assets_city.gd": "dcb342a860cda86e463248c6979c393338a49d852abe9c1a016425504ea904dc",
+    "scripts/assets_existing.gd": "472caa82dfed040b7536c996c8ce19dffcc382e5c28da106c7086f328b5d84cf",
+    "scripts/assets_rural.gd": "d067d5725f6186a97e1eb8cbaf740073a1e0cdc71862d51df2953a41ae9e85ca",
+    "scripts/assets_street.gd": "a802dc6f69fa30a532af71ddd647d19bbe96b1772cead69b50fd7996cd4e8bee",
+    "scripts/assets_waterfront.gd": "a2f5b8c01659192f978d2e95013f209899c872b5533e89caafe22a52c142c9f7",
+    "scripts/audio_fx.gd": "d38bc7066f641c87d2e6b8656e7060def6708750e507d01896941155a97f385c",
+    "scripts/battle.gd": "14f7ecc7a0ae1993f87b1c7053144373fc3147c4ccc36bc0c62fd9da396c86dd",
+    "scripts/battle_menu.gd": "c8ed1a80c2dbdd96bd517e866ddc70601bb0590adaa28e51393331dd30fe56ee",
+    "scripts/battlefield_interface.gd": "f14fbbfd6748efd86f50d91e2d9ac2cb521bdca348e0660112a9bd556fdc9a65",
+    "scripts/city_building_geometry.gd": "548977fe199c78c6cb733a77cd5bd96f82ac650f6b1ad16a580cabc5d84c5313",
+    "scripts/city_buildings.gd": "ffef8109a99fb17ca779ca56eb13bae3b233f4a3aadeeecce82c0f01b90cae44",
+    "scripts/city_buildings_urban.gd": "7ebfa50a2036c4f9b50458700cd32cfe8d5c878f66793364e9bc9fe12b1f230a",
+    "scripts/city_buildings_works.gd": "78fab233950ece9790dd1dd01571aa3c85cf4bb3ed359097eea6346c0187ed46",
+    "scripts/classic.gd": "4bf60e6587aa46a44d1727aed74d2905fa19cd34fcc83eed0541d8e9d0d9b7f0",
+    "scripts/cover_behavior.gd": "e5d775bb721dad6bfe57270498679b84bbf6fc5edec62b9efbb3ae6901111836",
+    "scripts/effects.gd": "b5aaac0f1ae33756dbf08bb239b801177928c7f4be72fbe17070c280b1fa826e",
+    "scripts/effects_explosions.gd": "fc44db4175a7d47b93725bea81b022a10295b0f3d302ab1abe082c17788ccd79",
+    "scripts/effects_remains.gd": "a8b2c624f068713e5386995d0c1c2fb2cb97988f871b7e1edc15d53e7677d8c6",
+    "scripts/elevation.gd": "d98c501506b01abf4c89aeaba9bcb3ea2b50ffbd085e353cdc91b74fc4c046d9",
+    "scripts/environment_detail.gd": "3d617f2f51cc8d698d31002e3c68e17d86e375ba8a45e372c426a50751fefcef",
+    "scripts/environment_palette.gd": "4c088cbd1fb74e19f943d8b66da6b129259537d0ddfa8aaaf2fd9ab5c5803c46",
+    "scripts/environment_variants.gd": "13a12a5de1746ea239a240bf99cf9d27f0141b79fad50cce3c711160c77d4bb8",
+    "scripts/field_models.gd": "5b88eb181fdec7a3d7a30401533fac23224d771f2bcb1fe36307bb7c1648652f",
+    "scripts/field_ops.gd": "8e846fb0abf92a860a79b4def38c13f34bd317fd339a9973336d7d590d444dd1",
+    "scripts/field_positions.gd": "4b6237afd188795e4a55521894d21b6fad17ad7d269d3233ab42cf1735aed51a",
+    "scripts/foliage_mesh.gd": "6a325a12052b3e179625dbe02d621217f6b13caf9b6e677e92d3f614044e115e",
+    "scripts/garrison.gd": "d14f275d0219fa23aeb15daefe609e7dfce83589f59256978cdb000f165669e0",
+    "scripts/harbor_props.gd": "eb52ce64845b98d3572ac6f1e7b776e77e1f198e89cd50e17e15e72867bcfd27",
+    "scripts/hud.gd": "63efbd89eed30219708d15e964a454658e66f87c2bed12f54463b85d089dc40e",
+    "scripts/infantry.gd": "720fa62541056525c9f185b68f9633803a74a26b3ed746dfb8ee058cf79c64dd",
+    "scripts/infantry_coordination.gd": "1008c19c48ad6fde76b063214b9788db662eaaae763e1f65a244d9708f1476d3",
+    "scripts/minimap_background.gd": "0942c4736046ffe4c81f6e77c14307d339a0e533c3843938d07132058956a6b6",
+    "scripts/notice_feed.gd": "5b2f0e7774cfe6c56e51be1431fac5ae7d2e611ff4da0d69fad18421b9c9a384",
+    "scripts/operation_rules.gd": "1264872eb266cda6ab3d68cd5715c508a56b0aefcf36d5182dc0a537e2703d66",
+    "scripts/parcel_kit.gd": "badc0cfd602d5360dd64cfb8350f1cf4deeb8bcd544459096b6af42c30820bf6",
+    "scripts/player_settings.gd": "e4d6108ca503c6a259d5e8e5437271c59717e6edad3071116104e84a5ef8b8a7",
+    "scripts/region_catalog.gd": "96dee14658c66878e7d96787ac89e03ddc3243490bc7f52a91345d449164c9ea",
+    "scripts/regional_campaign.gd": "072ced31ccc364beee7a5cf37334fe86bc65953348df5a8d67d88aea94fe6947",
+    "scripts/regional_map.gd": "5a1a653f8d17c9e707197e618a773454b3a39ea9a7783694dff34eaf3159e450",
+    "scripts/release_info.gd": "89bcd9adc784f6f388a52ec1b71e2618bc8aca57e56cd953dbdb0a4ebaf32d5e",
+    "scripts/road_network.gd": "21b56494f9026bb1feb917aa773cc3d4a3e31217a9c62b70828900b1526e81ec",
+    "scripts/roadside_props.gd": "b764996b77b38c34060dd82d1a9659aaf4407035592f100c73091aeb794b0cc7",
+    "scripts/ruined_building.gd": "f4d0cf30ab7c7c90efe1832a08287f091e1270a75c30db1439d0454099cf85fd",
+    "scripts/scenario_catalog.gd": "49be849040bdd2eaf061248405c0f271ffdca1d130ddb29d08a28f24a86a08f3",
+    "scripts/section_recovery.gd": "152b61342d5c0e55a27f4c31e4bdb7019290e412646dbf2947a444f1c9404e9e",
+    "scripts/simulation.gd": "8d1a55f156722835ce4cda49c4fadde0a9f6e619f2f27b9f41f1ed65c3b233f2",
+    "scripts/structure_damage.gd": "72e27efd185b081cffc4c3cc4705893b61d042b9771213ed649ddcd82e454d3d",
+    "scripts/support_requests.gd": "816439bdbb5fd1f3640707db3798f663b3cca03119c34e0209efa59a04c3b7a9",
+    "scripts/tactical_actions.gd": "101cdec1195a07747adaff76fc52aae3e9bd820da50f7a6d6a4e1403f2dc288a",
+    "scripts/tactical_context.gd": "e38058a64627d5c442818db1e6ac751f1fcbb1998ca7e1eed7892b9729aeb403",
+    "scripts/tactical_director.gd": "b7dc536bf55a9fd41af17927ddf3e20e69ba7ddaa8b5ef9ce6c3309f8f337d3e",
+    "scripts/tactical_effects.gd": "033f3befe29d91518ace5677dee44f2cb480775f1f85c6c541cd33eff9bd3994",
+    "scripts/tactical_interface.gd": "556fa0b2a1148f2c8942d1c4548e671ad3308845bfb19165bc097c0a6e69ee53",
+    "scripts/tactical_navigation.gd": "2cc0b7325aed3efc03445a05fecd847bbabc80010dfe27468e43218915a92781",
+    "scripts/tactical_work_budget.gd": "cb647ecc1212ff44f173c1a96235fd032e9469e213aff09aa29c7d93494cf59e",
+    "scripts/terrain.gd": "003f111634ce6aca0b4052f5365e94ea3dc3a2c483117f9d85968f170c7a3b3d",
+    "scripts/throwables.gd": "1d6299afea0751dbf55f900c2df97a9da2558b6dc49ae826b133449a2b55e373",
+    "scripts/unit_animation.gd": "f044154b43936061d2d8e433ec7bc652159713b990ece1f4382d640785acc7d2",
+    "scripts/unit_models.gd": "2df525f123b86234872a48fa5dbb82b0d0accf4222a9194e868a103f28f43a0d",
+    "scripts/vehicle_damage.gd": "efd198884a6e41a6f4dc720c1aa03fa3b5441900c1f0b9f4951724708c15eb51",
+    "scripts/visuals.gd": "28957d7cb64d8601b2a2fd0f195628de239084af0f535f452dcd22842818ec3d",
+    "scripts/weather.gd": "47642b37469ecb49490606a29d35015ff33a5bb2aa6c650dd01f812696e2741a",
+    "scripts/weather_visuals.gd": "dea9acb98df54e291fdc9d96af6b138137c73ac0dd850a9807f8110e1474abf2",
+    "tests/m1_defense_fixture.gd": "8515cddde7fc838a1129a72ac9e4a34ce7d0cee9b010bf2063a45b2145bc8714",
+    "tests/m1_section6_native_review.gd": "e4f43820fbef1ce90d4c756954caf5f3b2bbe3dcff303f06dbdeda0e774e5e18"
+  },
+  "provenance": {
+    "source_count": 103,
+    "source_scope": "All .gd scripts, .json resource data, .tscn scenes, PNG assets, shader sources, project.godot, the shared Harbor fixture and the native runner.",
+    "prelaunch_snapshot_local_path": "artifacts/m1-section6-native-verified/prelaunch-sources.json",
+    "prelaunch_snapshot_sha256": "cffc8bf003313881747fcc1acfb106f0a646d47c85f4de65d305a2c59cf71371",
+    "prelaunch_recorded_at_utc": "2026-11-02T20:19:49.957581+00:00",
+    "process_launch_utc": "2026-11-02T20:19:49.958322+00:00",
+    "latest_source_modification_utc": "2026-11-02T20:19:07.255375+00:00",
+    "all_sources_precede_process_launch": true,
+    "prelaunch_process_start_process_end_postrun_and_current_hashes_match": true,
+    "raw_metadata_local_path": "artifacts/m1-section6-native-verified/review.json",
+    "raw_metadata_sha256": "6f7e1d4cb3b0c98b7e5d86ae77039868390fd7e0ce6e350b38551e10fe86031a",
+    "note": "Final eight-capture run launched after the fixture and runner edits were complete. All 103 recorded source hashes are identical before launch, at process start/end, immediately afterward and when this evidence file was generated."
+  },
+  "captures": [
+    {
+      "name": "01-harbor-defense-ready",
+      "local_path": "artifacts/m1-section6-native-verified/01-harbor-defense-ready.jpg",
+      "image_sha256": "9e47a08fed1aaf418ff7504eea845cfbbed6aab59da83204edce20d3706f8561",
+      "image_bytes": 245857,
+      "published": false,
+      "visually_inspected": true,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1280.0, 800.0)",
+      "hud_points": "(1280.0, 800.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 0.0,
+      "phase": "setup",
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "site": {
+        "build_left": null,
+        "build_paused": null,
+        "engineer_id": null,
+        "id": null,
+        "kind": null,
+        "paid_cost": null,
+        "pos": null,
+        "position_progress": null,
+        "position_stage": null,
+        "position_total": null
+      },
+      "request_phase": null,
+      "request_reason": null,
+      "request_service_seconds": null,
+      "preparations": 0,
+      "released_projectiles": 0,
+      "smoke_volumes": 0,
+      "visible_smoke_puffs": 0,
+      "frontage_clear_forward": true,
+      "frontage_clear_reverse": true,
+      "supply": 1000.0,
+      "selected_activity": [
+        {
+          "role": "defender",
+          "id": 63,
+          "status": "",
+          "reason": "Following orders",
+          "frag": 3,
+          "smoke": 3
+        },
+        {
+          "role": "engineer",
+          "id": 64,
+          "status": "",
+          "reason": "Following orders",
+          "frag": 3,
+          "smoke": 3
+        },
+        {
+          "role": "reserve",
+          "id": 65,
+          "status": "",
+          "reason": "Following orders",
+          "frag": 3,
+          "smoke": 3
+        }
+      ],
+      "defender_member_stock": [
+        {
+          "id": "member_0",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_1",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_2",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        }
+      ]
+    },
+    {
+      "name": "02-cover-throw-and-dig",
+      "local_path": "artifacts/m1-section6-native-verified/02-cover-throw-and-dig.jpg",
+      "image_sha256": "76976cbf046f961003e5e34bec607bbd06d3ebcfc96b8b4345cb20cd70396dc1",
+      "image_bytes": 243757,
+      "published": false,
+      "visually_inspected": true,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1280.0, 800.0)",
+      "hud_points": "(1280.0, 800.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 2.06666666666667,
+      "phase": "defense",
+      "command_count": 7,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "site": {
+        "build_left": 16.1999999999999,
+        "build_paused": false,
+        "engineer_id": 63,
+        "id": 67,
+        "kind": "fighting_trench",
+        "paid_cost": 0.0,
+        "pos": "(230.0, 660.0)",
+        "position_progress": 1.80000000000009,
+        "position_stage": 0,
+        "position_total": 18.0
+      },
+      "request_phase": "en_route",
+      "request_reason": "Backup en route",
+      "request_service_seconds": 0.0,
+      "preparations": 1,
+      "released_projectiles": 0,
+      "smoke_volumes": 0,
+      "visible_smoke_puffs": 0,
+      "frontage_clear_forward": true,
+      "frontage_clear_reverse": true,
+      "supply": 1000.0,
+      "selected_activity": [
+        {
+          "role": "defender",
+          "id": 63,
+          "status": "Digging · 17s remaining",
+          "reason": "Preparing position",
+          "frag": 3,
+          "smoke": 3
+        }
+      ],
+      "defender_member_stock": [
+        {
+          "id": "member_0",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": "dig",
+          "cover_for": null
+        },
+        {
+          "id": "member_1",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": "throw",
+          "cover_for": null
+        },
+        {
+          "id": "member_2",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": "member_1"
+        }
+      ]
+    },
+    {
+      "name": "03-released-frag-smoke-preparation",
+      "local_path": "artifacts/m1-section6-native-verified/03-released-frag-smoke-preparation.jpg",
+      "image_sha256": "e13e12a2204c39697bb0cda8d1335d4a4edc028b83979f5911d0769b1a0de1d1",
+      "image_bytes": 243862,
+      "published": false,
+      "visually_inspected": true,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1280.0, 800.0)",
+      "hud_points": "(1280.0, 800.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 3.13333333333333,
+      "phase": "smoke",
+      "command_count": 7,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "site": {
+        "build_left": 15.1333333333332,
+        "build_paused": true,
+        "engineer_id": -1,
+        "id": 67,
+        "kind": "fighting_trench",
+        "paid_cost": 0.0,
+        "pos": "(230.0, 660.0)",
+        "position_progress": 2.86666666666676,
+        "position_stage": 0,
+        "position_total": 18.0
+      },
+      "request_phase": "en_route",
+      "request_reason": "Backup en route",
+      "request_service_seconds": 0.0,
+      "preparations": 2,
+      "released_projectiles": 1,
+      "smoke_volumes": 0,
+      "visible_smoke_puffs": 0,
+      "frontage_clear_forward": true,
+      "frontage_clear_reverse": true,
+      "supply": 1000.0,
+      "selected_activity": [
+        {
+          "role": "defender",
+          "id": 63,
+          "status": "Preparing smoke grenade",
+          "reason": "Preparing smoke grenade",
+          "frag": 2,
+          "smoke": 3
+        }
+      ],
+      "defender_member_stock": [
+        {
+          "id": "member_0",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_1",
+          "throwables": {
+            "frag": 0,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_2",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": "throw",
+          "cover_for": null
+        }
+      ]
+    },
+    {
+      "name": "04-smoke-and-resumed-work",
+      "local_path": "artifacts/m1-section6-native-verified/04-smoke-and-resumed-work.jpg",
+      "image_sha256": "046a8fe05272aaba1fe2d7586e5e0dff43c8dc2c7939aa8ecedce2d6d5442ec1",
+      "image_bytes": 239704,
+      "published": false,
+      "visually_inspected": true,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1280.0, 800.0)",
+      "hud_points": "(1280.0, 800.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 4.66666666666666,
+      "phase": "work",
+      "command_count": 7,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "site": {
+        "build_left": 14.4999999999999,
+        "build_paused": false,
+        "engineer_id": 63,
+        "id": 67,
+        "kind": "fighting_trench",
+        "paid_cost": 0.0,
+        "pos": "(230.0, 660.0)",
+        "position_progress": 3.50000000000009,
+        "position_stage": 0,
+        "position_total": 18.0
+      },
+      "request_phase": "en_route",
+      "request_reason": "Backup en route",
+      "request_service_seconds": 0.0,
+      "preparations": 0,
+      "released_projectiles": 0,
+      "smoke_volumes": 1,
+      "visible_smoke_puffs": 7,
+      "frontage_clear_forward": false,
+      "frontage_clear_reverse": false,
+      "supply": 1000.0,
+      "selected_activity": [
+        {
+          "role": "defender",
+          "id": 63,
+          "status": "Digging · 15s remaining",
+          "reason": "Preparing position",
+          "frag": 2,
+          "smoke": 2
+        },
+        {
+          "role": "reserve",
+          "id": 65,
+          "status": "Backup en route",
+          "reason": "Backup en route",
+          "frag": 3,
+          "smoke": 3
+        }
+      ],
+      "defender_member_stock": [
+        {
+          "id": "member_0",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": "dig",
+          "cover_for": null
+        },
+        {
+          "id": "member_1",
+          "throwables": {
+            "frag": 0,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_2",
+          "throwables": {
+            "frag": 1,
+            "smoke": 0
+          },
+          "task": null,
+          "cover_for": null
+        }
+      ]
+    },
+    {
+      "name": "05-hasty-position-backup-returned",
+      "local_path": "artifacts/m1-section6-native-verified/05-hasty-position-backup-returned.jpg",
+      "image_sha256": "1f40aaa09a61cb1ac4d257719bc7e6f05cafcef75353b6562cc133496a134d47",
+      "image_bytes": 238577,
+      "published": false,
+      "visually_inspected": true,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1280.0, 800.0)",
+      "hud_points": "(1280.0, 800.0)",
+      "requested_ui_scale": 1.0,
+      "simulation_seconds": 22.4000000000003,
+      "phase": "work",
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "site": {
+        "build_left": 0.0,
+        "build_paused": false,
+        "engineer_id": -1,
+        "id": 67,
+        "kind": "fighting_trench",
+        "paid_cost": 0.0,
+        "pos": "(230.0, 660.0)",
+        "position_progress": 18.0,
+        "position_stage": 1,
+        "position_total": 18.0
+      },
+      "request_phase": "completed",
+      "request_reason": "Backup delivered · returning",
+      "request_service_seconds": 4.26666666666665,
+      "preparations": 0,
+      "released_projectiles": 0,
+      "smoke_volumes": 1,
+      "visible_smoke_puffs": 7,
+      "frontage_clear_forward": false,
+      "frontage_clear_reverse": false,
+      "supply": 1000.0,
+      "selected_activity": [
+        {
+          "role": "defender",
+          "id": 63,
+          "status": "",
+          "reason": "Position prepared",
+          "frag": 2,
+          "smoke": 2
+        },
+        {
+          "role": "engineer",
+          "id": 64,
+          "status": "",
+          "reason": "Following orders",
+          "frag": 3,
+          "smoke": 3
+        }
+      ],
+      "defender_member_stock": [
+        {
+          "id": "member_0",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_1",
+          "throwables": {
+            "frag": 0,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_2",
+          "throwables": {
+            "frag": 1,
+            "smoke": 0
+          },
+          "task": null,
+          "cover_for": null
+        }
+      ]
+    },
+    {
+      "name": "06-reinforcing-largest-ui",
+      "local_path": "artifacts/m1-section6-native-verified/06-reinforcing-largest-ui.jpg",
+      "image_sha256": "2189a675fef534d6cd585a4b26dc8b9d08a5ada2da72c71a33fb95778a30d0cd",
+      "image_bytes": 237086,
+      "published": false,
+      "visually_inspected": true,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1423.0, 889.0)",
+      "hud_points": "(1152.0, 720.0)",
+      "requested_ui_scale": 1.5,
+      "simulation_seconds": 25.1333333333337,
+      "phase": "upgrade",
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "site": {
+        "build_left": 7.96666666666667,
+        "build_paused": false,
+        "engineer_id": 64,
+        "id": 67,
+        "kind": "fighting_trench",
+        "paid_cost": 50.0,
+        "pos": "(230.0, 660.0)",
+        "position_progress": 2.03333333333333,
+        "position_stage": 1,
+        "position_total": 10.0
+      },
+      "request_phase": "completed",
+      "request_reason": "Backup delivered · returning",
+      "request_service_seconds": 4.26666666666665,
+      "preparations": 0,
+      "released_projectiles": 0,
+      "smoke_volumes": 0,
+      "visible_smoke_puffs": 0,
+      "frontage_clear_forward": true,
+      "frontage_clear_reverse": true,
+      "supply": 950.0,
+      "selected_activity": [
+        {
+          "role": "engineer",
+          "id": 64,
+          "status": "Reinforcing · 8s remaining",
+          "reason": "Reinforcing position",
+          "frag": 3,
+          "smoke": 3
+        }
+      ],
+      "defender_member_stock": [
+        {
+          "id": "member_0",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_1",
+          "throwables": {
+            "frag": 0,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_2",
+          "throwables": {
+            "frag": 1,
+            "smoke": 0
+          },
+          "task": null,
+          "cover_for": null
+        }
+      ]
+    },
+    {
+      "name": "07-paid-work-paused",
+      "local_path": "artifacts/m1-section6-native-verified/07-paid-work-paused.jpg",
+      "image_sha256": "f2a6669174e68ea7eb19bbd714aa3cc8ed4b9ae30faaa06210116f42fe10e791",
+      "image_bytes": 238437,
+      "published": false,
+      "visually_inspected": true,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1423.0, 889.0)",
+      "hud_points": "(1152.0, 720.0)",
+      "requested_ui_scale": 1.5,
+      "simulation_seconds": 25.7333333333338,
+      "phase": "upgrade",
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "site": {
+        "build_left": 7.96666666666667,
+        "build_paused": true,
+        "engineer_id": -1,
+        "id": 67,
+        "kind": "fighting_trench",
+        "paid_cost": 50.0,
+        "pos": "(230.0, 660.0)",
+        "position_progress": 2.03333333333333,
+        "position_stage": 1,
+        "position_total": 10.0
+      },
+      "request_phase": "completed",
+      "request_reason": "Backup delivered · returning",
+      "request_service_seconds": 4.26666666666665,
+      "preparations": 0,
+      "released_projectiles": 0,
+      "smoke_volumes": 0,
+      "visible_smoke_puffs": 0,
+      "frontage_clear_forward": true,
+      "frontage_clear_reverse": true,
+      "supply": 950.0,
+      "selected_activity": [
+        {
+          "role": "engineer",
+          "id": 64,
+          "status": "",
+          "reason": "Following orders",
+          "frag": 3,
+          "smoke": 3
+        }
+      ],
+      "defender_member_stock": [
+        {
+          "id": "member_0",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_1",
+          "throwables": {
+            "frag": 0,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_2",
+          "throwables": {
+            "frag": 1,
+            "smoke": 0
+          },
+          "task": null,
+          "cover_for": null
+        }
+      ]
+    },
+    {
+      "name": "08-reinforced-defense-complete",
+      "local_path": "artifacts/m1-section6-native-verified/08-reinforced-defense-complete.jpg",
+      "image_sha256": "d659f7763e8e98262325e0b973c142d27db9582e931d1a355be264812a590d99",
+      "image_bytes": 239241,
+      "published": false,
+      "visually_inspected": true,
+      "window_pixels": "(1280, 800)",
+      "render_pixels": "(1423.0, 889.0)",
+      "hud_points": "(1152.0, 720.0)",
+      "requested_ui_scale": 1.5,
+      "simulation_seconds": 33.733333333334,
+      "phase": "complete",
+      "command_count": 8,
+      "minimum_label_margin_after_16px_padding": 12.0,
+      "site": {
+        "build_left": 0.0,
+        "build_paused": false,
+        "engineer_id": -1,
+        "id": 67,
+        "kind": "fighting_trench",
+        "paid_cost": 50.0,
+        "pos": "(230.0, 660.0)",
+        "position_progress": 10.0,
+        "position_stage": 2,
+        "position_total": 10.0
+      },
+      "request_phase": "completed",
+      "request_reason": "Backup delivered · returning",
+      "request_service_seconds": 4.26666666666665,
+      "preparations": 0,
+      "released_projectiles": 0,
+      "smoke_volumes": 0,
+      "visible_smoke_puffs": 0,
+      "frontage_clear_forward": true,
+      "frontage_clear_reverse": true,
+      "supply": 950.0,
+      "selected_activity": [
+        {
+          "role": "defender",
+          "id": 63,
+          "status": "",
+          "reason": "Position prepared",
+          "frag": 2,
+          "smoke": 2
+        },
+        {
+          "role": "engineer",
+          "id": 64,
+          "status": "",
+          "reason": "Position reinforced",
+          "frag": 3,
+          "smoke": 3
+        },
+        {
+          "role": "reserve",
+          "id": 65,
+          "status": "Reserve delegated",
+          "reason": "Reserve ready",
+          "frag": 3,
+          "smoke": 3
+        }
+      ],
+      "defender_member_stock": [
+        {
+          "id": "member_0",
+          "throwables": {
+            "frag": 1,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_1",
+          "throwables": {
+            "frag": 0,
+            "smoke": 1
+          },
+          "task": null,
+          "cover_for": null
+        },
+        {
+          "id": "member_2",
+          "throwables": {
+            "frag": 1,
+            "smoke": 0
+          },
+          "task": null,
+          "cover_for": null
+        }
+      ]
+    }
+  ],
+  "publication": "Metadata only. All native screenshots remain local and unpublished; no image data is included.",
+  "limitations": "Functional and visual review on software-rendered llvmpipe. This deterministic local encounter does not establish full Harbor mission pacing, human balance or supported-hardware frame rate/latency. Campaign inventory is checked separately; the operational save still excludes transient tactical positions, actor claims, orders, preparations, released projectiles, smoke, requests and field works."
+}
