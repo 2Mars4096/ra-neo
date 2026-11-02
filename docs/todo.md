@@ -1,13 +1,14 @@
 # Todo
 
-## Tactical expansion — M0 delivered, 2026-10-30
+## Tactical expansion — M1 staged implementation, 2026-11-02
 
-The user authorized implementation starting with M0 on `codex/unit-tactics-implementation`. Readiness, targeting, strength, action ownership, observation memory and bounded planning are implemented and verified: 58/58 integration suites and three native captures pass. [18-1-1](plans/18-1-1-m0-foundation.md) records completion; [validation](validation.md) also records the remaining CPU hitch risk. The [action catalogue](tactical-action-catalogue.md) retains its planning-baseline classifications; M1 and later actions remain planned.
+M0 is complete at `5850504`. [M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) is split into six buildable sections on `codex/m1-staged-implementation`: coordinated movement, grenades/smoke, reserve backup, field positions, controls, and persistence/integration. An unpublished local candidate is being recovered and verified section by section; only each checkpoint’s current evidence establishes its completion. Broader domain actions and the existing CPU hitch follow-up remain open.
 
 - [ ] [18: Tactical actions and capable individual units](plans/18-unit-tactical-autonomy.md) — master milestones, shared contracts and acceptance gates.
   - [ ] [18-1: Action framework and readiness](plans/18-1-action-framework-and-readiness.md).
     - [x] [18-1-1: M0 tactical foundation](plans/18-1-1-m0-foundation.md) — implemented; 58/58 integration suites, native review and current-build CPU evidence recorded.
   - [ ] [18-2: Infantry fire and movement](plans/18-2-infantry-fire-and-movement.md).
+    - [ ] [18-2-1: M1 infantry defense](plans/18-2-1-m1-infantry-defense.md) — M1.1 complete and verified; M1.2–M1.6 pending.
   - [ ] [18-3: Grenades and urban actions](plans/18-3-infantry-grenades-and-urban-actions.md).
   - [ ] [18-4: Coordination and support requests](plans/18-4-coordination-and-support-requests.md).
   - [ ] [18-5: Engineering and field fortifications](plans/18-5-engineering-and-field-fortifications.md).

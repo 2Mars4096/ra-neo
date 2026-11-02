@@ -14,6 +14,7 @@ const Director = preload("res://scripts/tactical_director.gd")
 const Actions = preload("res://scripts/tactical_actions.gd")
 const Context = preload("res://scripts/tactical_context.gd")
 const Navigation = preload("res://scripts/tactical_navigation.gd")
+const Coordination = preload("res://scripts/infantry_coordination.gd")
 var actions = Actions.new()
 var context = Context.new()
 var action_tick := 0
@@ -482,9 +483,11 @@ func record_order(u:Dictionary,mode:String,target:Vector2,target_id:int,queued:b
 
 func cancel_preparation(u:Dictionary,reload:bool=true)->void:
 	u.erase("tactical_navigation")
+	Coordination.clear(u,self)
 	for ticket in u.get("equipment_handovers",{}).values().duplicate():Infantry.cancel_handover(u,ticket)
-	if reload:
-		for member in u.members:Infantry.cancel_readiness(member)
+	for member in u.members:
+		if reload:Infantry.cancel_readiness(member)
+		member.erase("task_action");member.erase("task_kind")
 
 # What a new order replaces (record_order, Director.cancel), to put back.
 const SNAPSHOT_KEYS:=["orders","path","intent","state","command_group","route_pending","maneuver","reason","commit_until","next_decision","hold_command","maneuver_review","wreck_recovery"]
@@ -1031,7 +1034,7 @@ func can_fire(u: Dictionary, other: Dictionary) -> bool:
 	if not u.get("members",[]).is_empty():
 		var budget:int=soldier_checks+SECTION_CHECKS
 		for member in u.members:
-			if member.hp<=0:continue
+			if member.hp<=0 or Infantry.task_busy(member):continue
 			var weapon:String=section_weapon(u,member)
 			if weapon_reaches(weapon,member.pos,other,mini(SOLDIER_CHECKS,budget-soldier_checks)):return true
 			if soldier_checks>=budget:return false
@@ -1897,7 +1900,7 @@ func sync_action_state(u:Dictionary)->void:
 	for member in u.members:
 		var channel:String="member:%s"%str(member.get("member_id",member.index))
 		if member.hp<=0:
-			for suffix in [":weapon",":cover"]:
+			for suffix in [":weapon",":cover",":task",":support"]:
 				var lost:Dictionary=actions.active(u,channel+suffix)
 				if not lost.is_empty():actions.cancel(u,lost,time,"member_lost")
 			continue
@@ -2033,6 +2036,10 @@ func infantry_combat(u:Dictionary,dt:float,candidates:Variant=null) -> void:
 	var contact:bool=autonomy and Infantry.in_contact(u,time)
 	for member in u.members:
 		if member.hp<=0:continue
+		if Infantry.task_busy(member):
+			Infantry.cancel_readiness(member)
+			member.target=-1;member.aim=0.0
+			continue
 		member["in_trench"]=terrain.dug_in(member.pos)
 		if u.maneuver.get("phase","")=="WITHDRAW" or (not u.orders.is_empty() and u.orders[0].mode=="retreat"):
 			Infantry.cancel_readiness(member)

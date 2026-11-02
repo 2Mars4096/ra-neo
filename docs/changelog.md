@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-02 — M1.1 coordinated cover and movement
+
+- Recover the first buildable section of the unpublished M1 candidate onto `codex/m1-staged-implementation`, based on the existing GitHub plan and completed M0. Record all six implementation sections before continuing.
+- Add reciprocal covering roles, real weapon/observation checks, partner replacement, retained covering positions and narrow survival moves. Shared task ownership excludes simultaneous movement, firing, reload and casualty care.
+- Fix alternate-weapon readiness: a loaded rifle or launcher can provide the requested cover while an empty other weapon does not hide it. Active reloads, actor duties, pressure and Hold fire remain authoritative.
+- Verification: coordination (39 checks), tactical readiness and action integration pass after the correction; cover behavior/candidate suites passed during recovery. [Checkpoint evidence](evidence/m1-01-checks.json). M1.2–M1.6 remain open.
+
 ## 2026-10-30 — M0 tactical readiness and ownership
 
 - Continue `codex/unit-tactics-implementation` from recovery checkpoint `e36b211`, completing the M0 slice over the tactical plans and regional operations. Add [18-1-1](plans/18-1-1-m0-foundation.md) and update the master plan, architecture, catalogue status and player guidance.

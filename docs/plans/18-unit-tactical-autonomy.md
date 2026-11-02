@@ -90,4 +90,4 @@ Dependencies refer to the minimal contracts needed for a slice, not completion o
 
 ## Notes
 
-No implementation duration or hardware capacity is promised. M0 is delivered and verified; M1 is the next planned increment. The broad catalogue records the intended design space; it is not an instruction to implement every item at once.
+No implementation duration or hardware capacity is promised. M0 is delivered and verified; [M1](18-2-1-m1-infantry-defense.md) is being delivered in six verified checkpoints on `codex/m1-staged-implementation`. The broad catalogue records the intended design space; it is not an instruction to implement every item at once.

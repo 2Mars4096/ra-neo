@@ -1,12 +1,12 @@
 # 18-2: Infantry fire and movement
 
 **Parent:** [18-unit-tactical-autonomy](18-unit-tactical-autonomy.md)
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Make individual soldiers prepare, observe, fight, move and assist one another coherently while preserving the player's objective.
 
 ## Baseline and scope
 
-At regional-operations `f5916e8`, [infantry](../../scripts/infantry.gd), [cover behavior](../../scripts/cover_behavior.gd) and [the tactical director](../../scripts/tactical_director.gd) already implement individual wounds, aim, magazines, cover, corner firing, staggered movement, contact reactions, flanking, aid and dragging. Long-distance navigation remains section-based. The new policies below are unimplemented.
+At regional-operations `f5916e8`, [infantry](../../scripts/infantry.gd), [cover behavior](../../scripts/cover_behavior.gd) and [the tactical director](../../scripts/tactical_director.gd) already implement individual wounds, aim, magazines, cover, corner firing, staggered movement, contact reactions, flanking, aid and dragging. Long-distance navigation remains section-based. [M0](18-1-1-m0-foundation.md) implements readiness/strength; [M1](18-2-1-m1-infantry-defense.md) adds real covering partners, coordinated bounds and task-actor exclusion. The table retains its historical starting points, and broader expansion policies remain planned.
 
 The [foundation plan](18-1-action-framework-and-readiness.md) owns corrections for quiet reloads, survivor-relative strength and competing action priorities. This plan owns the soldier behaviors using them.
 
@@ -46,6 +46,7 @@ Suppression fire uses an observed area or valid contact memory, a duration, ammu
 
 - [ ] 1. Integrate the foundation action contract and separate assigned strength, effective strength, healing capacity and readiness; preserve existing wound bookkeeping.
 - [ ] 2. Deliver INF-01 through INF-06 and INF-13 as one three-person encounter: independent reload, stable target tracking, valid cover reservations and verified supporting availability.
+  - [x] M1 covering/bounding subset: actual loaded fire lanes, retained coverer position, topoff exclusion, replacement support and explicit urgent escape; dedicated coordination regression.
 - [ ] 3. Add INF-08 through INF-10 with bounded position candidates, contact memory and explicit failure reasons; profile cover work before widening searches.
 - [ ] 4. Integrate INF-16 with the recovery plan's SUP-08 through SUP-12 and caregiver reservations; verify that treatment cannot silently remove all available support.
 - [ ] 5. Add expansion actions through shared coordination and inventory contracts; introduce equipment identity before INF-15 and ammunition-transfer SUP-04.
@@ -72,4 +73,4 @@ Suppression fire uses an observed area or valid contact memory, a duration, ammu
 
 ## Notes
 
-Use current rigs with placeholder watching, reloading, covering and pickup poses. Peeking requires real actor displacement; cosmetic leaning grants no protection. No implementation or new performance result accompanies this plan.
+Use current rigs with placeholder watching, reloading, covering and pickup poses. Peeking requires real actor displacement; cosmetic leaning grants no protection. M1 implementation/evidence is recorded in its child plan; full peeking, alternating withdrawals and specialist pickup remain later scope.

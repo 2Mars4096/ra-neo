@@ -45,11 +45,11 @@ The current increment deepens distinct battlefield decisions, carries expedition
 
 ## Current delivery focus
 
-### Tactical foundation implementation — 2026-10-30
+### M1 infantry defense — staged implementation, 2026-11-02
 
-The user requested a master plan and subplans for richer individual decisions across infantry, vehicles, air, naval and support units, explicitly including grenades, backup requests and trench digging, then authorized implementation starting with M0. [Plan 18](plans/18-unit-tactical-autonomy.md) and its [action catalogue](tactical-action-catalogue.md) define the sequence. [M0](plans/18-1-1-m0-foundation.md) is implemented on `codex/unit-tactics-implementation` with 58/58 integration suites passing, inspected native readiness captures and a documented busy-combat CPU sample. Synchronous work still causes long ticks; M1 remains planned.
+M0 is complete at `5850504`. The user now authorizes M1 in implementation sections with partial commits on a separate branch. [M1](plans/18-2-1-m1-infantry-defense.md) divides delivery into coordinated cover/movement, finite grenades/smoke, reserve backup, hasty positions/upgrades, compact controls, and persistence/integration. Work is on `codex/m1-staged-implementation`, based on GitHub's plan-only `b94593a`; the active plan records each recovered and currently verified section.
 
-The sequence is readiness/targeting/action ownership; an infantry defense slice with throwables, support and preparation; persistent roles for existing vehicle/air/sea units; then urban, engineering and sustainment decisions. M0 also adds minimal contact memory, durable magazine/equipment identity and planning admission. Shared physical/information rules, compact feedback and measured responsiveness remain gates for each increment. New transport classes, generalized fuel, towing, minefields, full interiors and wider evacuation remain optional scope. Regional operations retain their existing checkpoint boundary.
+The broader [Plan 18](plans/18-unit-tactical-autonomy.md) remains the roadmap. M2 domain roles and M3 urban/sustainment expansion follow this slice. Shared physical rules, player order authority and measured responsiveness remain requirements. Human balance and supported-hardware performance acceptance remain separate from functional checks.
 
 ### Regional operations — 2026-10-25
 

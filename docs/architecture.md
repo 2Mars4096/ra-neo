@@ -4,6 +4,10 @@
 
 [M0](plans/18-1-1-m0-foundation.md) adds action/assignment ownership, quiet readiness, stable/urgent targeting, original-strength assessment, contact observations and shared planning admission around the existing executors. [Plan 18](plans/18-unit-tactical-autonomy.md) and the [action catalogue](tactical-action-catalogue.md) retain broader future scope: throwables, smoke, support requests, infantry digging and domain assignments are subsequent increments. Shared collision/elevation/sensing rules, one live battlefield and the deployment-checkpoint persistence boundary remain authoritative.
 
+## M1 staged implementation
+
+M1 is recovered in six buildable checkpoints on `codex/m1-staged-implementation`; the [active plan](plans/18-2-1-m1-infantry-defense.md) records which are verified. `infantry_coordination.gd` validates actual observation, permission, weapon readiness and fire lanes before reserving reciprocal covering roles. Coverers retain their firing position and cannot voluntarily top off while supporting a teammate. A lost partner can be replaced; narrow survival moves remain explicitly unsupported. Shared actor task markers exclude conflicting movement, combat, reload and medical work, and replacement commands clear those roles.
+
 ## Implemented stack
 
 - Godot **4.5.1-stable**, GDScript, GL Compatibility renderer, 2× MSAA.
@@ -23,6 +27,7 @@
 | `scripts/tactical_work_budget.gd` | Deterministic per-tick planning admission, age/priority service, cancellation and queue diagnostics |
 | `scripts/tactical_navigation.gd` | Resumable formation and firing-position candidate searches with current-state validation |
 | `scripts/infantry.gd` | Individual bodies, wounds, aim/readiness, durable member/equipment identity and strength accounting |
+| `scripts/infantry_coordination.gd` | Reciprocal covering roles, actual weapon/readiness validation, partner replacement and survival bounds |
 | `scripts/cover_behavior.gd` | Bounded individual shelter search, reservations, commitment and routes for autonomy scenarios |
 | `scripts/terrain.gd`, `scripts/elevation.gd` | Shared scenery, plateau/ramp height, slope-aware navigation, cover and visibility |
 | `scripts/scenario_catalog.gd` | Stable legacy scenario indices, lightweight regional descriptors, lazy external map loading and deployment reload |

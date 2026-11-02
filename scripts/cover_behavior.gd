@@ -121,6 +121,9 @@ static func _update(u:Dictionary,sim) -> void:
 		if member.hp<=0:
 			_cancel_search(u,member,sim)
 			continue
+		if sim.Infantry.task_busy(member) or not str(member.get("cover_for","")).is_empty():
+			_cancel_search(u,member,sim)
+			continue
 		var phase:String=member.get("cover_phase","")
 		# Inside one, or still to pass through one on the way to its own slot.
 		var intruding:=false
@@ -150,6 +153,7 @@ static func _update(u:Dictionary,sim) -> void:
 				if result.get("pending",false):continue
 				member.cover_until=sim.time+2.0+member.index*0.15
 				if result.get("fire",false) and route_length(member.pos,result.path)<=6.0:
+					if not sim.Coordination.begin_bound(u,member,sim,threat,result):continue
 					clear(member)
 					assign(u,member,sim,result,bearing)
 					member.cover_until=sim.time+2.0+member.index*0.15
@@ -172,6 +176,9 @@ static func _update(u:Dictionary,sim) -> void:
 		if result.get("pending",false):continue
 		member.cover_until=sim.time+2.0+member.index*0.15
 		if result.is_empty():member.cover_phase="EXPOSED";continue
+		if not sim.Coordination.begin_bound(u,member,sim,threat,result):
+			member.cover_phase="OVERWATCH"
+			continue
 		assign(u,member,sim,result,bearing)
 		moving+=1
 
@@ -527,7 +534,7 @@ static func occupy_works(u:Dictionary,sim,threat:Dictionary) -> bool:
 			if member.hp>0 and member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"]:taken.append(member.cover_goal)
 	var assigned:=false
 	for member in u.members:
-		if member.hp<=0 or member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] or sim.time<member.cover_until:continue
+		if member.hp<=0 or sim.Infantry.task_busy(member) or member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] or sim.time<member.cover_until:continue
 		var best:=Vector2(-1,-1);var distance:=INF
 		for slot in slots:
 			# End slots on adjoining works can be closer than WORK_SPACING even
@@ -558,7 +565,7 @@ static func halt_in_cover(u:Dictionary,sim,threat_dir:Vector2,first:int=0) -> bo
 	var any:=false
 	for i in range(first,u.members.size()):
 		var member:Dictionary=u.members[i]
-		if member.hp<=0 or member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] or sim.time<member.cover_until:continue
+		if member.hp<=0 or sim.Infantry.task_busy(member) or member.get("cover_phase","") in ["SEEKING","SETTLING","SHELTERED"] or sim.time<member.cover_until:continue
 		var result:=find_slot(u,member,sim,phantom,[phantom])
 		if result.get("pending",false):
 			# Deferral is not a failed search and never starts the long no-cover

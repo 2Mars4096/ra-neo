@@ -101,6 +101,10 @@ Retreating units stop firing and withdraw faster. In Field Operations, use aid/r
 
 The command deck shows supply, reinforcements, selected-unit health/state, and mission progress. Selected orders have destination markers; a single section shows its weapon range or UAV sight radius.
 
+### M1: coordinated infantry defense
+
+The M1 work is delivered in [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **M1.1 is available:** members taking a short cover route reserve a teammate who can actually observe and fire on the threat. The covering member holds its position and retains loaded ammunition; another member can take over after a reload or casualty. Explicit movement/hold orders remain authoritative. Grenades, smoke, backup, digging, their controls and campaign inventory follow in the remaining sections.
+
 ### M0: readiness and reliable orders
 
 In autonomous tactical modes, stationary soldiers prepare empty weapons during quiet moments. A low rifle magazine can top off while another capable loaded member watches; movement, casualty aid and cover transit take precedence. The selection panel shows how many members are reloading and ready. Explicit targets take priority, ordinary targets stay stable, and AA can switch to a newly observed urgent air threat. Depleted sections assess losses against their originally assigned strength; healing still restores only survivors.

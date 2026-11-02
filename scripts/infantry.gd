@@ -97,19 +97,24 @@ const RELOAD_QUIET_SECONDS:=3.0
 # withdrawal. A garrison uses the same rule; inside is not itself an exclusion.
 static func readiness_available(u:Dictionary,member:Dictionary) -> bool:
 	if member.is_empty() or float(member.get("hp",0.0))<=0:return false
+	if task_busy(member):return false
 	if member.get("wound",HEALTHY) in [SEVERE,KIA,"CREW"] or int(member.get("aiding",-1))>=0:return false
 	if float(member.get("travel",0.0))>0.01 or member.get("cover_phase","") in ["SEEKING","SETTLING"]:return false
 	return u.get("maneuver",{}).get("phase","")!="WITHDRAW" and (u.get("orders",[]).is_empty() or u.orders[0].mode!="retreat")
 
-static func ready_to_cover(u:Dictionary,member:Dictionary,now:float) -> bool:
+static func ready_to_cover(u:Dictionary,member:Dictionary,now:float,weapon:String="") -> bool:
 	if not readiness_available(u,member) or float(member.get("reload_until",0.0))>0.0:return false
 	if maxf(float(member.get("suppression",0.0)),float(u.get("suppression",0.0)))>0.65:return false
 	if member.get("posture","")=="RISING" and now<float(member.get("posture_until",0.0)):return false
-	var weapon:String=member.get("readiness_weapon","rifle")
+	# Capability queries can select the weapon needed by their actual contact.
+	# Inspect its carried magazine without switching weapons or interrupting a
+	# live reload; generic readiness callers still inspect the current weapon.
+	if weapon.is_empty():weapon=str(member.get("readiness_weapon","rifle"))
 	if weapon=="atgm" and (not has_equipment(u,member,"launcher") or int(u.get("missiles",1))<=0):return false
 	return magazine_rounds(member,weapon)>0
 
 static func can_topoff(u:Dictionary,member:Dictionary,now:float) -> bool:
+	if not str(member.get("cover_for","")).is_empty():return false
 	if int(member.get("target",-1))>=0 or int(u.get("target",-1))>=0:return false
 	if in_contact(u,now) or now-float(member.get("last_shot",-100.0))<RELOAD_QUIET_SECONDS or now-float(u.get("last_shot",-100.0))<RELOAD_QUIET_SECONDS:return false
 	if now-float(u.get("last_hit",-100.0))<RELOAD_QUIET_SECONDS or maxf(float(member.get("suppression",0.0)),float(u.get("suppression",0.0)))>0.3:return false
@@ -119,6 +124,11 @@ static func can_topoff(u:Dictionary,member:Dictionary,now:float) -> bool:
 	for peer in u.get("members",[]):
 		if peer.get("member_id","")!=member.get("member_id","") and ready_to_cover(u,peer,now):return true
 	return false
+
+# Throwing and field work share one actor slot; they never coexist with firing,
+# reloading, medical work or another physical move by that soldier.
+static func task_busy(member:Dictionary)->bool:
+	return int(member.get("task_action",0))>0
 
 # Readiness is allowed in a quiet interval without a selected target. It never
 # grants rounds at the start, and switching weapons preserves spent magazines.
@@ -420,14 +430,14 @@ static func tick_wounds(u:Dictionary,now:float,dt:float,sim=null) -> void:
 			if spot!=Vector2.INF:casualty["drag_to"]=spot
 		var treat:bool=quiet or (calm and covered)
 		var medic:Dictionary=u.members[casualty.medic] if casualty.medic>=0 else {}
-		if not medic.is_empty() and (medic.hp<=0 or not (treat or casualty.has("drag_to")) or medic.suppression>AID_SUPPRESSION):
+		if not medic.is_empty() and (medic.hp<=0 or task_busy(medic) or not (treat or casualty.has("drag_to")) or medic.suppression>AID_SUPPRESSION):
 			release(u,casualty)
 			medic={}
 		if not treat and not casualty.has("drag_to"):continue
 		if medic.is_empty():
 			var best:=INF
 			for member in u.members:
-				if member.hp<=0 or member.get("aiding",-1)>=0 or member.suppression>AID_SUPPRESSION:continue
+				if member.hp<=0 or task_busy(member) or member.get("aiding",-1)>=0 or member.suppression>AID_SUPPRESSION:continue
 				if member.get("cover_phase","") in ["SEEKING","SETTLING"]:continue
 				var distance:float=member.pos.distance_squared_to(casualty.pos)
 				if distance<best:best=distance;medic=member
@@ -461,6 +471,7 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 	if not u.members.is_empty() and sim.scenario.get("autonomy",false):
 		update_regroup(u,sim)
 		if not u.hold_command:yield_to_hulls(u,sim)
+	sim.Coordination.review(u,sim)
 	# The threat scan (line-of-fire checks against every nearby enemy) runs ~3x a
 	# second per section, staggered by id, instead of every 30 Hz tick. A new
 	# order still clears stale cover immediately.
@@ -479,6 +490,7 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 			continue
 		member.cooldown-=dt
 		member.suppression=maxf(0,member.suppression-dt*0.12)
+		if task_busy(member):continue
 		var offset:Vector2=member.offset
 		# Once spread, a soldier keeps the wider slot while still in the open
 		# (the contact window may lapse between bursts): shrinking it back would
@@ -507,6 +519,7 @@ static func move(u:Dictionary,sim,dt:float) -> void:
 			if not yielding.is_empty() and sim.time>=float(yielding.until):member.erase("hull_yield");yielding={}
 			if u.hold_command:desired=member.pos
 			elif not yielding.is_empty():desired=yielding.spot
+			elif not str(member.get("cover_for","")).is_empty():desired=member.pos
 			elif u.get("regroup_active",false):desired=regroup_destination(u,member,sim,desired)
 			elif phase=="OVERWATCH":desired=member.pos
 			elif phase in ["SEEKING","SETTLING","SHELTERED"]:

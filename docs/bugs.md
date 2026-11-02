@@ -1,5 +1,9 @@
 # Bugs and failed approaches
 
+## M1 staged review — 2026-11-02
+
+- Cover eligibility inspected a specialist’s current empty magazine before choosing the weapon actually needed against the contact. `ready_to_cover` now accepts an optional requested weapon and coordination checks that weapon without switching, replenishing, consuming or interrupting a live reload. A loaded alternate rifle/launcher is usable; pressure, task/medical ownership, Hold fire, equipment and missile limits remain enforced. Focused red/green cases reproduce the old failure and verify the correction.
+
 ## M0 implementation corrections — 2026-10-30
 
 The following defects were reproduced while completing [M0](plans/18-1-1-m0-foundation.md). Focused tests cover the corrected state transitions; final combined evidence is recorded in [validation](validation.md).

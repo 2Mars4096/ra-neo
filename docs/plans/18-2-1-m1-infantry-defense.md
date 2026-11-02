@@ -2,43 +2,35 @@
 
 **Parent:** [18-2-infantry-fire-and-movement](18-2-infantry-fire-and-movement.md)
 **Status:** in-progress
-**Goal:** Deliver coordinated infantry defense with finite grenades, optical smoke, real nearby backup and staged field positions through compact controls.
+**Goal:** Deliver coordinated infantry defense with finite grenades, optical smoke, nearby backup and staged field positions through compact controls.
 
 ## Delivery boundary
 
-The user authorized M1 after M0 was implemented and requested implementation sections with partial commits on a separate branch. Work continues from M0 `5850504` on `codex/unit-tactics-m1`. The recovered local implementation comprises `16d820a` and its review commit `6149686`; neither had been published when this pass fetched GitHub. Their prior verified evidence is retained below. Current publication review is in progress, including the remaining combat, support and command-feedback corrections.
+M0 is complete at `5850504`. GitHub's existing M1 branch at `b94593a` contains a plan only. The local candidate `751c474` includes unpublished implementation and review work; it is being recovered, checked and published in six buildable sections on `codex/m1-staged-implementation`, starting from that remote plan. Historical candidate checks are not verification of these new checkpoints.
 
-This is the M1 vertical slice across plans 18-2/3/4/5/9/10/11/12; it does not complete those plans' full catalogues or enable M2 vehicle, aircraft and naval assignments.
+This slice crosses plans 18-2/3/4/5/9/10/11/12. Their broader urban, domain and sustainment catalogues remain open. Each section receives its affected checks, a tracking update, a commit and a push before the next section.
 
 ## Implementation sequence
 
-Use the following sections as implementation and review units. M0 is the completed foundation. The recovered commits already contain all six sections; the current pass preserves that work, reviews the remaining integration boundaries and publishes completed checkpoints on the M1 branch. A recovered implementation is not yet a passing result for subsequent edits.
-
-| Section and scope | Dependencies | Source modules and review checks | Current status |
+| Section | Scope | Dependency and acceptance | Status |
 |---|---|---|---|
-| **M1.1 — Coordinated cover and movement.** Reserve a genuinely ready covering member; retain its useful position, replace lost support and permit a bounded urgent escape. | M0 action ownership, readiness, observations and planning admission. | `infantry_coordination.gd`, `infantry.gd`, `cover_behavior.gd`; `test_infantry_coordination.gd` checks actual weapon/ray, role loss, movement and order authority. | Implementation recovered; publication review in progress. |
-| **M1.2 — Fragmentation and optical smoke.** Finite stock, cancelable preparation, one release charge, swept travel, physical blast and height-aware smoke. | M1.1 for delegated defensive throws; M0 actor/item claims and sensing. | `throwables.gd`, `simulation.gd`, `tactical_effects.gd`; `test_throwables.gd` and `test_m1_optics.gd` check interruption, allies, alternate actors, exposure and altitude-dependent fog. | Implementation recovered; remaining optics correction under review. |
-| **M1.3 — Existing-reserve backup.** Delegate a nearby section, claim one responder, require useful service and return only to its unchanged assignment. | M1.1 capability checks; M0 assignment versions, observations and bounded routing. | `support_requests.gd`; `test_support_requests.gd` checks actual support weapons, exclusive leases, radio loss, deadlines and retasking. | Implementation recovered; work-order cancellation boundaries under review. |
-| **M1.4 — Hasty positions and engineer upgrades.** Dig free shallow cover, retain interrupted progress, then reinforce the same site with one paid upgrade. | M1.1 covering readiness; M1.3 replacement-order ownership; existing field geometry/accounting. | `field_positions.gd`, `field_ops.gd`, `field_models.gd`; `test_field_positions.gd` plus existing engineering suites check actual protection, covering weapons, accepted/rejected work orders and single payment/refund. | Implementation recovered; support and work integration under review. |
-| **M1.5 — Controls and feedback.** Contextual commands, targeting previews, Hold fire, Reserve/Auto Frag toggles and concise real-action status. | M1.1–M1.4 authoritative APIs and rejection reasons. | `tactical_interface.gd`, `battle.gd`, `hud.gd`, `battlefield_interface.gd`; `test_m1_commands.gd` and `test_field_ui.gd` check real input, cancellation, partial radio acknowledgements, backup status and layout. | Implementation recovered; command-feedback correction under review. |
-| **M1.6 — Persistence and integration.** Preserve per-member equipment through campaign outcomes/retry and migrate old saves; combine the sections in Harbor, validate and publish. | M1.2 inventory identity; M1.1–M1.5 integration; existing campaign checkpoint boundary. | `regional_campaign.gd`, `tools/check.py`; `test_m1_persistence.gd`, `test_m1_defense.gd`, tactical regression gate and `m1_native_review.gd` check zeros/casualties, migration, concurrent actions and native presentation. | Implementation and prior evidence recovered; current verification, tracking and branch publication pending. |
-
-Complete each correction with its affected checks before committing a checkpoint. M1.6 closes the current review after combined evidence and documentation describe the actual branch state. Human balance, long-session and supported-hardware performance acceptance remain separate open gates.
+| **M1.1 — Coordinated cover and movement** | A ready member covers a moving partner, holds a useful firing position and hands over after reload, suppression or casualty; task ownership excludes conflicting actions. | M0 readiness, observations and order authority. Check real ammunition/rays, partner replacement, survival moves and player overrides. | Complete |
+| **M1.2 — Fragmentation and smoke** | Finite carried payloads, interruptible preparation, one release charge, swept flight, physical blast and height-aware optical smoke. | M1.1 covering and actor claims. Check cancellation, allies, alternative throwers, actual impact and air/ground visibility. | Pending |
+| **M1.3 — Nearby reserve backup** | Explicitly delegate an existing section, lease one capable responder, deliver useful support and return to its unchanged assignment. | M1.1 readiness and M1.2 optical rays. Check actual support weapons, exclusive leases, radio loss, retasking and deadlines. | Pending |
+| **M1.4 — Hasty positions and upgrades** | One infantry member digs shallow cover; an engineer can reinforce the same site with one paid upgrade. Retain interrupted progress. | M1.1 actor ownership and M1.3 order cancellation. Check cover stages, geometry, work authority and no duplicate charges/refunds. | Pending |
+| **M1.5 — Controls and feedback** | Contextual commands, target previews, Hold fire, Reserve/Auto Frag toggles and concise action status. | M1.1–M1.4 APIs. Check real input, rejected orders, partial radio acknowledgements, cancellation and layout. | Pending |
+| **M1.6 — Persistence and integration** | Preserve individual equipment through outcomes/retry, migrate old saves, and combine the mechanics in Harbor. | M1.1–M1.5. Check empty inventories/casualties, migration, integrated encounter, affected regression gate and native rendering. | Pending |
 
 ## Tasks
 
-- [x] 1. Reserve genuinely capable covering partners for individual bounds; revalidate ammunition, readiness, observed threat and actual fire lanes. Preserve the coverer's position and allow replacement or an explicit urgent escape.
-- [x] 2. Add finite per-member frag/smoke stock, actor/item claims, interruptible preparation, swept travel, authoritative effects and single release consumption.
-- [x] 3. Connect smoke to optical sensing, fog, targeting and height-aware rays; preserve existing released fire-and-forget missile behavior.
-- [x] 4. Dispatch one explicitly delegated existing infantry reserve, require useful service, bound its lease/retries and return only to the unchanged assignment.
-- [x] 5. Add local infantry digging and an engineer upgrade on the same physical site; preserve unfinished progress, stage protection and single payment/refund accounting.
-- [x] 6. Add contextual commands, targeting previews, Hold fire, optional defensive frag delegation, actor poses, smoke/projectile rendering and campaign schema migration.
-- [x] 7. Preserve prior combined regression coverage and native Harbor review: 71 passing suite results, 466 M1 checks and four inspected captures; retain the full-run/focused-rerun evidence and remaining limits.
-- [x] 8. Update implementation tracking and prepare the isolated M1 review branch.
-- [x] 9. Recover the previous candidate review: alternate throwers at blocked corners, actual specialist support weapons, digging/upgrade support cancellation, old engineer-save migration and its native evidence.
-- [ ] 10. Finish the six-section publication review: integrate remaining optics, ordinary engineer-work and command-feedback corrections; verify affected behavior, update the evidence and tracking, and commit/push the completed checkpoints to the separate M1 branch.
+- [x] 1. Recover, verify and publish coordinated cover/movement and actor ownership.
+- [ ] 2. Recover, verify and publish finite fragmentation grenades and optical smoke.
+- [ ] 3. Recover, verify and publish existing-reserve backup and assignment-safe return.
+- [ ] 4. Recover, verify and publish hasty positions, engineer upgrades and work-order integration.
+- [ ] 5. Recover, verify and publish compact controls, previews and action feedback.
+- [ ] 6. Recover persistence, run integration/native review, update evidence and publish completion.
 
-## Implemented rules
+## Behavior contract
 
 | Area | M1 behavior |
 |---|---|
@@ -63,20 +55,16 @@ The strip shows stock and relevant capabilities. Throw previews use the executor
 
 ## Verification
 
-```sh
-python3 tools/check.py --group m1
-python3 tools/check.py --group tactical
-./tools/play.sh --audio-driver Dummy --script tests/m1_native_review.gd
-```
+Use Godot 4.5.1. During staged delivery `python3 tools/check.py --group m1` selects the M1 suites present at that checkpoint. The completed slice contains eight M1 suites; `--group tactical` also checks affected existing executors. Run the native Harbor encounter with `./tools/play.sh --audio-driver Dummy --script tests/m1_native_review.gd` once M1.6 lands.
 
-Use Godot 4.5.1. The eight M1 suites cover cooperation, throwables, support, work, optics, campaign persistence, real command input and a staged Harbor interaction. The broader tactical gate retains existing geometry, mission, command, combat, economy and save assertions.
+Current checkpoint results are recorded below as the sections pass. Previous local-candidate results are historical only. A functional pass does not establish human balance, hardware performance or a completed mission.
 
-**Prior verified evidence at recovered commit `6149686`:** 71 passing suite results, including all 466 M1 checks and 1,439 M0 checks. The full serial run passed 70/71; after correcting its sole ordinary engineer-confirmation failure, the field-work UI and M1 command suites passed their focused rerun. Four native captures passed, and all 17 recorded native source hashes and 90 functional source hashes matched that recovered state. Full runs and the prior snapshot are in [validation](../validation.md#m1-infantry-defense--2026-10-31). This evidence does not validate later publication-review edits; their current results must be recorded before closing task 10.
+## Checkpoint evidence
 
-The Harbor fixture uses authored ground near `(312,652)`, staged existing force types and normal command APIs/ticks. Hold fire isolates grenade damage from incidental shooting. It demonstrates concurrent work/throws, smoke, actual backup delivery/return and one paid upgrade. It is not a mission victory, human playtest or balance/performance benchmark. Coordination and defensive grenade handover also have separate deterministic regression fixtures.
+- **M1.1:** coordination, readiness and action-integration suites pass after the alternate-weapon readiness correction (39 coordination checks). Cover behavior/candidate suites also passed before that correction. [Current focused report](../evidence/m1-01-checks.json).
 
 ## Bounds and remaining work
 
-Throwables cap active projectiles/preparations at 64 and smoke at 32. Defensive reviews inspect at most two due sections per tick under shared decision/line admission. Support caps 32 requests, 64 registered reserves and 12 provider candidates; requests, leases, service and returns have explicit deadlines. Field positions cap 64 active jobs and 96 sites and use bounded local approach/work searches. These code limits do not establish a wall-clock or FPS result; M0's documented synchronous navigation hitch risk remains.
+Throwables cap active projectiles/preparations at 64 and smoke at 32. Defensive reviews inspect at most two due sections per tick. Support caps 32 requests, 64 registered reserves and 12 provider candidates. Requests, leases, service and returns have deadlines. Field positions cap 64 active jobs and 96 sites with bounded local searches. These limits do not establish CPU/FPS acceptance; M0's synchronous navigation hitch remains an open issue.
 
-M1 art uses the existing procedural soldiers with placeholder throw/dig poses, simple payload meshes, pooled smoke and staged prepared-position meshes. Bouncing, room/interior throws, grenade replenishment, expanded urban actions, engineer request dispatch, broad initiative profiles and new domain assignments remain later work. Human command clarity, tuning, long-session play and supported-hardware performance acceptance remain open.
+The slice uses existing procedural soldiers, placeholder throw/dig poses, simple payload meshes, pooled smoke and staged position meshes. Room/interior throws, bouncing, grenade replenishment, generalized engineer dispatch, broader initiative profiles and M2 domain roles remain later work. Human command clarity, tuning, long-session play and supported-hardware performance acceptance remain open.

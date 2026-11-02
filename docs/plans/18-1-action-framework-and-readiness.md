@@ -52,10 +52,10 @@ Separate original/assigned strength, current effective strength and recoverable 
 - [x] 1. Reproduce the readiness, target-priority and strength cases using small fixtures; record intentional old behavior separately from defects.
 - [x] 2. Add order/assignment versions, capability views and a minimal action contract around existing reload/aim/cover executors.
 - [ ] 3. Move reload readiness outside target acquisition; coordinate magazine timing through section-role reservations in [18-2](18-2-infantry-fire-and-movement.md).
-  - [x] M0 quiet reloads and a loaded-partner guard for voluntary topoffs; persistent section roles remain M1.
+  - [x] M0 quiet reloads and a loaded-partner guard for voluntary topoffs; M1 adds validated covering roles and excludes committed coverers from optional topoffs.
 - [x] 4. Apply explicit-target-first validation, stable aim tracking and a cheap urgent-threat override; retain actual weapon acquisition requirements.
 - [ ] 5. Unify interruption precedence for contact holds, withdrawal, aid, digging, throwing and direct orders; add bounded failure backoff and a valid temporary action.
-  - [x] M0 existing-executor cancellation, pressure handling and failure backoff; digging/throwing adapters remain future work.
+  - [x] M0 existing-executor cancellation, pressure handling and failure backoff; M1.1 adds shared actor task exclusion; concrete throwing/work adapters and backup cancellation follow in the later checkpoints.
 - [x] 6. Separate assigned strength and equipment identity from healing capacity/member array indices; provide the handover interface without automatically completing a transfer.
 - [x] 7. Add event invalidation and bounded work scheduling with [18-12](18-12-performance-and-validation.md), plus compact state reasons with [18-11](18-11-command-interface-and-feedback.md).
 - [ ] 8. Adapt one action at a time, proving old mission, collision, casualty and campaign invariants before broad adoption.
