@@ -1,21 +1,21 @@
 # 18-5: Engineering and field fortifications
 
 **Parent:** [18-unit-tactical-autonomy](18-unit-tactical-autonomy.md)
-**Status:** not-started
+**Status:** in-progress
 **Goal:** Let infantry prepare limited local protection and engineers construct, maintain and alter useful battlefield positions through delegated, physical work.
 
 ## Baseline and scope
 
 [Field operations](../../scripts/field_ops.gd) already provides paid construction, lines/queues, interruption/resume, refunds and barrier/wreck clearing. [Definitions](../../resources/field_units.json) include trenches, sandbags, berms, wire, barriers, nets and support posts. `sync_obstacles` publishes cover/movement/concealment effects; regional construction validates elevation.
 
-Ordinary infantry digging, controlled wall passages, minefields and bridges need new contracts. Existing trenches are authored zones. This plan extends the current construction system.
+[M1 section 4](18-2-1-4-hasty-positions-and-upgrades.md) delivers local infantry digging and a paid engineer upgrade on `codex/m1-section-4`, continuing section 3 at `57f7fa8`. Existing and new trenches use authored terrain zones. General engineer dispatch, connected works, controlled wall passages, minefields and bridges remain outside this checkpoint.
 
 ## Action catalogue
 
 | ID | Action | Starting point | First delivery | Decision / limit |
 |---|---|---|---|---|
-| ENG-01 | Dig shallow infantry protection | New | Core | Require equipment, eligible ground and delegated defense; consume work time. |
-| ENG-02 | Construct a staged fighting trench | Existing | Core | Build authored segments with stage-specific protection. |
+| ENG-01 | Dig shallow infantry protection | New | M1.4 | One rifle/AT/engineer member, nearby clear level soil, 18 seconds, no supply charge. |
+| ENG-02 | Construct a staged fighting trench | Existing | M1.4 | Reinforce the same hasty site: one engineer, 50 supply, ten seconds; publish protection by stage. |
 | ENG-03 | Connect trench segments | Partial | Expansion | Validate junctions, entrances, capacity and physical transitions. |
 | ENG-04 | Build sandbag protection | Existing | Core | Choose an authorized face with reachable soldier slots. |
 | ENG-05 | Build and orient a vehicle berm | Existing | Core | Match the defense direction; validate slope, hull space and approach. |
@@ -36,26 +36,28 @@ Ordinary infantry digging, controlled wall passages, minefields and bridges need
 
 ## Infantry digging and engineer work
 
-A delegated defense intent may permit shallow infantry positions. Eligibility depends on equipment, ground, slope, access and available security. Asphalt, structures, water and unsupported ground reject digging. Preparation costs time and authored inventory; spending remains within [18-11 authority](18-11-command-interface-and-feedback.md).
+M1.4 accepts explicit local work through `Simulation.issue_dig(ids, point)` and `upgrade_position(ids, site_id)`. Rifle, AT and engineer sections assign one available member to a clear, sufficiently level 7 × 2 soil footprint; the others remain available. Roads, structures, water and blocked access reject digging before commitment. Digging costs 18 seconds of actual work and no supply. The unfinished survey grants no cover; completion grants ordinary infantry cover and 120 maximum integrity.
 
-Engineers build deeper or reinforced positions through existing jobs. Sites retain footprint, access slots, owner, stage, integrity and material accounting. Planned, started, partially usable and complete stages publish geometry and protection together. Unfinished markers grant no full protection. Interruptions retain earned progress, completed physical work and paid sites while releasing the builder.
+An engineer reinforces the same site for the existing trench price of 50 supply and ten seconds of work. Completion grants dug-in protection and 320 maximum integrity; incoming damage remains. Interrupted upgrades retain hasty protection, progress and paid materials. Repeating current work preserves its actor and assignment; resuming paid work cannot charge twice. Cancellation and salvage refund only purchased materials, once. Broader engineer jobs continue to use the existing construction system.
 
-Core digging uses bounded terrain zones. Soldier placement and visuals must agree with protection geometry. If depth cannot be represented, present an explicit prepared-position abstraction. Continuous terrain deformation is outside Core.
+Field-position jobs share actor/site claims and existing Resume/Cancel/clearing adapters. Pressure and hull yielding pause work; replacement orders release it. Accepted work clears obsolete reserve, wreck-recovery and spacing state, and ordinary automatic spacing respects the work anchor. Whole-footprint geometry, stage protection and procedural survey/earth/trench meshes share the same site. The work pose remains a placeholder. No terrain excavation is simulated. Jobs are capped at 64 and living sites at 96; work approaches and assignments have deadlines.
 
 ## Delegation, shared geometry and persistence
 
-[18-4 requests](18-4-coordination-and-support-requests.md) assign compatible engineers to real work points. Jobs report waiting/working/unsafe status, request security and release claims on cancellation or loss. Idle engineers select only authorized work; existing defenses require explicit dismantling assignments.
+Generalized engineer dispatch through [18-4 requests](18-4-coordination-and-support-requests.md) remains planned. M1.4 uses explicit work orders, reports waiting/working/unsafe states and releases claims on cancellation or loss. Existing defenses require explicit dismantling assignments. Contextual work buttons/hotkeys remain M1.5; campaign inventory and the combined defense encounter remain M1.6.
 
-Placement considers firing faces, friendly routes, work/casualty access and vehicle width. Cover, exposure, navigation, rendering and destruction share geometry; changes invalidate affected caches and reservations. Wall breaches create actual traversal portals while retaining building ownership/destruction. Clearing and recovery arbitrate one claim per wreck.
+Broader placement work must account for firing faces, friendly routes, work/casualty access and vehicle width. Cover, exposure, navigation, rendering and destruction must share geometry, with changes invalidating affected caches and reservations. Planned wall breaches must create actual traversal portals while retaining building ownership/destruction. Clearing and recovery must arbitrate one claim per wreck.
 
 Regional saves preserve forces/outcomes, not tactical works. New inventories use the campaign schema; works reset with a fresh tactical battlefield until tactical-world saving exists. Operation transfers create no free construction.
 
 ## Tasks
 
 - [ ] 1. Integrate the [18-1 action contract](18-1-action-framework-and-readiness.md), preserving payment, refund, clearing and progress invariants.
-- [ ] 2. Deliver ENG-01 and staged ENG-02 on eligible open ground, using shared work stages and one selected defense intent.
+  - [x] M1.4 field positions use actor/site claims, accepted-order authority, retained progress and payment-aware refunds.
+- [x] 2. Deliver the M1.4 ENG-01 and staged ENG-02 subset on eligible open ground through explicit local work orders; contextual controls remain M1.5.
 - [ ] 3. Connect useful placement and passage reservations for ENG-04 through ENG-07; share safe work/cover roles with [18-2 infantry](18-2-infantry-fire-and-movement.md).
 - [ ] 4. Integrate ENG-11, ENG-12 and ENG-19 into the request lifecycle; cover builder loss, replacement, interrupted access and competing jobs.
+  - [x] Route existing field-position Resume/Cancel/dismantling through compatible workers and shared work ownership; generalized dispatch remains open.
 - [ ] 5. Add connected trenches, repairs and building improvements after geometry/accounting gates pass.
 - [ ] 6. Implement tagged wall portals jointly with [18-3 urban actions](18-3-infantry-grenades-and-urban-actions.md); validate collision, sight, fire and structure collapse together.
 - [ ] 7. Keep mine zones, surveys, clearance and crossings optional until sensing, authored assets and navigation-link prerequisites are complete.
@@ -78,4 +80,4 @@ Regional saves preserve forces/outcomes, not tactical works. New inventories use
 
 ## Notes
 
-Touchpoints: `FieldOps`, `Terrain`, `StructureDamage`, campaign inventories. Placeholder work poses and stage meshes require documented collision envelopes. [18-10](18-10-logistics-medical-and-recovery.md) owns medical behavior. This is unimplemented planning.
+Touchpoints: `FieldPositions`, `FieldOps`, `Terrain`, `StructureDamage`, campaign inventories. [18-10](18-10-logistics-medical-and-recovery.md) owns medical behavior. The [section 4 plan](18-2-1-4-hasty-positions-and-upgrades.md) records checkpoint verification; broader engineering, native/hardware acceptance and construction-density expansion remain open here.

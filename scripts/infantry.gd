@@ -1011,8 +1011,10 @@ static func recover(u:Dictionary,amount:float) -> float:
 	publish(u)
 	return restored
 
-static func actor_clear(u:Dictionary,member:Dictionary,to:Vector2,sim) -> bool:
-	if not sim.terrain.segment_clear(member.pos,to,"land",member.get("body_radius",0.8)):return false
+# Only placement previews may filter unobserved bodies/works. Movement and
+# commitment use the physical default and cannot walk through hidden actors.
+static func actor_clear(u:Dictionary,member:Dictionary,to:Vector2,sim,known_only:bool=false,ignored_blocks:Array=[]) -> bool:
+	if not sim.terrain.segment_clear(member.pos,to,"land",member.get("body_radius",0.8),ignored_blocks):return false
 	if to.distance_to(u.pos)>Cover.LEASH:return false
 	var body_radius:float=member.get("body_radius",0.8)
 	var min_x:=minf(member.pos.x,to.x)
@@ -1023,6 +1025,7 @@ static func actor_clear(u:Dictionary,member:Dictionary,to:Vector2,sim) -> bool:
 		var other:Dictionary=entry.unit
 		var peer:Dictionary=entry.actor
 		if not sim.alive(other) or peer.hp<=0:continue
+		if known_only and other.team!=u.team and not sim.contact_known(u,other):continue
 		# Field works already have their exact (possibly rotated) terrain
 		# footprint. A second, enclosing actor circle blocks usable wall faces.
 		if other.get("structure",false):continue

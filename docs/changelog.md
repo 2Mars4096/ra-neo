@@ -1,5 +1,14 @@
 # Changelog
 
+## M1 section 4 — Hasty positions and engineer upgrades
+
+- Continue `codex/m1-section-4` from completed section 3 (`57f7fa8`), recovering only the section 4 candidate (`3ce3b99`) and retaining all section 1–3 corrections. Complete the [section plan](plans/18-2-1-4-hasty-positions-and-upgrades.md); controls and persistence/integration remain sections 5–6.
+- Add one-member local digging with shared ground/access validation: 18 seconds of free work produces hasty infantry cover with 120 integrity. An unfinished survey grants no protection. A nearby engineer pays the existing 50 supply once for ten seconds of reinforcement on the same site, ending with dug-in protection and 320 integrity.
+- Retain progress, damage and paid materials through pressure, casualties and replacement commands. Preserve hasty protection during an interrupted upgrade. Repeated orders are idempotent; free work cannot generate refunds and paid cancellation/salvage cannot refund twice.
+- Correct automatic spacing that cancelled digging or displaced its anchor. Release the worker for hull avoidance and real wreck recovery; accepted new work removes stale recovery while recomputing a still-required escape. Deadline, capacity, queued/provisional orders and out-of-leash cleanup have focused regressions. Existing status text reflects paused/completed work.
+- Add survey/shallow/reinforced procedural stage presentation and a native Harbor review using ordinary movement and the simulation APIs. Three current captures were visually inspected; no hardware performance or production-art claim is made.
+- Verification: **715 M1 checks pass**, including **248 field-position checks**. The affected gate passes **39/40 suites**; the one Harbor crowd-spacing failure is reproduced on unchanged section 3 and recorded as a follow-up. Fix the inherited field-visuals fake to use actual simulation context, preserving its 662,132 assertions. [Functional evidence](evidence/m1-04-checks.json) records current results, matched controls and 121 source hashes; [native evidence](evidence/m1-04-native-review.json) records the three inspected stages.
+
 ## M1 section 3 — Nearby reserve backup checkpoint
 
 - Continue `codex/m1-section-3` from completed section 2 (`e180a118`), recovering the section 3 candidate (`39af9e3`) and reviewing its integration. Add the [section 3 plan](plans/18-2-1-3-nearby-reserve-backup.md); sections 4–6 remain pending.

@@ -2,12 +2,9 @@ extends SceneTree
 const Art=preload("res://scripts/visuals.gd")
 const Fields=preload("res://scripts/field_models.gd")
 const Motion=preload("res://scripts/unit_animation.gd")
+const Sim=preload("res://scripts/simulation.gd")
 var checks:=0
 var failures:Array[String]=[]
-class Clock:
-	extends RefCounted
-	var time:=1.0
-	var scenario:Dictionary={"autonomy":true}
 func check(ok:bool,message:String)->void:
 	checks+=1
 	if not ok and not failures.has(message):failures.append(message);printerr("FAIL: ",message)
@@ -74,7 +71,12 @@ func run()->void:
 		check(engineer.has_node("Soldier%d/Upper/EngineerKit"%i),"engineer tools attached to upper articulation")
 		members.append({"pos":Vector2(i*0.6,0),"hp":30.0,"travel":0.1,"facing":Vector2(0,-1),"last_shot":-100.0,"last_hit":-100.0,"target":-1,"suppression":0.0,"phase":0.0})
 	var u:Dictionary={"id":1,"kind":"engineer","hp":90.0,"pos":Vector2.ZERO,"members":members,"orders":[],"recovering":false,"suppression":0.0,"state":"IDLE","target":-1,"cooldown":0.0,"blocked_time":0.0}
-	var clock:=Clock.new()
+	# Animation now reads shared terrain elevation and infantry task/equipment
+	# state as well as the clock. Use the actual flat-scenario context so those
+	# production contracts execute while retaining the original pose assertions.
+	var clock=Sim.new(false,0)
+	clock.time=1.0
+	clock.scenario.autonomy=true
 	var initial:Transform3D=engineer.get_node("Soldier0/LegL").transform
 	for frame in 20:
 		clock.time+=0.1

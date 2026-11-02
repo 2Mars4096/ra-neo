@@ -1,5 +1,13 @@
 # Bugs and failed approaches
 
+## M1 section 4 review — 2026-11-02
+
+- **Resolved:** empty movement queues made active one-member digging look idle to ordinary squad spacing. Automatic unstacking replaced work with Move; engagement spacing displaced the anchor. Both systems now respect the live work assignment while explicit commands remain authoritative. The identical 16-check suite produces five failures before the guards and none afterward.
+- **Resolved:** task ownership blocked a digger's hull avoidance and allowed work during physical wreck recovery. Unsafe work now releases actor/site action claims while retaining earned progress, cancels if the work leaves the section leash, and recomputes a still-needed recovery when a new work order replaces it. Removing every recovery record initially stranded the anchor beside a real wreck; that rejected approach is covered by the final 81-check lifecycle suite (13 original-candidate failures, zero after correction).
+- **Resolved test fixture:** `test_field_visuals.gd` passed a time-only fake to animation after animation began using terrain and infantry state. Unchanged section 3 has 24 script errors and five assertion failures. Using a real unpopulated simulation restores all 662,132 existing assertions; production animation and criteria remain unchanged.
+- **Open, inherited:** `test_engaged_spacing.gd` fails the Harbor `(526, 690)` case on both unchanged `57f7fa8` and this checkpoint. A soldier stays inside another section's footprint for 2.3 seconds against the existing 1.5-second limit; minimum anchor separation is 4.83, both sections fire, and the other three fixtures pass. This scenario contains no new field-position jobs. Keep the assertion and investigate separately; do not claim a fully green repository gate. [Evidence](evidence/m1-04-checks.json).
+
+
 ## M1 section 3 integration corrections
 
 - An immediately activated Shift order, or a deferred queued head accepted later, changed the responder's assignment without revoking reserve delegation or its old `BACKUP` maneuver. The stale maneuver then prevented the ordinary order from completing. Activation now cancels the old support before changing assignment ownership; a genuine queued tail waits until activation. Rejecting a queued head preserves the support route it never owned.

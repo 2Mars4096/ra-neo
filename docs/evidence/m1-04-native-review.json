@@ -1,0 +1,76 @@
+{
+  "adapter": "llvmpipe (LLVM 20.1.2, 256 bits)",
+  "captures": [
+    {
+      "dug_in": false,
+      "hasty_earth_visible": false,
+      "hp": 29.3333333333333,
+      "max_hp": 120.0,
+      "name": "01-survey",
+      "ordinary_cover": false,
+      "path": "res://artifacts/m1-section4-native-final/01-survey.jpg",
+      "position_stage": 0,
+      "reinforced_mesh_count": 0,
+      "site_id": 63,
+      "survey_visible": true,
+      "time": 4.99999999999999,
+      "work_left": 17.0,
+      "repository_image_included": false
+    },
+    {
+      "dug_in": false,
+      "hasty_earth_visible": true,
+      "hp": 119.999999999999,
+      "max_hp": 120.0,
+      "name": "02-hasty",
+      "ordinary_cover": true,
+      "path": "res://artifacts/m1-section4-native-final/02-hasty.jpg",
+      "position_stage": 1,
+      "reinforced_mesh_count": 0,
+      "site_id": 63,
+      "survey_visible": false,
+      "time": 22.0000000000003,
+      "work_left": 0.0,
+      "repository_image_included": false
+    },
+    {
+      "dug_in": true,
+      "hasty_earth_visible": false,
+      "hp": 320.0,
+      "max_hp": 320.0,
+      "name": "03-reinforced",
+      "ordinary_cover": true,
+      "path": "res://artifacts/m1-section4-native-final/03-reinforced.jpg",
+      "position_stage": 2,
+      "reinforced_mesh_count": 3,
+      "site_id": 63,
+      "survey_visible": false,
+      "time": 33.333333333334,
+      "work_left": 0.0,
+      "repository_image_included": false
+    }
+  ],
+  "digger_kind": "rifle",
+  "engine": "4.5.1-stable (official)",
+  "failures": 0,
+  "initial_supply": 3222.19999999998,
+  "note": "Same site progresses through real API work in the native Harbor scene with ordinary fog and existing infantry. Campaign persistence disabled. No contextual input, performance or human-playtest claim.",
+  "render_pixels": "(1280.0, 720.0)",
+  "source_sha256": {
+    "scripts/battle.gd": "1ec63c1e7e5635fb0d849d01db103842f0d55cf75fc2b2749977a93b726f476d",
+    "scripts/field_models.gd": "5b88eb181fdec7a3d7a30401533fac23224d771f2bcb1fe36307bb7c1648652f",
+    "scripts/field_ops.gd": "8e846fb0abf92a860a79b4def38c13f34bd317fd339a9973336d7d590d444dd1",
+    "scripts/field_positions.gd": "4b6237afd188795e4a55521894d21b6fad17ad7d269d3233ab42cf1735aed51a",
+    "scripts/infantry.gd": "720fa62541056525c9f185b68f9633803a74a26b3ed746dfb8ee058cf79c64dd",
+    "scripts/simulation.gd": "8d1a55f156722835ce4cda49c4fadde0a9f6e619f2f27b9f41f1ed65c3b233f2",
+    "tests/m1_section4_native_review.gd": "1362d90c842a807f767aa04c53d5544642a80bc44ce57dd9034c5955fd3d14a0"
+  },
+  "checkpoint": "codex/m1-section-4",
+  "visual_review": "All three captures inspected in the current session: survey has no completed cover mesh, hasty earth is visibly shallow, and completed reinforcement uses the existing procedural trench. Rifle digging and engineer upgrading use the same site after normal movement; completed status is current.",
+  "image_sha256": {
+    "res://artifacts/m1-section4-native-final/01-survey.jpg": "b948823eb1e3d01b4ab20ec460c2c70ba4e91c9166b98f8a5731607d77da4a07",
+    "res://artifacts/m1-section4-native-final/02-hasty.jpg": "3fdf87a1d5003a52c902dbdfdccb27b7871c9525e3c29fcba7854f3442bda3a6",
+    "res://artifacts/m1-section4-native-final/03-reinforced.jpg": "e0f41c8c1715cc7ee40341994a3dcb37836b2016528dbbe49070fb51fb1b182a"
+  },
+  "publication": "Verification metadata only. Native screenshots were generated and visually inspected locally; image files are not included in this public checkpoint pending explicit approval."
+}

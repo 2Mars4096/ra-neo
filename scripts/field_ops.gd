@@ -3,6 +3,7 @@ extends RefCounted
 const Garrison=preload("res://scripts/garrison.gd")
 const StructureDamage=preload("res://scripts/structure_damage.gd")
 const OperationRules=preload("res://scripts/operation_rules.gd")
+const Positions=preload("res://scripts/field_positions.gd")
 
 const KINDS=["tactical_cover","observation_post","repair_point","aid_post","concertina_wire","tank_obstacles","fighting_trench","vehicle_berm","camouflage_net","forward_supply_point","bunker","at_gun","command_post","ammo_depot"]
 # Linear works may be turned 90 degrees during placement.
@@ -816,6 +817,7 @@ static func engineer_available(sim,engineer:Dictionary,structure_id:int=-1)->boo
 static func available_engineer(sim,structure_id:int)->int:
 	if not valid_site(sim,structure_id):return -1
 	var site:Dictionary=sim.get_unit(structure_id)
+	if site.get("field_position",false):return Positions.available_worker(sim,structure_id)
 	var busy:Dictionary={}
 	for other in sim.units:
 		if other.id!=structure_id and sim.alive(other) and other.get("build_left",0.0)>0 and not other.get("build_paused",false):busy[other.get("engineer_id",-1)]=true
@@ -908,7 +910,9 @@ static func assign_builder(sim,site:Dictionary,engineer:Dictionary,plan:Dictiona
 		# Stop only the superseded construction assignment, not unrelated orders.
 		sim.stop([previous.id])
 		previous.erase("building_id")
-	# Explicit work replaces reserve duty; continuing paid work retains it.
+	# This adapter is reached only after build/resume preflight succeeds. An
+	# explicit work order ends reserve authority; a paid queue continuation does
+	# not revoke a delegation made while that existing work was underway.
 	if replace_intent:sim.SupportRequests.cancel_for_unit(sim,engineer)
 	sim.Director.cancel(engineer)
 	sim.cancel_preparation(engineer)
@@ -951,6 +955,7 @@ static func pause_builder(sim,engineer_id:int)->void:
 	if sim.field_ops.is_empty():return
 	var engineer:Dictionary=sim.get_unit(engineer_id)
 	if not engineer.is_empty():
+		Positions.cancel_worker(sim,engineer)
 		engineer.erase("building_id")
 		# A new order also abandons any obstacle clearing in progress.
 		var clearing:Dictionary=sim.get_unit(engineer.get("clearing_id",-1))
@@ -985,6 +990,11 @@ static func clear_site(sim,site_id:int,engineer_id:int)->bool:
 	if site.team!=0 and not sim.contact_known(engineer,site):return fail(sim,"Obstacle not currently spotted")
 	var plan:=work_plan(sim,site.kind,site.pos,engineer,true,site.id,site.get("rotated",false))
 	if plan.reason!="":return fail(sim,"No route to the obstacle")
+	if site.get("field_position",false):
+		var worker:Dictionary=sim.get_unit(int(site.get("engineer_id",-1)))
+		if sim.alive(worker):
+			if site.team!=engineer.team:return fail(sim,"Position is still being worked")
+			Positions.cancel_worker(sim,worker,"site_dismantled")
 	sim.SupportRequests.cancel_for_unit(sim,engineer)
 	pause_builder(sim,engineer.id)
 	sim.Director.cancel(engineer)
@@ -1099,13 +1109,14 @@ static func progress_clearing(sim,dt:float)->void:
 			site.hp=0.0
 			site.state="CLEARED"
 			engineer.erase("clearing_id")
-			if site.team==0:sim.credits+=float(sim.definitions[site.kind].cost)*0.5
+			if site.team==0:sim.credits+=float(site.get("paid_cost",sim.definitions[site.kind].cost))*0.5
 			sim.events.append({"type":"warning","text":"%s cleared by engineers" % str(sim.definitions[site.kind].get("name",site.kind)).capitalize(),"notice":"low"})
 			sim.events.append({"type":"destroyed","kind":site.kind,"pos":site.pos,"visible":true})
 
 static func resume(sim,structure_id:int,engineer_id:int=-1,replace_intent:bool=true)->bool:
 	if not valid_site(sim,structure_id):return fail(sim,"Site unavailable")
 	var site:Dictionary=sim.get_unit(structure_id)
+	if site.get("field_position",false):return Positions.resume(sim,structure_id,engineer_id)
 	if engineer_id<0:engineer_id=available_engineer(sim,structure_id)
 	# No idle section: take the section this site is queued for (or last built it)
 	# and swap its current segment back into its queue rather than refusing.
@@ -1139,7 +1150,9 @@ static func cancel(sim,structure_id:int)->bool:
 	var unit:Dictionary=sim.get_unit(structure_id)
 	if sim.field_ops.is_empty() or sim.result!="" or not sim.alive(unit) or unit.team!=0 or unit.kind not in KINDS or unit.get("build_left",0.0)<=0:return fail(sim,"Site unavailable")
 	var definition:Dictionary=sim.definitions[unit.kind]
-	sim.credits+=float(definition.cost)*unit.build_left/float(definition.build_seconds)
+	sim.credits+=float(unit.get("paid_cost",definition.cost))*unit.build_left/float(unit.get("position_total",definition.build_seconds))
+	var position_worker:Dictionary=sim.get_unit(int(unit.get("engineer_id",-1)))
+	if unit.get("field_position",false) and not position_worker.is_empty():Positions.cancel_worker(sim,position_worker,"site_cancelled")
 	unit.hp=0.0
 	unit.state="CANCELLED"
 	var engineer:Dictionary=sim.get_unit(unit.engineer_id)
@@ -1153,7 +1166,7 @@ static func cancel(sim,structure_id:int)->bool:
 static func sync_obstacles(sim)->void:
 	var structures:Array=sim.units.filter(func(u):return sim.alive(u) and u.get("structure",false))
 	# New, cleared and shoved wrecks must change the key too, so routes follow at once.
-	var key:String=str(structures.map(func(u):return [u.id,u.get("build_left",0.0)<=0]))+"|"+str(sim.VehicleDamage.wrecks(sim).size())+"|"+str(sim.get_meta(sim.VehicleDamage.WRECK_REVISION,0))
+	var key:String=str(structures.map(func(u):return [u.id,u.get("build_left",0.0)<=0,u.get("position_stage",-1)]))+"|"+str(sim.VehicleDamage.wrecks(sim).size())+"|"+str(sim.get_meta(sim.VehicleDamage.WRECK_REVISION,0))
 	if key==sim.field_ops.obstacle_key:return
 	sim.field_ops.obstacle_key=key
 	var blocks:Array=[]
@@ -1163,9 +1176,10 @@ static func sync_obstacles(sim)->void:
 		var rect:=footprint(sim,unit.kind,unit.pos,unit.get("rotated",false))
 		var definition:Dictionary=sim.definitions[unit.kind]
 		if definition.get("solid",true):blocks.append(rect)
-		elif unit.build_left<=0:
+		elif unit.build_left<=0 or int(unit.get("position_stage",0))>=1:
 			var zone:Dictionary=definition.get("zone",{})
-			zones.append({"rect":rect,"speed":zone.get("speed",{}),"cover":zone.get("cover",[]),"conceal":float(zone.get("conceal",1.0)),"dug":unit.kind=="fighting_trench","front":Vector2.LEFT if unit.get("rotated",false) else Vector2.UP})
+			var hasty:bool=unit.get("field_position",false) and int(unit.position_stage)<2
+			zones.append({"rect":rect,"speed":{} if hasty else zone.get("speed",{}),"cover":zone.get("cover",[]),"conceal":float(zone.get("conceal",1.0)),"dug":unit.kind=="fighting_trench" and not hasty,"front":Vector2.LEFT if unit.get("rotated",false) else Vector2.UP})
 		if unit.kind=="tactical_cover" and unit.build_left<=0:covers.append(rect)
 	# Burnt-out and abandoned vehicles block the road for everyone (local nav
 	# refresh only) and give hard cover to infantry beside them. Tracked
@@ -1208,6 +1222,9 @@ static func tick(sim,dt:float)->void:
 	enemy_breach(sim)
 	for unit in sim.units:
 		if not sim.alive(unit) or not unit.get("structure",false):continue
+		# One actor, staged protection and pause/resume belong to this executor.
+		# Running the old whole-section builder as well would double the work.
+		if unit.get("field_position",false):continue
 		if unit.build_left>0:
 			var engineer:Dictionary=sim.get_unit(unit.engineer_id)
 			unit.state="QUEUED" if unit.has("queued_for") else "CONSTRUCTION PAUSED"

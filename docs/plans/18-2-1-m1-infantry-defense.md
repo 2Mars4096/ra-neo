@@ -6,9 +6,9 @@
 
 ## Delivery boundary
 
-M0 is complete at `5850504`. M1 is divided into the six sections below. Sections 1–2 are published at `d10682e` and `e180a118`. Section 1 corrected actual covering fire and explicit/urgent target priority; section 2 corrected stale throw cleanup and exposed-member smoke visibility, with functional and native evidence. The current delivery completes **section 3** on `codex/m1-section-3`, reusing the nearby-reserve candidate `39af9e3` on the completed section 2 baseline. Review corrects queued/provisional order ownership, stale rollback cleanup, actual support credit and copied body observation through smoke. Fresh evidence passes 29/29 affected suites, including 467 M1 checks; the reviewed checkpoint is prepared for commit and publication. Later sections exist on the separate staged implementation branch; their code and completion claims are outside this branch.
+M0 is complete at `5850504`. M1 is divided into the six sections below. Sections 1–3 are published at `d10682e`, `e180a118` and `57f7fa8`, with their checkpoint evidence retained below. The current delivery completes **section 4** on `codex/m1-section-4`, recovering the isolated candidate `3ce3b99` onto completed section 3. It preserves the earlier covering-fire, optical-smoke, reserve lifecycle and copied-observation corrections. The staged branch also contains section 5; that code is not imported here. Section 4 implementation and verification are complete locally; publication of its separate branch is pending.
 
-This slice crosses plans 18-2/3/4/5/9/10/11/12. Their broader urban, domain and sustainment catalogues remain open. Status below describes this branch. Each section remains a separate buildable checkpoint with affected checks and tracking updates; the current delivery stops before section 4.
+This slice crosses plans 18-2/3/4/5/9/10/11/12. Each section remains a buildable checkpoint with current checks and tracking. This delivery stops after hasty positions and engineer upgrades; contextual controls and campaign inventory/integration remain sections 5–6.
 
 ## Implementation sequence
 
@@ -17,7 +17,7 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Their broader urban, domain and 
 | **[M1.1 — Coordinated cover and movement](18-2-1-1-coordinated-cover-and-movement.md)** | A ready member covers a moving partner, holds a useful firing position and hands over after reload, suppression or casualty; task ownership excludes conflicting actions. | M0 readiness, observations and order authority. Check real ammunition/rays, partner replacement, survival moves and player overrides. | Complete — 17/17 affected suites pass |
 | **[M1.2 — Fragmentation and smoke](18-2-1-2-grenades-and-smoke.md)** | Finite carried payloads, interruptible preparation, one release charge, swept flight, physical blast and height-aware optical smoke. | M1.1 covering and actor claims. Check cancellation, allies, alternative throwers, actual impact and air/ground visibility. | Complete — 22/22 suites; three native captures |
 | **[M1.3 — Nearby reserve backup](18-2-1-3-nearby-reserve-backup.md)** | Explicitly delegate an existing section, lease one capable responder, deliver useful support and return to its unchanged assignment. | M1.1 readiness and M1.2 optical rays. Check actual support weapons, exclusive leases, radio loss, retasking and deadlines. | Complete — 29/29 affected suites pass |
-| **M1.4 — Hasty positions and upgrades** | One infantry member digs shallow cover; an engineer can reinforce the same site with one paid upgrade. Retain interrupted progress. | M1.1 actor ownership and M1.3 order cancellation. Check cover stages, geometry, work authority and no duplicate charges/refunds. | Pending |
+| **[M1.4 — Hasty positions and upgrades](18-2-1-4-hasty-positions-and-upgrades.md)** | One infantry member digs shallow cover; an engineer can reinforce the same site with one paid upgrade. Retain interrupted progress. | M1.1 actor ownership and M1.3 order cancellation. Check cover stages, geometry, work authority and no duplicate charges/refunds. | Complete — 248 field-position checks; three native captures |
 | **M1.5 — Controls and feedback** | Contextual commands, target previews, Hold fire, Reserve/Auto Frag toggles and concise action status. | M1.1–M1.4 APIs. Check real input, rejected orders, partial radio acknowledgements, cancellation and layout. | Pending |
 | **M1.6 — Persistence and integration** | Preserve individual equipment through outcomes/retry, migrate old saves, and combine the mechanics in Harbor. | M1.1–M1.5. Check empty inventories/casualties, migration, integrated encounter, affected regression gate and native rendering. | Pending |
 
@@ -28,16 +28,16 @@ This slice crosses plans 18-2/3/4/5/9/10/11/12. Their broader urban, domain and 
 - [x] 2. Recover, verify and publish finite fragmentation grenades and optical smoke.
   - [x] Recover the section 2 implementation onto `d10682e` while retaining section 1 corrections.
   - [x] Complete the [section 2 review](18-2-1-2-grenades-and-smoke.md), record checkpoint evidence and publish `codex/m1-section-2` at `e180a118`.
-- [x] 3. Recover and verify existing-reserve backup and assignment-safe return; prepare the checkpoint for publication.
+- [x] 3. Recover, verify and publish existing-reserve backup and assignment-safe return.
   - [x] Recover the section 3 candidate onto `e180a118` while retaining sections 1–2 corrections.
-  - [x] Complete the [section 3 review](18-2-1-3-nearby-reserve-backup.md), record current evidence and prepare `codex/m1-section-3` for commit and push.
-- [ ] 4. Recover, verify and publish hasty positions, engineer upgrades and work-order integration.
+  - [x] Complete the [section 3 review](18-2-1-3-nearby-reserve-backup.md), record current evidence and publish `codex/m1-section-3` at `57f7fa8`.
+- [ ] 4. Recover, verify and publish [hasty positions, engineer upgrades and work-order integration](18-2-1-4-hasty-positions-and-upgrades.md).
 - [ ] 5. Recover, verify and publish compact controls, previews and action feedback.
 - [ ] 6. Recover persistence, run integration/native review, update evidence and publish completion.
 
 ## Behavior contract
 
-This table specifies the complete M1 target. Section 1 provides cooperation and shared actor ownership; section 2 adds payloads, optical smoke and their integration with covering fire. Section 3 supplies nearby reserve dispatch and assignment-safe return. Field positions, contextual controls and campaign inventory persistence remain later sections on this branch.
+This table specifies the complete M1 target. Section 1 provides cooperation and shared actor ownership; section 2 adds payloads, optical smoke and their integration with covering fire. Section 3 supplies nearby reserve dispatch and assignment-safe return. Section 4 adds hasty positions and engineer upgrades. Contextual controls and campaign inventory persistence remain later sections on this branch.
 
 | Area | M1 behavior |
 |---|---|
@@ -64,7 +64,7 @@ The strip shows stock and relevant capabilities. Throw previews use the executor
 
 ## Verification
 
-Use Godot 4.5.1. `python3 tools/check.py --group m1` selects the M1 suites present at the current checkpoint: `test_infantry_coordination.gd`, `test_throwables.gd`, `test_m1_optics.gd`, `test_support_requests.gd` and `test_support_lifecycle.gd`. `--group tactical` also checks affected existing executors. Later checkpoints add field-position, command, persistence and integrated-defense suites; the complete slice's integrated native Harbor review belongs to M1.6.
+Use Godot 4.5.1. `python3 tools/check.py --group m1` selects the M1 suites present at the current checkpoint: `test_infantry_coordination.gd`, `test_throwables.gd`, `test_m1_optics.gd`, `test_support_requests.gd`, `test_support_lifecycle.gd`, `test_field_positions.gd`, `test_field_position_lifecycle.gd` and `test_field_position_orders.gd`. `--group tactical` also checks affected existing executors. Later checkpoints add command, persistence and integrated-defense suites; the complete slice's integrated native Harbor review belongs to M1.6.
 
 Current checkpoint results are recorded below as the sections pass. Previous local-candidate results are historical only. A functional pass does not establish human balance, hardware performance or a completed mission.
 
@@ -77,8 +77,10 @@ Current checkpoint results are recorded below as the sections pass. Previous loc
 
 - **Completed M1.3 checkpoint:** [current evidence](../evidence/m1-03-checks.json) records 29/29 affected suites passing in 203 seconds with no assertion/script failures, including 467 M1 checks (79 coordination, 145 throwable, 56 optics, 125 support-request and 62 lifecycle). Corrections cover queued/provisional order ownership through actual ordinary completion, paused service/stall timing with absolute deadlines, parked rollback cleanup, actual target/weapon use and copied exposed-body smoke geometry. Identical final tests produce 24 lifecycle and seven support failures on integrated pre-fix tree `ba5456bc`, then zero here. No new native rendering, UI or hardware-performance result is claimed for this checkpoint.
 
+- **Completed M1.4 checkpoint:** [current evidence](../evidence/m1-04-checks.json) records **715 passing M1 checks**, including 151 field-position, 81 work-lifecycle and 16 work-order checks. The affected gate passes **39/40 suites**; its remaining Harbor crowd-spacing failure is identical on unchanged section 3 (`57f7fa8`). The obsolete visual-test fake was repaired without changing assertions or production animation. Identical final lifecycle/order suites produce 13 and five failures before their fixes and zero afterward. [Native review](../evidence/m1-04-native-review.json) contains three inspected Harbor captures of the same site progressing from survey to hasty to reinforced cover through real movement/work APIs. Contextual controls and full slice integration remain later sections.
+
 ## Bounds and remaining work
 
-Section 1 reviews existing section members and uses the existing bounded cover search. Section 2 caps projectiles/preparations at 64 each, smoke volumes at 32 and defensive reviews at two due sections per tick. Section 3 caps support requests at 32, registered reserves at 64 and provider candidates at 12. Planned section 4 limits are 64 field-work jobs and 96 sites. Requests, leases, service and returns must have deadlines. These limits do not establish CPU/FPS acceptance; M0's synchronous navigation hitch remains an open issue.
+Section 1 reviews existing section members and uses the existing bounded cover search. Section 2 caps projectiles/preparations at 64 each, smoke volumes at 32 and defensive reviews at two due sections per tick. Section 3 caps support requests at 32, registered reserves at 64 and provider candidates at 12. Section 4 caps field-work jobs at 64 and living sites at 96, with a 120-second assignment deadline and a two-second blocked approach limit. Requests, leases, service and returns must have deadlines. These limits do not establish CPU/FPS acceptance; M0's synchronous navigation hitch remains an open issue.
 
-Sections 1–2 use the existing procedural soldiers, a placeholder throw pose, simple payload meshes and pooled smoke. Dig poses and staged position meshes belong to later sections. Room/interior throws, bouncing, grenade replenishment, generalized engineer dispatch, broader initiative profiles and M2 domain roles remain later work. Human command clarity, tuning, long-session play and supported-hardware performance acceptance remain open.
+Sections 1–2 use the existing procedural soldiers, a placeholder throw pose, simple payload meshes and pooled smoke. Section 4 reuses the procedural work pose and adds distinct survey, shallow-earth and reinforced stage meshes. Room/interior throws, bouncing, grenade replenishment, generalized engineer dispatch, broader initiative profiles and M2 domain roles remain later work. Human command clarity, tuning, long-session play and supported-hardware performance acceptance remain open.

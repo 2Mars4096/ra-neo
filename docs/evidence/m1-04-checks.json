@@ -1,0 +1,655 @@
+{
+  "engine": "4.5.1.stable.official.f62fdbde1",
+  "checkpoint": {
+    "branch": "codex/m1-section-4",
+    "base_commit": "57f7fa8e56df405b163d0ecfe0cabce749196660",
+    "recovered_candidate_commit": "3ce3b99a31ed95e7bed6790bcacf832e836ee94e",
+    "scope": "M1 section 4: hasty positions and engineer upgrades; sections 1\u20133 retained"
+  },
+  "summary": {
+    "suites_passed": 39,
+    "suites_failed": 1,
+    "inherited_failures": 1,
+    "new_section_failures": 0,
+    "m1_checks": 715,
+    "m1_failures": 0,
+    "field_position_checks": 248,
+    "source_file_count": 121
+  },
+  "m1_suite_checks": {
+    "test_infantry_coordination.gd": 79,
+    "test_throwables.gd": 145,
+    "test_m1_optics.gd": 56,
+    "test_support_requests.gd": 125,
+    "test_support_lifecycle.gd": 62,
+    "test_field_positions.gd": 151,
+    "test_field_position_lifecycle.gd": 81,
+    "test_field_position_orders.gd": 16
+  },
+  "verification_runs": [
+    {
+      "name": "initial_affected_gate",
+      "command": "GODOT_BIN=/tmp/ra-neo-m1-runtime/Godot_v4.5.1-stable_linux.x86_64 python3 tools/check.py --group tactical --group core --group regression --group combat test_engineer_works.gd test_field_ops_resume.gd test_field_ops.gd test_field_ops_edges.gd test_regroup_recovery.gd test_cover_behavior.gd test_cover_contact.gd test_spatial_targeting.gd test_garrison.gd test_garrison_fire.gd test_action_integration.gd test_action_targeting.gd test_command_modes.gd test_elevation.gd test_enemy_knowledge.gd test_infantry_coordination.gd test_input_actions.gd test_m1_optics.gd test_runtime_planning.gd test_section_contact.gd test_support_lifecycle.gd test_support_requests.gd test_tactical_actions.gd test_tactical_context.gd test_tactical_navigation.gd test_tactical_pressure.gd test_tactical_readiness.gd test_throwables.gd test_wreck_clearing.gd test_field_positions.gd test_field_position_lifecycle.gd test_field_position_orders.gd test_field_geometry.gd test_field_visuals.gd test_field_ui.gd test_engaged_spacing.gd test_wreck_section_recovery.gd test_world_damage.gd test_animation.gd test_command_authority.gd test_give_way_spots.gd",
+      "log_dir": "/tmp/for-every-dawn-check-bjlh6hsg",
+      "suites": 40,
+      "passed": 37,
+      "failed": [
+        "test_field_position_lifecycle.gd",
+        "test_field_visuals.gd",
+        "test_engaged_spacing.gd"
+      ]
+    },
+    {
+      "name": "final_field_work_rerun",
+      "command": "GODOT_BIN=/tmp/ra-neo-m1-runtime/Godot_v4.5.1-stable_linux.x86_64 python3 tools/check.py --group m1 test_field_position",
+      "log_dir": "/tmp/for-every-dawn-check-fbh4_bw6",
+      "suites": 3,
+      "passed": 3
+    },
+    {
+      "name": "corrected_visual_fixture_rerun",
+      "command": "Godot 4.5.1 --headless --path . --script tests/test_field_visuals.gd (isolated XDG directories)",
+      "log": "/tmp/m1-section4-field-visuals-after.log",
+      "passed": true,
+      "fixture_change": "Replace obsolete time-only fake with unpopulated real Simulation; assertions and production animation unchanged."
+    }
+  ],
+  "results": [
+    {
+      "group": "tactical",
+      "script": "test_engineer_works.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 6.6,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nENGINEER WORKS: 138 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_field_ops_resume.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 3.1,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD OPS RESUME TESTS: 53 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_field_geometry.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 12.1,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD GEOMETRY: 280 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_field_ops.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 3.9,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD OPS TESTS: 653 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_field_ops_edges.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.4,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD OPS EDGE TESTS: 20 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_field_ui.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 9.6,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD UI: 3755 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_regroup_recovery.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 18.9,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nREGROUP SNAPSHOT t=60 squad=1 pos=(39.00561, 21.97194) hp=160.0 blocked=0.0 target=-1 orders=[] maneuver={  } path=[]\n actor=0 pos=(32.05, 23.0) phase=SHELTERED occupying=true goal=(32.05, 23.0) cover_path=[] gap=7.03117656707764 regroup=[]\n actor=1 pos=(44.50561, 21.97194) phase=SHELTERED occupying=true goal=(44.50561, 21.97194) cover_path=[] gap=5.5 regroup=[]\n actor=2 pos=(46.50561, 21.97194) phase=SHELTERED occupying=true goal=(46.50561, 21.97194) cover_path=[] gap=7.5 regroup=[]\nREGROUP SNAPSHOT t=60 squad=2 pos=(34.92694, 24.80478) hp=160.0 blocked=0.0 target=-1 orders=[] maneuver={  } path=[]\n actor=0 pos=(31.54938, 26.11226) phase=SEEKING occupying=true goal=(30.0, 27.95) cover_path=[(30.0, 27.95)] gap=3.62179565429688 regroup=[(34.92694, 23.82478)]\n actor=1 pos=(30.0, 25.05) phase=SHELTERED occupying=true goal=(30.0, 25.05) cover_path=[] gap=4.93303918838501 regroup=[]\n actor=2 pos=(30.02194, 27.02111) phase=SEEKING occupying=true goal=(28.0, 25.05) cover_path=[(27.93807, 26.98609), (28.0, 25.05)] gap=5.38248682022095 regroup=[]\nREGROUP SNAPSHOT t=60 squad=3 pos=(40.23995, 26.22888) hp=105.0 blocked=0.0 target=-1 orders=[] maneuver={  } path=[]\n actor=0 pos=(44.95, 31.0) phase=SHELTERED occupying=true goal=(44.95, 31.0) cover_path=[] gap=6.70433759689331 regroup=[]\n actor=1 pos=(47.0, 29.95) phase=SHELTERED occupying=true goal=(47.0, 29.95) cover_path=[] gap=7.71653985977173 regroup=[]\nFIRST ORDER COMPLETIONS: { 3: 41.6000000000002, 1: 42.5000000000001, 2: 52.4666666666662 }\nVILLAGE owner=0 progress=12.0\nREGROUP RECOVERY: 139107 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_cover_behavior.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 3.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nCOVER BEHAVIOR: 0 failures; maximum individual movement=7.10605907440186 settled=true",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_cover_contact.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 16.7,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nSANDBAG normal sandbag close sheltered=2\nSANDBAG rotated sandbag close sheltered=2\nCOVER CONTACT: 99 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_spatial_targeting.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 11.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nSPATIAL TARGETING: 0 failures; [{\"average_candidates\":10.86,\"brute_query_us_p95\":210,\"entities\":250,\"indexed_query_us_p95\":51},{\"average_candidates\":11.76,\"brute_query_us_p95\":556,\"entities\":500,\"indexed_query_us_p95\":58},{\"average_candidates\":12.36,\"brute_query_us_p95\":812,\"entities\":1000,\"indexed_query_us_p95\":113},{\"average_candidates\":12.66,\"brute_query_us_p95\":1917,\"entities\":2000,\"indexed_query_us_p95\":142}]",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_animation.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nANIMATION TESTS: 580 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_garrison.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 3.2,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nentry walk (indoors vs outside): damage 5.25 vs 15.00, exposure 0.085 vs 0.202, pin 0.027 vs 0.090\nentry walk blast KIA/severe (indoors vs outside): 120 vs 226 of 400\nexit walk (indoors vs outside): damage 5.25 vs 8.25, exposure 0.085 vs 0.142, pin 0.027 vs 0.090\nexit walk blast KIA/severe (indoors vs outside): 25 vs 69 of 400\nGARRISON: 32 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_garrison_fire.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 5.7,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nbuilding 211 bounds [P: (336.0001, 373.1), S: (20.0001, 15.5)] rects 1 door (346.1787, 391.65)\nside (1.0, 0.0): shots 20 by 3 soldiers, first at +2.0s, enemy hp 160 -> 0, states [\"HOLDING\", \"SETTLING\", \"ACQUIRING\", \"FIRING\", \"CYCLING\", \"RELOADING\"]\nside (0.0, -1.0): shots 23 by 3 soldiers, first at +1.2s, enemy hp 160 -> 107, states [\"HOLDING\", \"SETTLING\", \"ACQUIRING\", \"FIRING\", \"CYCLING\", \"RELOADING\"]\nside (-1.0, 0.0): shots 8 by 3 soldiers, first at +1.2s, enemy hp 160 -> 0, states [\"HOLDING\", \"SETTLING\", \"ACQUIRING\", \"FIRING\", \"CYCLING\", \"RELOADING\"]\nside (0.0, 1.0)(door): shots 11 by 3 soldiers, first at +1.3s, enemy hp 160 -> 0, states [\"HOLDING\", \"SETTLING\", \"ACQUIRING\", \"FIRING\", \"CYCLING\", \"RELOADING\"]\ntank + infantry: shots 9, targets [7] (tank 6, infantry 7)\njavelin: missiles 3 -> 0, launches at [4.59999999999999, 11.6333333333333, 18.6666666666668], tank hp 440 -> 76, gunner HOLDING\nGARRISON FIRE: 27 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_world_damage.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 42.2,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nSHOTS TO COLLAPSE (integrity = (20 + area x floors x 0.30) x construction)\n  design             area floors integrity |  tank at_gun  atgm  helo  boat\n  outbuilding          10      1        14 |     2     2     3     2     3\n  dacha_hut            16      1        15 |     2     3     3     2     3\n  gatehouse            27      1        28 |     3     5     6     4     5\n  garage_row          115      1        38 |     4     6     8     5     7\n  stone_house          42      1        39 |     4     6     8     5     7\n  shop_pavilion       182      1        52 |     6     8    11     7     9\n  stone_house          46      2        57 |     6     9    12     8    10\n  petrol_station      216      1        59 |     6     9    12     8    10\n  barn_long           265      1        60 |     6     9    12     8    10\n  classic_row          90      2        74 |     8    11    15    10    13\n  colonnade_landing     198      1        79 |     8    12    16    10    14\n  shop_pavilion       198      2        97 |    10    14    20    13    17\n  classic_row          95      3       106 |    11    16    22    14    18\n  workshop_hall       448      1       108 |    11    16    22    14    19\n  coop_shed           576      1       116 |    12    17    24    15    20\n  classic_row          95      4       134 |    14    20    27    17    23\n  market_hall         540      1       146 |    15    21    30    19    25\n  slipway             432      1       150 |    15    22    30    19    25\n  transit_shed        971      1       187 |    19    27    38    24    32\n  classic_corner      203      3       203 |    21    29    41    26    34\n  kindergarten        385      2       251 |    26    36    51    32    42\n  classic_corner      203      4       264 |    27    38    53    33    44\n  cathedral           660      1       349 |    35    50    70    44    59\n  port_admin          312      4       394 |    40    57    79    50    66\n  barracks            480      3       452 |    46    65    91    57    76\n  fort_ruin           900      1       522 |    53    75   105    66    87\n  civic_hall          576      3       538 |    54    77   108    68    90\n  panel_5             342      5       693 |    70    99   139    87   116\n  panel_9             480      9       900 |    90   129   180   113   150\n  point_tower         256     13       900 |    90   129   180   113   150\nTANK vs stone_house (48 m2, 1 floor, integrity 41): 5 shots to collapse (expected 5), states [0, 1, 2, 3], 10.3 s\nRUBBLE at (708.6593, 112.0333): traversable before false after true; solid before { \"infantry\": true, \"tracked\": true, \"wheeled\": true } after infantry false tracked false wheeled true\nRUBBLE speed vs open: infantry 0.55 tracked 0.35 wheeled 0.07; surface 'RUBBLE \u00b7 COVER \u00b7 VEHICLES SLOWED'\nRUBBLE infantry approaches with a route to the centre: 10 of 12\nRUBBLE line of sight firing spot -> 1.5 m inside the struck wall: before false after true\nGARRISON protection leak vs small arms: intact 1.00, damaged 1.40, breached 1.90\nBREACH fragments: garrison hp 107 -> 0 after 10 HE hits\nCOLLAPSE of barracks (3 floors, 11 x 39 m): killed 2 survivors 1; sim cost 16.3 ms (nav refresh, rubble zone)\nSANDBAGS under tank HE: protection factor [0.55, 0.65, 0.74, 0.74, 0.74, 0.84, 0.84, 0.93, 1.0], leak to soldiers [1.0, 1.17, 1.35, 1.35, 1.35, 1.52, 1.52, 1.7, 1.0], gone after 8 hits\nDEPOT cook-off after 5 HE rounds: 4 secondary blasts; crew 160 -> 0, command post 520 -> 438\nOUTCOMES tank HE vs corvette (n=3000): { \"firepower\": 595, \"mobility\": 605, \"crew\": 737, \"fire\": 440, \"flooding\": 443, \"catastrophic\": 180 }\nFLOODING one hole (0.035/s), 3 crew pumping: flood level 0.34 after 40 s, alive true, draft 0.44 m\nFLOODING two holes, crew of 1: sank after 7.5 s\nFIRE 12 s: corvette 480 -> 420 hp, burning false\nOUTCOMES autocannon vs gunship (n=3000): { \"crew\": 247, \"mobility\": 211, \"hydraulics\": 98, \"firepower\": 147, \"tail_rotor\": 156 }\nTAIL ROTOR: down after 2.9 s, troops below 160 -> 53, wreck true\nDRONE drone downed per hit: rifle 1.00 engineer 0.91 tank 1.00 aa 1.00\nDRONE fpv_drone downed per hit: rifle 1.00 engineer 0.92 tank 1.00 aa 1.00\nVISUALS: tiles built in 4554 ms; damage marks 4 (one MultiMesh); collapse handled in 8.9 ms; parcel triangles 848, hidden 848; rubble mound 1 mesh nodes\nBATTLE consume_events: collapse of stone_house handled in 14.1 ms; hidden 848 triangles; rubble true; marks 6\nHOOK cost: 300 fresh shot events 1.73 ms; idle tick 0.0015 ms\nWORLD DAMAGE: 82 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_action_integration.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 4.1,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nACTION INTEGRATION: 169 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_action_targeting.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 1.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nACTION TARGETING: 20 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_command_modes.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 23.5,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nCOMMAND MODES: 33 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_elevation.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 3.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nELEVATION: 58 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_enemy_knowledge.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 8.6,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nENEMY KNOWLEDGE: 59 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "m1",
+      "script": "test_field_position_lifecycle.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 9.2,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD POSITION LIFECYCLE: 81 checks, 0 failures",
+      "verification_run": "final_field_work_rerun"
+    },
+    {
+      "group": "m1",
+      "script": "test_field_position_orders.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 5.9,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD POSITION ORDERS: 16 checks, 0 failures",
+      "verification_run": "final_field_work_rerun"
+    },
+    {
+      "group": "m1",
+      "script": "test_field_positions.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 11.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD POSITIONS: 151 checks, 0 failures",
+      "verification_run": "final_field_work_rerun"
+    },
+    {
+      "group": "tactical",
+      "script": "test_give_way_spots.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 10.4,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\ntank+tank: both asked 74, sharing a spot 0, closest spots 6.0 u apart\ntank+rifle: both asked 74, sharing a spot 0, closest spots 5.8 u apart\nrifle+atgm: both asked 98, sharing a spot 0, closest spots 4.4 u apart\n  tank+tank at (-6.0, 3.0) (0.0, 0.0): asked=true asker arrived 11.1 s, blockers 13.2 u apart, stacked 0.0 s\n  tank+rifle at (0.0, 0.0) (-6.0, 3.0): asked=true asker arrived 9.0 s, blockers 11.2 u apart, stacked 0.0 s\n  rifle+atgm at (-6.0, 3.0) (-3.0, 0.0): asked=true asker arrived 9.0 s, blockers 10.8 u apart, stacked 0.0 s\nGIVE WAY SPOTS: 31 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_infantry_coordination.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nINFANTRY COORDINATION: 79 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_input_actions.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 30.6,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\ncursor hint refresh: 1.627 ms\nINPUT ACTIONS: 61 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_m1_optics.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nM1 OPTICS: 56 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_runtime_planning.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nRUNTIME PLANNING: 22 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_section_contact.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 8.9,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\n  attack_move: casualty at 1.1 s, phase after 1 s=CONSOLIDATE, anchor moved 0.0 u in 4 s\n  attack-move: resumed 6.3 s after the casualty, now 32.7 u on\n  move: casualty at 1.1 s, phase after 1 s=, anchor moved 16.2 u in 4 s\n  drag: dragged at 0.6 s, in cover at 2.4 s, stable=true aid=8.0 wound=SEVERE enemy hp=160\n  open field casualty: aid under fire=false, aiding/dragging under fire 0.0 s, enemy hp=160\n  idle: first fire 1.5 s, prone 0.0 s, bound 7.1 s, sheltered 19.8 s, anchor 10.9 u from start, living 1\n  hold: first fire 1.5 s, prone 0.0 s, bound -1.0 s, sheltered -1.0 s, anchor 1.0 u from start, living 0\nSECTION CONTACT: 24 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_support_lifecycle.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.7,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nSUPPORT LIFECYCLE: 62 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_support_requests.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.7,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nSUPPORT REQUESTS: 125 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_tactical_actions.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 0.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTACTICAL ACTIONS: 70 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_tactical_context.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 1.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTACTICAL CONTEXT: 26 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_tactical_navigation.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTACTICAL NAVIGATION: 924 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_tactical_pressure.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.0,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTACTICAL PRESSURE: 61 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_tactical_readiness.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 1.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTACTICAL READINESS: 61 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_throwables.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 2.3,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nTHROWABLES: 145 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "tactical",
+      "script": "test_wreck_section_recovery.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 23.2,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\n  arrived SUPPORT: clear=0.37 s, goal distance 19.42 -> 0.07, state READY\n  fresh move: clear=0.37 s, goal distance 19.42 -> 0.07, state READY\n  fresh attack_move: clear=0.37 s, goal distance 19.42 -> 0.07, state READY\n  ordinary retreat: clear=0.37 s, goal distance 329.36 -> 290.53, state RETREATING\n  queued follow-up: clear=0.37 s, goal distance 19.42 -> 12.19, state MOVING\n  deferred valid: clear=0.33 s, goal distance 19.48 -> 0.07, state READY\n  deferred invalid restores prior: clear=0.33 s, goal distance 19.48 -> 0.07, state READY\n  replacement after Stop: clear=0.33 s, goal distance 19.48 -> 0.05, state READY\n  second wreck remains solid: clear=0.37 s, goal distance 19.42 -> 0.07, state READY\nWRECK SECTION RECOVERY: 186 checks, 0 failures",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "core",
+      "script": "test_field_visuals.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": null,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD VISUALS: 662132 checks, 0 failures",
+      "verification_run": "corrected_visual_fixture_rerun"
+    },
+    {
+      "group": "regression",
+      "script": "test_engaged_spacing.gd",
+      "passed": false,
+      "exit_code": 1,
+      "seconds": 22.8,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\n  (526.0, 690.0): both halted at 4.9 s; judged 12.0 s: min anchor gap 4.83, longest stay in the other footprint 2.3 s, fired [1, 2], most sheltered 2, soldier-seconds sheltered 20.0, anchors (538.3348, 690.0) (542.7776, 688.0981)\n  (400.0, 510.0): both halted at 4.5 s; judged 12.0 s: min anchor gap 4.45, longest stay in the other footprint 0.0 s, fired [1, 2], most sheltered 2, soldier-seconds sheltered 14.5, anchors (383.4709, 511.8128) (383.0554, 506.8936)\n  (448.0, 582.0): both halted at 4.7 s; judged 12.0 s: min anchor gap 4.13, longest stay in the other footprint 0.0 s, fired [1, 2], most sheltered 2, soldier-seconds sheltered 8.5, anchors (448.6473, 598.8231) (452.7328, 598.2191)\n  (560.0, 598.0): both halted at 3.7 s; judged 12.0 s: min anchor gap 4.45, longest stay in the other footprint 0.0 s, fired [1, 2], most sheltered 1, soldier-seconds sheltered 1.8, anchors (583.4778, 583.8683) (577.6653, 591.579)\nENGAGED SPACING: 20 checks, 1 failures\nFAIL: (526.0, 690.0): no soldier stays inside the other section's footprint (2.3 s)",
+      "verification_run": "initial_affected_gate"
+    },
+    {
+      "group": "regression",
+      "script": "test_wreck_clearing.gd",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 11.6,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\n  push_light: shove at 5.2 s, arrive 20.0 s at (384.91, 509.5), wreck moved 5.66 u to (357.53, 514.57), worst overlap 0.00 u\n  tank_wreck_holds: tank at (385.0, 509.57), wreck moved 0.000 u, worst overlap 0.00 u\n  engineer_clears: cleared at 50.5 s (job 47 s), last progress 'Clearing wreck 99%'\n  engineer_clears: tank route 125.9 u before (round the wreck), 55.0 u after\n  never_into_buildings: wreck at (345.28, 505.43)\n  never_into_water: shore x 422, wreck at (419.36, 400.72)\n  never_into_units: wreck at (300.36, 640.71)\nWRECK CLEARING: 45 checks, 0 failures (9801 ms)",
+      "verification_run": "initial_affected_gate"
+    }
+  ],
+  "negative_controls": [
+    {
+      "suite": "tests/test_field_position_lifecycle.gd",
+      "comparison": {
+        "created_utc": "2026-11-02T18:46:21.297100+00:00",
+        "base_commit": "57f7fa8e56df405b163d0ecfe0cabce749196660",
+        "candidate_commit": "3ce3b99a31ed95e7bed6790bcacf832e836ee94e",
+        "test_file": "/workspace/scratch/35a5b1692e52/ra-neo/tests/test_field_position_lifecycle.gd",
+        "test_sha256": "48b7eaea3111b1f0c825af4907fe3e54cec0d198d5a27722abc0264571992689",
+        "baseline_executor_exact_candidate": true,
+        "baseline_simulation_matches_section3_plus_only_candidate_delta": true,
+        "simulation_identical_between_comparators": true,
+        "test_identical_across_live_and_comparators": true,
+        "runs": [
+          {
+            "name": "baseline",
+            "snapshot": "/tmp/ra-neo-section4-review-baseline",
+            "engine": "Godot 4.5.1.stable.official.f62fdbde1",
+            "command": [
+              "/tmp/ra-neo-m1-runtime/Godot_v4.5.1-stable_linux.x86_64",
+              "--headless",
+              "--path",
+              "/tmp/ra-neo-section4-review-baseline",
+              "--script",
+              "res://tests/test_field_position_lifecycle.gd"
+            ],
+            "exit_code": 1,
+            "checks": 81,
+            "failures": 13,
+            "script_errors": false,
+            "output_file": "/tmp/ra-neo-section4-review-evidence/baseline.log",
+            "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFAIL: forced hull avoidance pauses work before another increment\nFAIL: hull avoidance releases both actor and work claims\nFAIL: ordinary infantry movement actually yields after work releases the soldier\nFAIL: work cannot resume while the soldier still owes hull avoidance\nFAIL: accepted work clears obsolete recovery and engage-spacing state\nFAIL: accepted local work cannot continue the old recovery movement\nFAIL: new physical recovery pauses progress and releases the worker before moving\nFAIL: new physical recovery releases actor and work claims\nFAIL: real recovery and infantry executors can move both anchor and released worker\nFAIL: the new work waits while actual wreck recovery moves its section\nFAIL: displacement beyond the local work leash cancels stale job authority\nFAIL: out-of-leash cancellation frees actor, site and task channel\nFAIL: out-of-leash cancellation preserves site progress and integrity\nFIELD POSITION LIFECYCLE: 81 checks, 13 failures\n",
+            "sha256": {
+              "tests/test_field_position_lifecycle.gd": "48b7eaea3111b1f0c825af4907fe3e54cec0d198d5a27722abc0264571992689",
+              "scripts/field_positions.gd": "40a75603190d365843b16333b19bb0104c8452d85fb3bf848b8e370800ae91ba",
+              "scripts/simulation.gd": "700f200ae8823f034b2b5e390c872c88bb081a769c5a7257ab761b8810fdeb76",
+              "scripts/infantry.gd": "720fa62541056525c9f185b68f9633803a74a26b3ed746dfb8ee058cf79c64dd",
+              "scripts/field_ops.gd": "8e846fb0abf92a860a79b4def38c13f34bd317fd339a9973336d7d590d444dd1"
+            }
+          },
+          {
+            "name": "isolated-fixed",
+            "snapshot": "/tmp/ra-neo-section4-review-corrected",
+            "engine": "Godot 4.5.1.stable.official.f62fdbde1",
+            "command": [
+              "/tmp/ra-neo-m1-runtime/Godot_v4.5.1-stable_linux.x86_64",
+              "--headless",
+              "--path",
+              "/tmp/ra-neo-section4-review-corrected",
+              "--script",
+              "res://tests/test_field_position_lifecycle.gd"
+            ],
+            "exit_code": 0,
+            "checks": 81,
+            "failures": 0,
+            "script_errors": false,
+            "output_file": "/tmp/ra-neo-section4-review-evidence/isolated-fixed.log",
+            "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD POSITION LIFECYCLE: 81 checks, 0 failures\n",
+            "sha256": {
+              "tests/test_field_position_lifecycle.gd": "48b7eaea3111b1f0c825af4907fe3e54cec0d198d5a27722abc0264571992689",
+              "scripts/field_positions.gd": "805792003023270cae9e7bfa994ec41a06651bf2f36276be7ef9905e7d61a595",
+              "scripts/simulation.gd": "700f200ae8823f034b2b5e390c872c88bb081a769c5a7257ab761b8810fdeb76",
+              "scripts/infantry.gd": "720fa62541056525c9f185b68f9633803a74a26b3ed746dfb8ee058cf79c64dd",
+              "scripts/field_ops.gd": "8e846fb0abf92a860a79b4def38c13f34bd317fd339a9973336d7d590d444dd1"
+            }
+          }
+        ],
+        "recovery_patch": "/tmp/ra-neo-section4-review-evidence/recovery-replacement.patch",
+        "notes": [
+          "Snapshots exclude later section-5 controls.",
+          "Corrected comparator changes only field_positions.gd from the integrated section-4 candidate; simulation retains the original candidate without spacing fixes.",
+          "The final test exercises forced hull avoidance, stale/active physical recovery, out-of-leash authority, deadlines, real job capacity, live site capacity, and provisional/queued commands.",
+          "A separate live run before guarded recomputation produced 81 checks/3 failures, all in replacement during actual recovery."
+        ]
+      },
+      "final_current_output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD POSITION LIFECYCLE: 81 checks, 0 failures"
+    },
+    {
+      "suite": "tests/test_field_position_orders.gd",
+      "baseline": "Completed section 3 plus recovered section 4 candidate, before automatic spacing guards.",
+      "test_sha256": "4616cb1dd2f54c5798db930ecd2350928112fa3c15361b91616a9c1caeb2e942",
+      "identical_test_in_both_runs": true,
+      "checks": 16,
+      "failures_before_fix": 5,
+      "failures_after_fix": 0,
+      "script_errors": false,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFAIL: ordinary crowd timeout cannot replace accepted digging with a Move order\nFAIL: digging remains assigned after the automatic unstack timeout\nFAIL: quiet spacing retains the work anchor while physical work advances\nFAIL: crowded section completes its real 18-second local position\nFAIL: engagement spacing cannot silently move an active work anchor\nFIELD POSITION ORDERS: 16 checks, 5 failures",
+      "positive_output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\nFIELD POSITION ORDERS: 16 checks, 0 failures"
+    }
+  ],
+  "inherited_failures": [
+    {
+      "suite": "tests/test_engaged_spacing.gd",
+      "baseline_commit": "57f7fa8e56df405b163d0ecfe0cabce749196660",
+      "baseline": "Unmodified git archive of completed section 3",
+      "checks": 20,
+      "failures": 1,
+      "script_errors": false,
+      "output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\n  (526.0, 690.0): both halted at 4.9 s; judged 12.0 s: min anchor gap 4.83, longest stay in the other footprint 2.3 s, fired [1, 2], most sheltered 2, soldier-seconds sheltered 20.0, anchors (538.3348, 690.0) (542.7776, 688.0981)\nFAIL: (526.0, 690.0): no soldier stays inside the other section's footprint (2.3 s)\n  (400.0, 510.0): both halted at 4.5 s; judged 12.0 s: min anchor gap 4.45, longest stay in the other footprint 0.0 s, fired [1, 2], most sheltered 2, soldier-seconds sheltered 14.5, anchors (383.4709, 511.8128) (383.0554, 506.8936)\n  (448.0, 582.0): both halted at 4.7 s; judged 12.0 s: min anchor gap 4.13, longest stay in the other footprint 0.0 s, fired [1, 2], most sheltered 2, soldier-seconds sheltered 8.5, anchors (448.6473, 598.8231) (452.7328, 598.2191)\n  (560.0, 598.0): both halted at 3.7 s; judged 12.0 s: min anchor gap 4.45, longest stay in the other footprint 0.0 s, fired [1, 2], most sheltered 1, soldier-seconds sheltered 1.8, anchors (583.4778, 583.8683) (577.6653, 591.579)\nENGAGED SPACING: 20 checks, 1 failures",
+      "current_output": "Godot Engine v4.5.1.stable.official.f62fdbde1 - https://godotengine.org\n\n  (526.0, 690.0): both halted at 4.9 s; judged 12.0 s: min anchor gap 4.83, longest stay in the other footprint 2.3 s, fired [1, 2], most sheltered 2, soldier-seconds sheltered 20.0, anchors (538.3348, 690.0) (542.7776, 688.0981)\n  (400.0, 510.0): both halted at 4.5 s; judged 12.0 s: min anchor gap 4.45, longest stay in the other footprint 0.0 s, fired [1, 2], most sheltered 2, soldier-seconds sheltered 14.5, anchors (383.4709, 511.8128) (383.0554, 506.8936)\n  (448.0, 582.0): both halted at 4.7 s; judged 12.0 s: min anchor gap 4.13, longest stay in the other footprint 0.0 s, fired [1, 2], most sheltered 2, soldier-seconds sheltered 8.5, anchors (448.6473, 598.8231) (452.7328, 598.2191)\n  (560.0, 598.0): both halted at 3.7 s; judged 12.0 s: min anchor gap 4.45, longest stay in the other footprint 0.0 s, fired [1, 2], most sheltered 1, soldier-seconds sheltered 1.8, anchors (583.4778, 583.8683) (577.6653, 591.579)\nENGAGED SPACING: 20 checks, 1 failures\nFAIL: (526.0, 690.0): no soldier stays inside the other section's footprint (2.3 s)",
+      "reason": "Harbor (526, 690): 2.3-second dwell inside another section footprint exceeds existing 1.5-second limit. Same failure on unchanged section 3; no active field work in this fixture. Threshold and production combat behavior unchanged."
+    }
+  ],
+  "inherited_visual_fixture": {
+    "baseline_commit": "57f7fa8e56df405b163d0ecfe0cabce749196660",
+    "checks": 662132,
+    "failures_before": 5,
+    "missing_terrain_script_errors": 24,
+    "failures_after": 0,
+    "baseline_log": "/tmp/m1-section3-field-visuals.log"
+  },
+  "source_sha256": {
+    "project.godot": "51dcb1de57498bc4f2b737e08516e644476f51d4d7b55a60667fc82e5d139ebc",
+    "resources/assets_battlefield.json": "2ddfe1435d3ea7b6b2a3916be3f350004b62c3a257548a77e74dc1cd8874e831",
+    "resources/assets_city.json": "86dc699114f81820e65e580608209d434e5997788b1910bca896fca56a1fb2af",
+    "resources/assets_rural.json": "5388300b48a0e82ccb6849316f5fa3ffff17b1ece83430397ad511ef872e253c",
+    "resources/assets_street.json": "5b6093a7495ee181327234fcdde42bcdbd2a2cf363df4b035c3618a13ebd2561",
+    "resources/assets_waterfront.json": "29e4d7e6c5387aac4bec73e5c8398fa0bb93888a91c85a808641d548bdc63818",
+    "resources/city_building_geometry.json": "2cf3f23d7f83b1bbb55bbb4c3aedfe7058ab2462daaee169f2e9e636c6564921",
+    "resources/classic_units.json": "7fff5156c15f84d91344c5d7e5f709e37cb7a186e2ccde5b8e7e039d574a53a2",
+    "resources/combat.json": "3a76b503ffaf967bbad7e823a914729f17f53549d3aae7e7154a9c4f602da8b2",
+    "resources/environment_catalog.json": "7d6dbd8dd5e4e1cd28c206041e3bfd69e9ce39ab1310d0219515eb8c91d342e9",
+    "resources/field_units.json": "69f5969a62d6ceccff3745a9f15c2d3033d8b2c150a43d0177c5bc6bf5cc620e",
+    "resources/scenarios.json": "49f850989dd52b72176cb629a7c88ed674736ac3222d4d3d794a75707a0d8bcd",
+    "resources/units.json": "60436807c5afa4ee4e60a4e3ce2524541f8506a0c8104c37e0920f2dadfba0e4",
+    "scenes/main.tscn": "08506f4bf248bf290c2818da78f6307c7b6bc68fa4cfccded8ab1df6428f1aeb",
+    "scripts/architectural_block.gd": "0c43ee06cf300de3993a24ae10bf294cbe8f6f74006ab71280e9cdf3ef4236a6",
+    "scripts/asset_library.gd": "c5cf9674e19a00983d9ea31df93654d2d8f9d3148a5d73f6ae4c1f6104358d0a",
+    "scripts/assets_battlefield.gd": "24e3cd13b76e01c60c89df1ee2e46d107f26c686f826ed248715f80fe95e2857",
+    "scripts/assets_city.gd": "dcb342a860cda86e463248c6979c393338a49d852abe9c1a016425504ea904dc",
+    "scripts/assets_existing.gd": "472caa82dfed040b7536c996c8ce19dffcc382e5c28da106c7086f328b5d84cf",
+    "scripts/assets_rural.gd": "d067d5725f6186a97e1eb8cbaf740073a1e0cdc71862d51df2953a41ae9e85ca",
+    "scripts/assets_street.gd": "a802dc6f69fa30a532af71ddd647d19bbe96b1772cead69b50fd7996cd4e8bee",
+    "scripts/assets_waterfront.gd": "a2f5b8c01659192f978d2e95013f209899c872b5533e89caafe22a52c142c9f7",
+    "scripts/audio_fx.gd": "d38bc7066f641c87d2e6b8656e7060def6708750e507d01896941155a97f385c",
+    "scripts/battle.gd": "1ec63c1e7e5635fb0d849d01db103842f0d55cf75fc2b2749977a93b726f476d",
+    "scripts/battle_menu.gd": "c8ed1a80c2dbdd96bd517e866ddc70601bb0590adaa28e51393331dd30fe56ee",
+    "scripts/battlefield_interface.gd": "9e82ef17fc731978a419eb66fc079be488e1bc1c2909fe9a672ae78ba650a93c",
+    "scripts/city_building_geometry.gd": "548977fe199c78c6cb733a77cd5bd96f82ac650f6b1ad16a580cabc5d84c5313",
+    "scripts/city_buildings.gd": "ffef8109a99fb17ca779ca56eb13bae3b233f4a3aadeeecce82c0f01b90cae44",
+    "scripts/city_buildings_urban.gd": "7ebfa50a2036c4f9b50458700cd32cfe8d5c878f66793364e9bc9fe12b1f230a",
+    "scripts/city_buildings_works.gd": "78fab233950ece9790dd1dd01571aa3c85cf4bb3ed359097eea6346c0187ed46",
+    "scripts/classic.gd": "4bf60e6587aa46a44d1727aed74d2905fa19cd34fcc83eed0541d8e9d0d9b7f0",
+    "scripts/cover_behavior.gd": "e5d775bb721dad6bfe57270498679b84bbf6fc5edec62b9efbb3ae6901111836",
+    "scripts/effects.gd": "b5aaac0f1ae33756dbf08bb239b801177928c7f4be72fbe17070c280b1fa826e",
+    "scripts/effects_explosions.gd": "fc44db4175a7d47b93725bea81b022a10295b0f3d302ab1abe082c17788ccd79",
+    "scripts/effects_remains.gd": "a8b2c624f068713e5386995d0c1c2fb2cb97988f871b7e1edc15d53e7677d8c6",
+    "scripts/elevation.gd": "d98c501506b01abf4c89aeaba9bcb3ea2b50ffbd085e353cdc91b74fc4c046d9",
+    "scripts/environment_detail.gd": "3d617f2f51cc8d698d31002e3c68e17d86e375ba8a45e372c426a50751fefcef",
+    "scripts/environment_palette.gd": "4c088cbd1fb74e19f943d8b66da6b129259537d0ddfa8aaaf2fd9ab5c5803c46",
+    "scripts/environment_variants.gd": "13a12a5de1746ea239a240bf99cf9d27f0141b79fad50cce3c711160c77d4bb8",
+    "scripts/field_models.gd": "5b88eb181fdec7a3d7a30401533fac23224d771f2bcb1fe36307bb7c1648652f",
+    "scripts/field_ops.gd": "8e846fb0abf92a860a79b4def38c13f34bd317fd339a9973336d7d590d444dd1",
+    "scripts/field_positions.gd": "4b6237afd188795e4a55521894d21b6fad17ad7d269d3233ab42cf1735aed51a",
+    "scripts/foliage_mesh.gd": "6a325a12052b3e179625dbe02d621217f6b13caf9b6e677e92d3f614044e115e",
+    "scripts/garrison.gd": "d14f275d0219fa23aeb15daefe609e7dfce83589f59256978cdb000f165669e0",
+    "scripts/harbor_props.gd": "eb52ce64845b98d3572ac6f1e7b776e77e1f198e89cd50e17e15e72867bcfd27",
+    "scripts/hud.gd": "2131227dc1cb3957a96f6a215a6413301f494c741505327521f7fa50a0b20c9a",
+    "scripts/infantry.gd": "720fa62541056525c9f185b68f9633803a74a26b3ed746dfb8ee058cf79c64dd",
+    "scripts/infantry_coordination.gd": "1008c19c48ad6fde76b063214b9788db662eaaae763e1f65a244d9708f1476d3",
+    "scripts/minimap_background.gd": "0942c4736046ffe4c81f6e77c14307d339a0e533c3843938d07132058956a6b6",
+    "scripts/notice_feed.gd": "5b2f0e7774cfe6c56e51be1431fac5ae7d2e611ff4da0d69fad18421b9c9a384",
+    "scripts/operation_rules.gd": "1264872eb266cda6ab3d68cd5715c508a56b0aefcf36d5182dc0a537e2703d66",
+    "scripts/parcel_kit.gd": "badc0cfd602d5360dd64cfb8350f1cf4deeb8bcd544459096b6af42c30820bf6",
+    "scripts/player_settings.gd": "e4d6108ca503c6a259d5e8e5437271c59717e6edad3071116104e84a5ef8b8a7",
+    "scripts/region_catalog.gd": "96dee14658c66878e7d96787ac89e03ddc3243490bc7f52a91345d449164c9ea",
+    "scripts/regional_campaign.gd": "b4b48bb65f297d7628b3f95819fe11336d6d93359a1b976a9262360e5bf99675",
+    "scripts/regional_map.gd": "5a1a653f8d17c9e707197e618a773454b3a39ea9a7783694dff34eaf3159e450",
+    "scripts/release_info.gd": "89bcd9adc784f6f388a52ec1b71e2618bc8aca57e56cd953dbdb0a4ebaf32d5e",
+    "scripts/road_network.gd": "21b56494f9026bb1feb917aa773cc3d4a3e31217a9c62b70828900b1526e81ec",
+    "scripts/roadside_props.gd": "b764996b77b38c34060dd82d1a9659aaf4407035592f100c73091aeb794b0cc7",
+    "scripts/ruined_building.gd": "f4d0cf30ab7c7c90efe1832a08287f091e1270a75c30db1439d0454099cf85fd",
+    "scripts/scenario_catalog.gd": "49be849040bdd2eaf061248405c0f271ffdca1d130ddb29d08a28f24a86a08f3",
+    "scripts/section_recovery.gd": "152b61342d5c0e55a27f4c31e4bdb7019290e412646dbf2947a444f1c9404e9e",
+    "scripts/simulation.gd": "8d1a55f156722835ce4cda49c4fadde0a9f6e619f2f27b9f41f1ed65c3b233f2",
+    "scripts/structure_damage.gd": "72e27efd185b081cffc4c3cc4705893b61d042b9771213ed649ddcd82e454d3d",
+    "scripts/support_requests.gd": "816439bdbb5fd1f3640707db3798f663b3cca03119c34e0209efa59a04c3b7a9",
+    "scripts/tactical_actions.gd": "101cdec1195a07747adaff76fc52aae3e9bd820da50f7a6d6a4e1403f2dc288a",
+    "scripts/tactical_context.gd": "e38058a64627d5c442818db1e6ac751f1fcbb1998ca7e1eed7892b9729aeb403",
+    "scripts/tactical_director.gd": "b7dc536bf55a9fd41af17927ddf3e20e69ba7ddaa8b5ef9ce6c3309f8f337d3e",
+    "scripts/tactical_effects.gd": "033f3befe29d91518ace5677dee44f2cb480775f1f85c6c541cd33eff9bd3994",
+    "scripts/tactical_navigation.gd": "2cc0b7325aed3efc03445a05fecd847bbabc80010dfe27468e43218915a92781",
+    "scripts/tactical_work_budget.gd": "cb647ecc1212ff44f173c1a96235fd032e9469e213aff09aa29c7d93494cf59e",
+    "scripts/terrain.gd": "003f111634ce6aca0b4052f5365e94ea3dc3a2c483117f9d85968f170c7a3b3d",
+    "scripts/throwables.gd": "1d6299afea0751dbf55f900c2df97a9da2558b6dc49ae826b133449a2b55e373",
+    "scripts/unit_animation.gd": "f044154b43936061d2d8e433ec7bc652159713b990ece1f4382d640785acc7d2",
+    "scripts/unit_models.gd": "2df525f123b86234872a48fa5dbb82b0d0accf4222a9194e868a103f28f43a0d",
+    "scripts/vehicle_damage.gd": "efd198884a6e41a6f4dc720c1aa03fa3b5441900c1f0b9f4951724708c15eb51",
+    "scripts/visuals.gd": "28957d7cb64d8601b2a2fd0f195628de239084af0f535f452dcd22842818ec3d",
+    "scripts/weather.gd": "47642b37469ecb49490606a29d35015ff33a5bb2aa6c650dd01f812696e2741a",
+    "scripts/weather_visuals.gd": "dea9acb98df54e291fdc9d96af6b138137c73ac0dd850a9807f8110e1474abf2",
+    "tests/m1_section4_native_review.gd": "1362d90c842a807f767aa04c53d5544642a80bc44ce57dd9034c5955fd3d14a0",
+    "tests/test_action_integration.gd": "c24fc8e9b83dec7644cf954f396ecb8382de484216795cf03eac829488a08afc",
+    "tests/test_action_targeting.gd": "b7bd3b8baf00181b32ba93710d5d2f73524ac32222cfdec8b1b105e6af8be4a7",
+    "tests/test_animation.gd": "7c373a40bc6af921a5ae425bb8caa1eb59072d397ed5e31a0decc115a226807e",
+    "tests/test_command_modes.gd": "1311a6eab929b69865128ffac0c8c0e9df505f2c5b52b75a8738bc26d0dcd869",
+    "tests/test_cover_behavior.gd": "830fb3e3e014f54cb1fec8ce8d9380da36b7cd5e146193053e5433eb3d136ede",
+    "tests/test_cover_contact.gd": "f0a0398eb450d5f730ecae7a6b19a000970e8ab027b1dc4ca4c4d4c5949f28a4",
+    "tests/test_elevation.gd": "a821e5878db9035cc8964232615ef45b73946580ba454af53a09163321492d22",
+    "tests/test_enemy_knowledge.gd": "ecfe233ba972265fbac153387ccdc4da3730b7970f6218d98b121d69923a80e4",
+    "tests/test_engaged_spacing.gd": "1beae253c4d4196c1687d9b882a9e7e055039ce088d22da7d967b57af2390fe2",
+    "tests/test_engineer_works.gd": "bcb19f8a5009c56f2ada5cd985049c2540da6ea4876dc49fb74bcbe8fc84d508",
+    "tests/test_field_geometry.gd": "aeafe105bcd3a47571647484cdf5596a3e92ea20916a06cd812d8857c5bc0efd",
+    "tests/test_field_ops.gd": "762bd8e3ea075d99c0562de345067f869cea3ca2136a2c4b6a22813600836ebe",
+    "tests/test_field_ops_edges.gd": "96be508bd8f964a80d949f4a3be44b514da74af3e4598f9cc3a14536dcbe6a12",
+    "tests/test_field_ops_resume.gd": "9620d5bf649781d766d5e49f78278bd3ab01b1f8aab1824945f3f3d6240adce6",
+    "tests/test_field_position_lifecycle.gd": "48b7eaea3111b1f0c825af4907fe3e54cec0d198d5a27722abc0264571992689",
+    "tests/test_field_position_orders.gd": "4616cb1dd2f54c5798db930ecd2350928112fa3c15361b91616a9c1caeb2e942",
+    "tests/test_field_positions.gd": "20a0050783fbffe971fac08a07d42af6bd3a7ffaa89ea37cd960208c6e308b0c",
+    "tests/test_field_ui.gd": "21b20dab8843ec610bca8e6db1ac3469d3c5c3bc0373d65ce760517704d415c5",
+    "tests/test_field_visuals.gd": "6d31a170a008448d21769c6d67215a5e9bc18ea8174605e61d2ee724e397e0e9",
+    "tests/test_garrison.gd": "5506446dd5408b08657f2d8b55bd37a840b10707fa2e4f689edf07176bb05d6b",
+    "tests/test_garrison_fire.gd": "be5f44dfb4cf496ff793490b4fd5dfc1ee79887bc470564d88f22d2337471506",
+    "tests/test_give_way_spots.gd": "e88aa3c8cd6e428b182b58b2458a38111f7d68f0039d40f79f3b5bd8fdddb17c",
+    "tests/test_infantry_coordination.gd": "26aba53f7e78b7bcc008f36cab9f67699a54c50ae1455a216d44d21360e73494",
+    "tests/test_input_actions.gd": "2d1a7cc5b9d1fde07d0a8041c6ef866e93e30fb1475a207be37d0478c54c214c",
+    "tests/test_m1_optics.gd": "d511bb07a7b0c266d0ec19b1160ea43118b8a88ff654a020421d67a1b21b1a02",
+    "tests/test_regroup_recovery.gd": "daebb104dd5ec5cea37fccd4fefcc670c2d8f07f389c9e3f378df215e5050e5c",
+    "tests/test_runtime_planning.gd": "f9fc2c001b9a5588790d358e88e17c111feca8f6cec73bc4c6c74bc49badbccc",
+    "tests/test_section_contact.gd": "e3771af4f04ca1c864a3f5c65d0c4d747ec847a7a765689f1c1ad8cc225647bd",
+    "tests/test_spatial_targeting.gd": "7d43867bc4c722098eda0610e894f3aa9b727d5aa75758d73355162249107094",
+    "tests/test_support_lifecycle.gd": "e81a41f5ec1542f4a3768cdd810754a21ff7759097e078832445478e24fef58b",
+    "tests/test_support_requests.gd": "ad51bc9a13d64baef5fbfb726b443e5f57e04d483178b463fce6dc78cec79e30",
+    "tests/test_tactical_actions.gd": "c4fef10a29ec5fef147db09aa1eaeb9fbed9221f029093e69ecde1bfaa078998",
+    "tests/test_tactical_context.gd": "820ee7e09bd4c8aece26bb0de53aa93432260fd1c4c97f72563b433d8750afd4",
+    "tests/test_tactical_navigation.gd": "c6d5361796c2385e41c095b49a86ce8a38cfdb8819e17189fba0a68842ea8dbb",
+    "tests/test_tactical_pressure.gd": "1e5d408a1c4d57a67a40dffbd7b0bb454ea80e201f118ba6034f04d70338f713",
+    "tests/test_tactical_readiness.gd": "ba8249bbd9dff28e2156f26fbd9195d57e1a65672ab1e1f8a58ac008bb175261",
+    "tests/test_throwables.gd": "f5fcdab914ef6fb5b4fcbc9a8783483a04b45c2a289ae85921f90a690b7cbbf8",
+    "tests/test_world_damage.gd": "80b754a7d7fde143403d22a5044b1a06d8ec34456f0e4119f7bc5cabb3ffe2f8",
+    "tests/test_wreck_clearing.gd": "abbe05a223961fe304353b907750ffecf2d497fa297cc2bf5efaac47a199804b",
+    "tests/test_wreck_section_recovery.gd": "0bea9dbaf825c38db527cffb0d7035cea448c2ef35048d5ba580604b2db678eb",
+    "tools/check.py": "855b032d99808594d493bfb40c269b81d5739d95b46cb42d1882c3d1abad278d"
+  },
+  "performance_acceptance": "Functional and llvmpipe native rendering only; hardware frame time and human balance are not established.",
+  "evidence_note": "Final results combine the affected gate with reruns of all three field-position suites after the localized recovery-replacement/status correction and the repaired pre-existing visual fixture. Unaffected suites retain their initial results. The one remaining crowded-combat failure was reproduced on unchanged section 3. The M1 section 4 cases all pass; historical section 1\u20133 evidence remains unchanged. Native metadata and three inspected captures are in m1-04-native-review.json."
+}

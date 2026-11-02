@@ -210,6 +210,9 @@ static func _ammo_depot(models,parent:Node3D)->void:
 static func sync_construction(model:Node3D,u:Dictionary)->void:
 	var kind:String=u.kind
 	if not FOOTPRINTS.has(kind):return
+	if u.get("field_position",false):
+		_sync_position(model,u)
+		return
 	var left:float=maxf(0.0,float(u.get("build_left",0.0)))
 	var progress:float=clampf(1.0-left/float(BUILD_SECONDS[kind]),0.0,1.0)
 	if model.get_meta("construction_progress",-1.0)==progress:return
@@ -235,3 +238,40 @@ static func sync_construction(model:Node3D,u:Dictionary)->void:
 	bar.visible=left>0
 	bar.position=Vector3(-0.9*(1-progress),4.3 if kind=="observation_post" else (1.0 if kind=="tactical_cover" else 3.0),0)
 	bar.scale.x=maxf(0.001,progress)
+
+# Hasty positions have a visibly shallow earth lip; only a completed engineer
+# upgrade reveals the reinforced trench assembly. The surveyed footprint is a
+# marker, never a finished-looking trench that grants unexplained protection.
+static func _position_box(parent:Node3D,name:String,at:Vector3,size:Vector3,color:Color)->MeshInstance3D:
+	var mesh:=MeshInstance3D.new();mesh.name=name
+	var shape:=BoxMesh.new();shape.size=size;mesh.mesh=shape
+	var material:=StandardMaterial3D.new();material.albedo_color=color;material.roughness=0.95
+	mesh.material_override=material;mesh.position=at;parent.add_child(mesh)
+	return mesh
+
+static func _sync_position(model:Node3D,u:Dictionary)->void:
+	var stage:int=int(u.get("position_stage",0))
+	var left:float=maxf(0.0,float(u.get("build_left",0.0)))
+	var total:float=maxf(0.01,float(u.get("position_total",18.0)))
+	var progress:float=clampf(1.0-left/total,0.0,1.0)
+	var signature:Vector3=Vector3(float(stage),progress,1.0 if u.get("build_paused",false) else 0.0)
+	if model.get_meta("position_signature",Vector3.INF)==signature:return
+	model.set_meta("position_signature",signature)
+	if not model.has_meta("position_original_meshes"):
+		model.set_meta("position_original_meshes",model.find_children("*","MeshInstance3D",true,false))
+		var marker:=Node3D.new();marker.name="PositionSurvey";model.add_child(marker)
+		for x in [-3.4,3.4]:
+			for z in [-0.9,0.9]:_position_box(marker,"Stake",Vector3(x,0.14,z),Vector3(0.06,0.28,0.06),P.MARKING)
+		for z in [-0.95,0.95]:_position_box(marker,"Edge",Vector3(0,0.025,z),Vector3(6.8,0.025,0.035),P.MARKING.darkened(0.15))
+		var earth:=Node3D.new();earth.name="HastyEarth";model.add_child(earth)
+		_position_box(earth,"Soil",Vector3(0,0.015,0),Vector3(6.8,0.025,1.85),PIT.lightened(0.1))
+		_position_box(earth,"Lip",Vector3(0,0.13,-0.7),Vector3(6.8,0.25,0.45),SPOIL)
+		_position_box(earth,"Rear",Vector3(0,0.06,0.84),Vector3(6.4,0.12,0.2),EARTH)
+		_position_box(model,"PositionProgress",Vector3(0,0.6,0),Vector3(1.8,0.08,0.12),P.MARKING)
+	for mesh in model.get_meta("position_original_meshes"):mesh.visible=stage>=2
+	model.get_node("PositionSurvey").visible=stage==0
+	model.get_node("HastyEarth").visible=stage==1
+	var bar:MeshInstance3D=model.get_node("PositionProgress")
+	bar.visible=left>0
+	bar.scale.x=maxf(0.001,progress)
+	bar.position.x=-0.9*(1.0-progress)

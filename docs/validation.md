@@ -1,5 +1,32 @@
 # Validation evidence
 
+## M1 section 4 — Hasty positions and engineer upgrades
+
+Verified with **Godot 4.5.1.stable.official.f62fdbde1**, Linux, on `codex/m1-section-4` based on completed section 3 (`57f7fa8`). All **715 M1 checks pass**. The affected selection passes **39/40 suites**; the single inherited failure and its baseline proof are explicit below. [Current evidence](evidence/m1-04-checks.json) includes outputs, exact commands, negative controls and 121 source/test/configuration hashes.
+
+| Focused M1 suite | Checks | Failures |
+|---|---:|---:|
+| Coordinated cover and movement | 79 | 0 |
+| Throwables | 145 | 0 |
+| Optical smoke | 56 | 0 |
+| Nearby reserve requests | 125 | 0 |
+| Reserve lifecycle | 62 | 0 |
+| Field-position behavior | 151 | 0 |
+| Field-position lifecycle | 81 | 0 |
+| Field-position order/spacing authority | 16 | 0 |
+| **Total** | **715** | **0** |
+
+The initial affected gate was followed by reruns of all three work suites after the narrow recovery/status correction and of the repaired visual fixture. Tests exercise actual approach/work, staged cover/integrity, damage retention, interruptions, hull yielding, real wreck displacement, one paid upgrade, refunds, limits/deadlines and accepted/rejected queued commands. The identical lifecycle/order suites reproduce 13 and five failures respectively on their original candidates and pass after correction. The field-visuals fixture now uses real simulation context while retaining all 662,132 existing assertions; production animation is unchanged.
+
+**Inherited remaining failure:** `test_engaged_spacing.gd` reports the same one failure on both this checkpoint and a complete unchanged archive of `57f7fa8`. In Harbor at `(526, 690)`, a soldier remains inside the other section footprint for 2.3 seconds against the 1.5-second threshold. Both sections fire, minimum anchor separation is 4.83, and the other three fixtures pass. No new field work exists in that scenario. The assertion and unrelated combat behavior were not relaxed; this remains a follow-up, not a passing full-regression claim.
+
+### Native stage presentation
+
+`tests/m1_section4_native_review.gd` uses the actual Harbor scene, ordinary fog, isolated settings and disabled campaign saving. An existing engineer reaches soil through a normal Move, an existing rifle section digs, and the engineer reinforces the same site. **Three captures and zero review failures** were obtained and visually inspected in OpenGL Compatibility on **llvmpipe**, at **1280 × 720**: survey, hasty position and reinforced position. The images were inspected locally; image files are withheld from this public checkpoint pending explicit publication approval.
+
+The survey has no cover or finished trench mesh; hasty completion has 120 integrity and ordinary cover; reinforcement has 320 integrity and dug-in protection. [Native metadata](evidence/m1-04-native-review.json) records stages, source/image hashes and the single site identity. These are procedural placeholders. Contextual commands remain section 5; campaign persistence and the combined encounter remain section 6. No hardware frame-time or human balance acceptance is implied.
+
+
 ## M1 section 3 — Nearby reserve backup
 
 Verified on **Godot 4.5.1.stable.official.f62fdbde1**, Linux, for `codex/m1-section-3`, based on completed section 2 (`e180a118`). The final affected gate passes **29/29 suites in 203 seconds**, without assertion or script errors. [Current evidence](evidence/m1-03-checks.json) records the exact selection and command, outputs, hashes for **99 source/test/configuration files**, and matched regression controls. Previous section reports remain historical to their own checkpoints.
