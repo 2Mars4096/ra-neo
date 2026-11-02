@@ -103,13 +103,19 @@ The command deck shows supply, reinforcements, selected-unit health/state, and m
 
 ### M1: coordinated infantry defense
 
-The M1 work is delivered in [six implementation sections](docs/plans/18-2-1-m1-infantry-defense.md). **M1.1 is available:** members taking a short cover route reserve a teammate who can actually observe and fire on the threat. The covering member holds its position and retains loaded ammunition; another member can take over after a reload or casualty. Explicit movement/hold orders remain authoritative. **M1.2 adds the grenade/smoke executor:** one requested payload, interruptible preparation, finite stock, physical flight/blast, optical smoke and pooled effects. The targeting controls arrive in M1.5, and inventory persistence in M1.6; **M1.3 adds existing-reserve backup:** explicitly delegated, ready infantry can answer one nearby request, provide useful support and return to the unchanged assignment. Busy engineers finish their current work first. **M1.4 adds field positions:** one member prepares free shallow cover in 18 seconds; an engineer can reinforce it for 50 supply and 10 seconds of work. Interrupted progress remains. Controls and campaign inventory finish the slice.
+[M1](docs/plans/18-2-1-m1-infantry-defense.md) adds ready covering partners, finite frag/smoke, existing-reserve backup and staged defensive positions. The six implementation sections have individual checkpoints; campaign inventory and integrated/native verification are the remaining section.
+
+**G / V** chooses frag/smoke; click a valid target to throw one carried payload even with several squads selected. Escape/right-click cancels targeting. A new order cancels preparation without spending inventory; an already released grenade remains in flight. Smoke obstructs both teams' optical sight for 18 seconds, with actual aircraft altitude respected.
+
+**D** digs free shallow cover with one member and 18 seconds of work. **U** with an engineer reinforces that position for 50 supply and 10 seconds of work. Interrupted progress remains. Unknown enemies do not affect the preview, while placement and movement still obey physical collision.
+
+Enable **RESERVE** on an available squad, then use **B** on another section to request nearby help. One capable existing reserve moves to useful support and returns only to its unchanged assignment. **H** toggles Hold fire. **AUTO FRAG** is off by default and explicitly permits defensive use of carried stock with a covering teammate. Grenade inventories join campaign saves in the final checkpoint.
 
 ### M0: readiness and reliable orders
 
 In autonomous tactical modes, stationary soldiers prepare empty weapons during quiet moments. A low rifle magazine can top off while another capable loaded member watches; movement, casualty aid and cover transit take precedence. The selection panel shows how many members are reloading and ready. Explicit targets take priority, ordinary targets stay stable, and AA can switch to a newly observed urgent air threat. Depleted sections assess losses against their originally assigned strength; healing still restores only survivors.
 
-Accepted replacement orders cancel obsolete preparation and plans. Queued commands retain their order, temporary movement preserves the parent task, and pending route work retries without being reported as impossible. **S remains Stop and hold position.** M0's separate fire-permission contract is internal; it adds no new control to learn. Grenades, smoke, backup requests and infantry digging are the next planned slice.
+Accepted replacement orders cancel obsolete preparation and plans. Queued commands retain their order, temporary movement preserves the parent task, and pending route work retries without being reported as impossible. **S remains Stop and hold position.** M1 exposes the separate fire policy through H and the contextual strip; an explicit throw grants only that scoped release.
 
 Campaign checkpoints now preserve partial magazines, specialist equipment ownership and original section strength, with migration from the earlier save format. **Settings → Copy bug report** includes bounded action reasons, assignment versions and planning diagnostics. See [the M0 plan](docs/plans/18-1-1-m0-foundation.md) and [validation evidence](docs/validation.md) for tested behavior and limits.
 

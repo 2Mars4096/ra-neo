@@ -144,7 +144,7 @@ func enemy_under_pointer(hud)->Dictionary:
 	for part in 2:
 		for region in hud.layer_blocked[part]:
 			if region.has_point(point):return {}
-	if battle.show_help or sim.result!="" or menu_open(battle) or hud.action_at(point)!="" or battle.dragging or battle.build_mode!="" or battle.strike_mode:
+	if battle.show_help or sim.result!="" or menu_open(battle) or hud.action_at(point)!="" or battle.dragging or battle.build_mode!="" or battle.tactical_mode!="" or battle.strike_mode:
 		return {}
 	if Time.get_ticks_msec()-hover_checked>=100:
 		hover_id=battle.pick(point,true)
@@ -267,18 +267,24 @@ func tutorial_text()->Array:
 		["OPENING COMPLETE","Secure all three sectors and hold them uncontested for 90 seconds. Enemy logistics are an optional target."]]
 	return steps[clampi(tutorial_step,0,5)]
 
-func draw_tutorial(hud)->void:
-	var battle=hud.battle
-	if battle.sim.scenario.get("id","")!="black_sea_harbor":return
+func tutorial_rect(hud)->Rect2:
+	if hud.battle.sim.scenario.get("id","")!="black_sea_harbor":return Rect2()
 	var bottom:float=roster_rect(hud).position.y-8 if roster_ids.size()>1 else hud.size.y-12
-	if not tutorial_active:
-		hud.button("tutorial:start","FIELD GUIDE",Rect2(12,bottom-27,122,27))
-		return
+	if not tutorial_active:return Rect2(12,bottom-27,122,27)
 	var width:float=minf(460,hud.battlefield_rect().size.x-24)
 	var content:=tutorial_text()
 	var lines:Array=hud.wrap_text(content[1],width-24,12)
 	var height:float=43+lines.size()*17
-	var r:=Rect2(12,bottom-height,width,height)
+	return Rect2(12,bottom-height,width,height)
+
+func draw_tutorial(hud)->void:
+	var r:=tutorial_rect(hud)
+	if not r.has_area():return
+	if not tutorial_active:
+		hud.button("tutorial:start","FIELD GUIDE",r)
+		return
+	var content:=tutorial_text()
+	var lines:Array=hud.wrap_text(content[1],r.size.x-24,12)
 	hud.console_panel(r)
 	hud.text_at(content[0],r.position+Vector2(12,20),12,hud.TEAL,true)
 	hud.button("tutorial:hide","HIDE",Rect2(r.end.x-62,r.position.y+5,50,21))

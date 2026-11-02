@@ -55,7 +55,7 @@ Separate original/assigned strength, current effective strength and recoverable 
   - [x] M0 quiet reloads and a loaded-partner guard for voluntary topoffs; M1 adds validated covering roles and excludes committed coverers from optional topoffs.
 - [x] 4. Apply explicit-target-first validation, stable aim tracking and a cheap urgent-threat override; retain actual weapon acquisition requirements.
 - [ ] 5. Unify interruption precedence for contact holds, withdrawal, aid, digging, throwing and direct orders; add bounded failure backoff and a valid temporary action.
-  - [x] M0 existing-executor cancellation, pressure handling and failure backoff; M1.1 adds shared actor task exclusion; concrete throwing/work adapters and backup cancellation follow in the later checkpoints.
+  - [x] M0 existing-executor cancellation, pressure handling and failure backoff; M1 adds shared actor task ownership for digging/throwing and version-safe backup cancellation.
 - [x] 6. Separate assigned strength and equipment identity from healing capacity/member array indices; provide the handover interface without automatically completing a transfer.
 - [x] 7. Add event invalidation and bounded work scheduling with [18-12](18-12-performance-and-validation.md), plus compact state reasons with [18-11](18-11-command-interface-and-feedback.md).
 - [ ] 8. Adapt one action at a time, proving old mission, collision, casualty and campaign invariants before broad adoption.

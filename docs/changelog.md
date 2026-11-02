@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-02 — M1.5 contextual controls and action feedback
+
+- Add G/V frag/smoke, D/U dig/upgrade, B backup, H Hold fire and explicit Reserve/Auto Frag toggles to a compact context strip. Existing targeting, Escape/right-click cancellation and movement controls remain consistent. Detailed explanations use hover text.
+- Preview and commitment choose the same single thrower across mixed selections. Work/support states, partial radio acknowledgements and zero-cost hasty-position cancellation show their actual outcome. The strip avoids both the Field Guide and roster.
+- Six affected input/layout suites pass, including 62 M1 command checks and real mouse confirmation. [Evidence](evidence/m1-05-checks.json). Native visual acceptance follows in M1.6.
+
 ## 2026-11-02 — M1.4 hasty positions and engineer reinforcement
 
 - Recover one-member local digging, free shallow cover, retained interrupted progress, staged geometry and paid engineer reinforcement of the same site. Ordinary field-work resume/cancel, destruction and refund adapters preserve one owner and one charge.

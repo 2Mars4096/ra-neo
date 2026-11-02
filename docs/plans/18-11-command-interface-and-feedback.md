@@ -6,7 +6,7 @@
 
 ## Baseline and evidence
 
-M0 protects existing replacement, queued, provisional, Hold and internal-approach ownership. The HUD adds reloading/ready counts and pressure/fire-policy reasons; the local diagnostic report adds bounded own-team action traces, strength and planner counters. [18-1-1](18-1-1-m0-foundation.md) tracks verification. New initiative, fire-policy, throw, backup and digging controls remain future work; internal permission support is not a shipped button.
+M0 protects existing replacement, queued, provisional, Hold and internal-approach ownership. The HUD adds reloading/ready counts and pressure/fire-policy reasons; the local diagnostic report adds bounded own-team action traces, strength and planner counters. [18-1-1](18-1-1-m0-foundation.md) tracks verification. [M1](18-2-1-m1-infantry-defense.md) adds a capability-dependent strip for G/V frag/smoke, D/U dig/upgrade, B backup, H Hold fire, RESERVE and AUTO FRAG. Broad initiative profiles and later domain controls remain future work.
 
 [Battle](../../scripts/battle.gd) handles contextual right-click, queued commands, selection, targeting and tactical pause. [HUD](../../scripts/hud.gd) already shows selected-unit state/reasons, movement routes, engineer placement and purchase queues. [NoticeFeed](../../scripts/notice_feed.gd) limits and merges notifications. Extend these surfaces rather than adding a separate panel for every soldier action.
 
@@ -27,7 +27,7 @@ Hold fire is a separate authoritative engagement permission, so observing or wai
 
 ## Key interaction flows
 
-**Grenade/smoke:** select a capable section, choose the payload, point at a valid area and confirm. Preview remaining charges, uncertain throw/impact area, obstruction and known allied risk. One eligible soldier reserves the action; the rest preserve useful roles. Escape cancels preparation, while a released projectile remains in the world. A request for another unit's smoke is shown as support, not as a grenade magically appearing in this section.
+**Grenade/smoke:** select a capable section, choose the payload, point at a valid area and confirm. Preview remaining charges, uncertain throw/impact area, obstruction and known allied risk. One eligible soldier reserves the action; the rest preserve useful roles. Escape/right-click cancels pending targeting; a new Move/Hold/Retreat cancels accepted preparation, while a released projectile remains in the world. This preserves the existing Escape pause behavior after an action is accepted. A request for another unit's smoke is shown as support, not as a grenade magically appearing in this section.
 
 **Backup:** select Request support or let a delegated unit raise its own need. Show the responding unit and brief status. Clicking the indicator focuses that responder; cancelling releases its temporary task. Buying a new unit remains a separate purchase interaction unless an explicit automated spending allowance exists.
 
@@ -41,11 +41,13 @@ Hold fire is a separate authoritative engagement permission, so observing or wai
 
 - [x] 1. Document current command semantics and protect them with focused input/replacement tests.
 - [ ] 2. Add the minimal initiative/engagement permission view with [18-1](18-1-action-framework-and-readiness.md); show scope in hover text and selection overlays.
-- [ ] 3. Add a capability-filtered context strip for the M1 grenade, smoke, backup and digging slice; use concise labels and recognizable icons.
-- [ ] 4. Make previews and commit validation share current geometry, inventory, knowledge and authorization checks. A stale preview may fail clearly without consuming resources.
+  - [x] M1 Hold fire and explicit optional defensive-frag policy, with scope in hover text. Broader initiative profiles remain planned.
+- [x] 3. Add a capability-filtered context strip for the M1 grenade, smoke, backup and digging slice; use short labels and finite stock counts.
+- [x] 4. Make M1 previews and commit validation share current geometry, inventory, knowledge and authorization checks. A stale preview may fail clearly without consuming resources.
 - [ ] 5. Add activity, support lifecycle and optional service-return cues using existing notice merging.
 - [ ] 6. Show mixed-selection eligibility: how many units can act, which one is assigned, and what stays pending. Do not duplicate throws or paid work accidentally.
 - [ ] 7. Preserve queued orders, control groups, pause, minimap commands and keyboard access; define conflict behavior for targeting modes.
+  - [x] M1 targeting exclusivity, cancellation and compact layout are covered alongside existing input/authority regressions.
 - [ ] 8. Inspect native visuals and run the usability/latency scenarios below before enabling the new controls broadly.
 
 ## Feedback and presentation contract

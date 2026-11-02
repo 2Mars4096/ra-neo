@@ -14,6 +14,8 @@ M1 is recovered in six buildable checkpoints on `codex/m1-staged-implementation`
 
 `field_positions.gd` owns one worker per local job. Survey sites give no protection, completed hasty sites provide ordinary cover, and a paid engineer upgrade creates dug-in protection on the same footprint. Interrupted work retains authorized materials/progress; existing field-work adapters handle resume, cancellation, damage and single refunds. Preview-only occupancy filters ignore unknown hostile bodies/works; commitment and execution remain fully physical. Each worker move updates its actor-index cell immediately.
 
+`tactical_interface.gd` owns the compact context strip and shared targeting previews. Battle input handles its shortcuts and cancellation through existing targeting modes. Briefly cached previews revalidate on commitment, mixed selection requests one payload, and selection status reflects actual work/support ownership. Detailed explanations use hover text. The strip uses the Field Guide/roster bounds to avoid overlap; partial radio reception reports the accepted subset.
+
 ## Implemented stack
 
 - Godot **4.5.1-stable**, GDScript, GL Compatibility renderer, 2× MSAA.

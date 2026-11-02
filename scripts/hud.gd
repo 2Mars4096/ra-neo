@@ -31,6 +31,7 @@ const FIELD_ORDERS := [
 const UNIT_NAMES := {"rifle":"RIFLE SECTION","atgm":"AT TEAM","engineer":"ENGINEERS","tank":"MAIN BATTLE TANK","drone":"SCOUT UAV","helo":"GUNSHIP","boat":"CORVETTE","aa":"AIR DEFENSE","harvester":"HARVESTER","fpv_drone":"FPV DRONE"}
 var battle: Node3D
 var battlefield_ui=BattlefieldInterface.new()
+var tactical_ui=preload("res://scripts/tactical_interface.gd").new()
 var scenario_entries: Array[Dictionary] = []
 var preview_key := ""
 var preview_reason := ""
@@ -193,7 +194,7 @@ func frame() -> void:
 # Inputs that change the sidebar at once (hover, selection, modes, supply).
 func sidebar_state() -> Array:
 	var sim=battle.sim
-	return [size,pointer(),battle.selected.hash(),battle.build_mode,battle.build_rotated,battle.attack_mode,battle.strike_mode,battle.paused,battle.show_help,sim.result,int(sim.credits)]
+	return [size,pointer(),battle.selected.hash(),battle.build_mode,battle.build_rotated,battle.attack_mode,battle.strike_mode,battle.tactical_mode,battle.paused,battle.show_help,sim.result,int(sim.credits)]
 
 # Battle's dispatcher delegates only interface actions here. This layer never
 # creates simulation orders, supply or tutorial success states.
@@ -404,6 +405,7 @@ func draw_top(sim) -> void:
 	if battle.notices.cursor_left>0 and not battle.show_help and sim.result=="":draw_cursor_notice()
 	if not battle.show_help and sim.result=="" and not battlefield_ui.menu_open(battle):
 		battlefield_ui.draw_roster(self)
+		tactical_ui.draw(self)
 		battlefield_ui.draw_tutorial(self)
 		battlefield_ui.draw_enemy_hover(self)
 	if battle.show_help:draw_guide()
@@ -442,7 +444,7 @@ func battlefield_rect() -> Rect2:
 	return Rect2(0,42,size.x-268,size.y-42)
 
 func build_progress(sim,structure:Dictionary) -> float:
-	var total:=float(sim.definitions[structure.kind].get("build_seconds",1.0))
+	var total:=float(structure.get("position_total",sim.definitions[structure.kind].get("build_seconds",1.0)))
 	return clampf(1.0-float(structure.get("build_left",0.0))/maxf(total,0.01),0,1)
 
 # Derived from the same gates FieldOps.tick uses: an assigned living engineer
@@ -450,6 +452,15 @@ func build_progress(sim,structure:Dictionary) -> float:
 # unsuppressed member within 3 m. Read-only; never changes the site.
 func site_condition(sim,site:Dictionary) -> String:
 	if float(site.get("build_left",0.0))<=0:return "complete"
+	if site.get("field_position",false):
+		var worker:Dictionary=sim.get_unit(int(site.get("engineer_id",-1)))
+		if not sim.alive(worker):return "paused" if site.get("build_paused",false) else "lost"
+		if site.get("state","")=="WAITING FOR COVER":return "pinned"
+		var job:Dictionary=sim.FieldPositions.jobs(sim).get(worker.id,{})
+		if job.is_empty():return "paused"
+		var actor:Dictionary=sim.Infantry.member_by_id(worker,str(job.member))
+		if actor.is_empty() or actor.hp<=0:return "lost"
+		return "building" if actor.state in ["DIGGING","REINFORCING"] else "en_route"
 	if site.get("build_paused",false) and sim.alive(sim.get_unit(site.get("queued_for",-1))):return "queued"
 	if site.get("build_paused",false):return "paused"
 	var engineer:Dictionary=sim.get_unit(site.get("engineer_id",-1))
@@ -464,10 +475,15 @@ func site_condition(sim,site:Dictionary) -> String:
 
 func builder_status(sim,site:Dictionary) -> String:
 	var condition:=site_condition(sim,site)
+	if site.get("field_position",false):
+		if condition=="complete":return "Shallow cover · engineers can reinforce" if int(site.position_stage)==1 else "Reinforced · dug-in cover"
+		return {"building":"Digging" if int(site.position_stage)==0 else "Reinforcing","pinned":"Waiting for covering fire","en_route":"Worker moving into position","paused":"Paused · resume to keep progress","lost":"Worker lost · replacement needed"}.get(condition,"Preparing position")
 	if condition=="complete":return FIELD_EFFECTS.get(site.kind,"Operational")
 	return SITE_STATUS[condition]
 
 func engineer_status(sim,engineer:Dictionary) -> String:
+	var tactical:String=tactical_ui.status(sim,engineer)
+	if tactical!="":return tactical
 	for site in sim.units:
 		if sim.alive(site) and site.get("engineer_id",-1)==engineer.id and float(site.get("build_left",0.0))>0 and not site.get("build_paused",false):
 			return "Assigned %s · orders pause it" % FIELD_LABELS.get(site.kind,"SITE")
@@ -477,12 +493,13 @@ func engineer_status(sim,engineer:Dictionary) -> String:
 func resume_reason(sim,site:Dictionary) -> String:
 	var condition:=site_condition(sim,site)
 	if condition not in ["paused","lost","off_site","queued"]:return "Builder already assigned"
-	if sim.FieldOps.available_engineer(sim,site.id)<0 and not sim.alive(sim.get_unit(site.get("queued_for",site.get("last_engineer_id",-1)))):return "No free engineer · buy or release one"
+	if sim.FieldOps.available_engineer(sim,site.id)<0 and not sim.alive(sim.get_unit(site.get("queued_for",site.get("last_engineer_id",-1)))):
+		return "No free infantry nearby" if site.get("field_position",false) and int(site.position_stage)==0 else "No free engineer · buy or release one"
 	return ""
 
 func cancel_refund(sim,site:Dictionary) -> int:
 	var definition:Dictionary=sim.definitions[site.kind]
-	return floori(float(definition.cost)*float(site.get("build_left",0.0))/float(definition.build_seconds))
+	return floori(float(site.get("paid_cost",definition.cost))*float(site.get("build_left",0.0))/maxf(0.01,float(site.get("position_total",definition.build_seconds))))
 
 func cancel_label(refund:int) -> String:
 	return "CANCEL +%d" % refund
@@ -672,8 +689,11 @@ func draw_sidebar(sim) -> void:
 			var assignment:Dictionary=unit.get("assignment",{})
 			if not sim.Actions.engagement_allowed(unit,int(assignment.get("target",-1)),str(assignment.get("mode","")),assignment.get("pos",Vector2.INF)):status="Holding fire"
 		if unit.hold_command and unit.reason=="Hold position · under pressure":status=unit.reason
+		var tactical:String=tactical_ui.status(sim,unit)
+		if tactical!="":status=tactical
 		if sim.definitions[unit.kind].get("strike",false):status="Autonomous strike munition · no orders"
 		if unit.get("structure",false) and not sim.field_ops.is_empty():
+			if unit.get("field_position",false):heading="PREPARED POSITION" if int(unit.position_stage)<2 else "REINFORCED TRENCH"
 			detail="%d / %d HP · %s" % [maxi(0,int(unit.hp)),int(unit.max_hp),"UNFINISHED" if float(unit.get("build_left",0.0))>0 else "COMPLETE"]
 			status=builder_status(sim,unit)
 		elif battle.is_engineer(unit):status=engineer_status(sim,unit)
@@ -710,9 +730,10 @@ func draw_sidebar(sim) -> void:
 			text_at(cancel_label(refund),cancel_rect.position+Vector2(7,16),10,WHITE,true)
 			var mouse:=pointer()
 			if resume_rect.has_point(mouse) and not battle.show_help:
-				sidebar_hint(blocked if blocked!="" else "Resume with nearest free engineer · no charge · %d%% kept" % roundi(build_progress(sim,site)*100),y+98)
+				var worker:="infantry" if site.get("field_position",false) and int(site.get("position_stage",0))==0 else "engineer"
+				sidebar_hint(blocked if blocked!="" else "Resume with nearest free %s · no charge · %d%% kept" % [worker,roundi(build_progress(sim,site)*100)],y+98)
 			elif cancel_rect.has_point(mouse) and not battle.show_help:
-				sidebar_hint("Cancel site · refund %d of %d supply · built share is lost" % [refund,int(definition.cost)],y+98)
+				sidebar_hint("Cancel site · refund %d of %d supply · built share is lost" % [refund,int(site.get("paid_cost",definition.cost))],y+98)
 	elif units.size()==1 and sim.definitions[units[0].kind].get("structure",false):
 		var queue:Array=units[0].get("queue",[])
 		text_at("QUEUE EMPTY" if queue.is_empty() else "%s · %.0fs (%d)" % [queue[0].kind.to_upper(),queue[0].left,queue.size()],Vector2(x+18,y+147),10,WHITE)
